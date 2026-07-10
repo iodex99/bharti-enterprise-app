@@ -15,6 +15,7 @@ import { stockRoutes } from './routes/stock.routes';
 import { openingRoutes } from './routes/opening.routes';
 import { cuttingRoutes } from './routes/cutting.routes';
 import { contractorsRoutes, jobsRoutes } from './routes/jobs.routes';
+import { checkingRoutes, dispatchesRoutes, packingRoutes } from './routes/checking.routes';
 
 export function createApp() {
   const app = express();
@@ -54,6 +55,9 @@ export function createApp() {
   app.use('/api/cutting', cuttingRoutes());
   app.use('/api/jobs', jobsRoutes());
   app.use('/api/contractors', contractorsRoutes());
+  app.use('/api/checking', checkingRoutes());
+  app.use('/api/packing', packingRoutes());
+  app.use('/api/dispatches', dispatchesRoutes());
 
   // Unknown API routes are a JSON 404, not the SPA fallback.
   app.use('/api', (_req, res) => {

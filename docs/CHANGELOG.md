@@ -5,6 +5,12 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Phase 7: checking (issue to checker, incremental pass/reject/missing results
+  with reason breakdowns, REJECTED stage), packing (issue to packer, packed→finished goods,
+  shortages with reasons), same-person checker+packer support, admin FG dispatches with
+  safe voids, full-chain conservation test proving zero inventory drift from purchase to
+  finished goods.
+
 - 2026-07-11 — Phase 6: contractor job work — multi-size job cards with auto-fetched
   editable rates, FIFO issue with recorded allocations, partial receipts (10dz as 2+3+5),
   excess receipts with mandatory reasons, unstitched cloth returns, auto-completion on

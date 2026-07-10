@@ -9,6 +9,9 @@ import PurchasesPage from './pages/purchases/PurchasesPage';
 import CuttingPage from './pages/cutting/CuttingPage';
 import JobsPage from './pages/jobs/JobsPage';
 import ContractorsPage from './pages/contractors/ContractorsPage';
+import CheckingPage from './pages/checking/CheckingPage';
+import PackingPage from './pages/packing/PackingPage';
+import DispatchesPage from './pages/dispatches/DispatchesPage';
 import StockPage from './pages/stock/StockPage';
 import OpeningBalancesPage from './pages/admin/OpeningBalancesPage';
 import UsersPage from './pages/admin/UsersPage';
@@ -58,6 +61,9 @@ export default function App() {
         <Route path="cutting" element={<CuttingPage />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="contractors" element={<ContractorsPage />} />
+        <Route path="checking" element={<CheckingPage />} />
+        <Route path="packing" element={<PackingPage />} />
+        <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="stock" element={<StockPage />} />
         <Route path="stock/:stage" element={<StockPage />} />
         <Route

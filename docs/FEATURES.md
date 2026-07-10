@@ -18,8 +18,8 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Job cards + partial receipts + discrepancies + WIP | ✅ | Phase 6 |
 | Contractor analytics + rankings | ✅ | Phase 6 |
 | Contractor payments (dues, statements) | ✅ | Phase 6 |
-| Checking (pass/reject/missing) + REJECTED stage | ⬜ | Phase 7 |
-| Packing + FG inventory + dispatch | ⬜ | Phase 7 |
+| Checking (pass/reject/missing) + REJECTED stage | ✅ | Phase 7 |
+| Packing + FG inventory + dispatch | ✅ | Phase 7 |
 | Traceability tree (FG ↔ vendor) | ⬜ | Phase 8 |
 | Reports (~15) + Excel export + print | ⬜ | Phase 8 |
 | Dashboard + alerts | ⬜ | Phase 9 |

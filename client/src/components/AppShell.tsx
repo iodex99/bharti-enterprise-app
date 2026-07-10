@@ -24,6 +24,9 @@ const NAV: NavSection[] = [
       { to: '/cutting', label: 'Cutting', icon: '✂️' },
       { to: '/jobs', label: 'Job Work', icon: '🧵' },
       { to: '/contractors', label: 'Contractors', icon: '🤝' },
+      { to: '/checking', label: 'Checking', icon: '🔍' },
+      { to: '/packing', label: 'Packing', icon: '📦' },
+      { to: '/dispatches', label: 'Dispatches', icon: '🚚' },
     ],
   },
   {

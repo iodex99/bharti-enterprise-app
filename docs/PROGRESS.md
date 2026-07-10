@@ -43,8 +43,13 @@
   allocated CUT lots (LIFO), auto-complete on exact settlement, admin-only
   close-with-discrepancy (job_shortage writeoff), void for unstarted jobs, contractor
   analytics (turnaround/discrepancy %/cost/dues) + payments module with voids, full UI.
-- [ ] **Phase 7 — Checking + Packing + FG** + dispatch + REJECTED stage; full-chain
-  conservation test.
+- [x] **Phase 7 — Checking + Packing + FG + dispatch**: check issues FIFO from the
+  CHECKING pool (allocations recorded), incremental results (passed→PACKING pool,
+  rejected→REJECTED, missing→terminal + discrepancy; rejection-reason breakdown must sum),
+  pack issues FIFO from PACKING pool, incremental pack results (packed→FG, short→terminal +
+  reason), staff-role validation (checker/packer/both — same-person scenario), admin FG
+  dispatch with void-via-ledger-replay, voids for unstarted issues, checking/packing/
+  dispatch UI. FULL-CHAIN CONSERVATION TEST: genesis − terminal = on-hand, drift 0.
 - [ ] **Phase 8 — Traceability tree + reports (~15) + Excel export + print CSS.**
 - [ ] **Phase 9 — Dashboard (KPIs + charts) + alerts panel.**
 - [ ] **Phase 10 — PWA + polish + nightly self-reconciliation.**
@@ -53,7 +58,8 @@
 
 ## Current state
 
-Phases 0–5 complete. 163 unit/integration + 28 E2E tests green. Release pipeline VERIFIED
+Phases 0–7 complete. 180 unit/integration + 34 E2E tests green (incl. browser-driven
+purchase→FG chain on desktop AND mobile, and the ledger conservation proof). Release pipeline VERIFIED
 end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**
@@ -67,13 +73,12 @@ end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/
 
 ## Next steps
 
-1. **Phase 7 — Checking + Packing + FG**: check issues (FIFO from CHECKING pool lots),
-   incremental check results (passed→PACKING, rejected→REJECTED, missing→terminal loss +
-   discrepancy), rejection reasons breakdown, pack issues (FIFO from PACKING pool),
-   pack results (packed→FG, short→terminal + discrepancy), same-person checker+packer
-   supported (staff role both), FG dispatch (admin stock-out), full-chain conservation
-   integration test (purchase→FG drift = 0), UI + E2E.
-2. Then Phase 8 (traceability + reports + Excel).
+1. **Phase 8 — Traceability + reports + Excel**: trace API (FG lot → pack → check →
+   receipt → job/contractor → cutting → purchase/vendor tree, and forward from purchase),
+   expandable tree UI; ~15 reports with shared filters (date/model/color/size/contractor/
+   checker/packer/vendor); generic exceljs exporter sharing column defs; ?format=xlsx on
+   every report; print CSS.
+2. Then Phase 9 (dashboard + alerts).
 
 ## Session notes
 

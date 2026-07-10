@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import {
+  CHECK_REJECTION_REASONS,
   CUTTING_VARIANCE_REASONS,
   JOB_DISCREPANCY_REASONS,
+  PACK_SHORT_REASONS,
   PAYMENT_MODES,
   RECEIPT_RETURN_TYPES,
   STAFF_ROLES,
@@ -223,6 +225,82 @@ export const paymentSchema = z.object({
   notes: optionalText(300),
 });
 export type PaymentInput = z.infer<typeof paymentSchema>;
+
+export const checkIssueSchema = z.object({
+  issueDate: businessDate,
+  staffId: id,
+  modelId: id,
+  colorId: id,
+  sizeId: id,
+  qtyPcs: z.number().int().positive().max(10_000_000),
+  notes: optionalText(300),
+});
+export type CheckIssueInput = z.infer<typeof checkIssueSchema>;
+
+export const checkResultSchema = z
+  .object({
+    resultDate: businessDate,
+    qtyPassed: z.number().int().min(0).max(10_000_000).default(0),
+    qtyRejected: z.number().int().min(0).max(10_000_000).default(0),
+    qtyMissing: z.number().int().min(0).max(10_000_000).default(0),
+    rejections: z
+      .array(
+        z.object({
+          reason: z.enum(CHECK_REJECTION_REASONS),
+          qtyPcs: z.number().int().positive().max(10_000_000),
+        }),
+      )
+      .default([]),
+    notes: optionalText(300),
+  })
+  .refine((r) => r.qtyPassed + r.qtyRejected + r.qtyMissing > 0, {
+    message: 'Enter at least one quantity',
+    path: ['qtyPassed'],
+  })
+  .refine((r) => r.rejections.reduce((s, x) => s + x.qtyPcs, 0) === r.qtyRejected, {
+    message: 'Rejection reasons must add up to the rejected quantity',
+    path: ['rejections'],
+  });
+export type CheckResultInput = z.infer<typeof checkResultSchema>;
+
+export const packIssueSchema = z.object({
+  issueDate: businessDate,
+  staffId: id,
+  modelId: id,
+  colorId: id,
+  sizeId: id,
+  qtyPcs: z.number().int().positive().max(10_000_000),
+  notes: optionalText(300),
+});
+export type PackIssueInput = z.infer<typeof packIssueSchema>;
+
+export const packResultSchema = z
+  .object({
+    resultDate: businessDate,
+    qtyPacked: z.number().int().min(0).max(10_000_000).default(0),
+    qtyShort: z.number().int().min(0).max(10_000_000).default(0),
+    shortReason: z.enum(PACK_SHORT_REASONS).nullish(),
+    notes: optionalText(300),
+  })
+  .refine((r) => r.qtyPacked + r.qtyShort > 0, {
+    message: 'Enter at least one quantity',
+    path: ['qtyPacked'],
+  })
+  .refine((r) => r.qtyShort === 0 || r.shortReason != null, {
+    message: 'Pick a reason for the shortage',
+    path: ['shortReason'],
+  });
+export type PackResultInput = z.infer<typeof packResultSchema>;
+
+export const dispatchSchema = z.object({
+  dispatchDate: businessDate,
+  modelId: id,
+  colorId: id,
+  sizeId: id,
+  qtyPcs: z.number().int().positive().max(10_000_000),
+  notes: optionalText(300),
+});
+export type DispatchInput = z.infer<typeof dispatchSchema>;
 
 export const openingBalanceSchema = z
   .object({
