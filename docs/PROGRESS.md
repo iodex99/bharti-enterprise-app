@@ -64,14 +64,18 @@
   packing pools); owner HomePage with KPI tiles, alerts panel (icon+label severity), and
   four Recharts charts using the validated dataviz palette (blue/aqua/yellow, ΔE 47.2;
   direct end-labels as contrast relief). Numbers asserted against the fixture ledger.
-- [ ] **Phase 10 — PWA + polish + nightly self-reconciliation.**
+- [x] **Phase 10 — PWA + reconciliation + settings**: installable PWA (manifest, generated
+  icons, hand-rolled sw.js: network-only /api and /uploads, network-first navigations,
+  cache-first hashed assets — can never mask a release or serve stale data; E2E proves
+  /api freshness THROUGH the active SW), admin System Health page (live conservation
+  self-checks incl. corrupted-ledger detection test, version/update state, editable
+  delayed_job_days with whitelist + audit).
 - [ ] **Phase 11 — Hardening**: full E2E, security sweep, backup/restore + rollback drills,
   USER_GUIDE, DEPLOYMENT (office PC + WinSW + Cloudflare Tunnel), final release.
 
 ## Current state
 
-Phases 0–9 complete. 205 unit/integration + 38 E2E tests green. Dashboard eyeballed via
-screenshot (renders correctly with live data). Release pipeline VERIFIED
+Phases 0–10 complete. 211 unit/integration + 42 E2E tests green. Release pipeline VERIFIED
 end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**

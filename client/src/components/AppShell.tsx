@@ -49,6 +49,7 @@ const NAV: NavSection[] = [
       { to: '/admin/users', label: 'Users', icon: '👥', roles: ['admin'] },
       { to: '/admin/audit', label: 'Audit Log', icon: '📜', roles: ['admin'] },
       { to: '/admin/backups', label: 'Backups', icon: '💾', roles: ['admin'] },
+      { to: '/admin/system', label: 'System Health', icon: '🩺', roles: ['admin'] },
     ],
   },
 ];

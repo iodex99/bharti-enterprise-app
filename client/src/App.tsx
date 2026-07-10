@@ -19,6 +19,7 @@ import OpeningBalancesPage from './pages/admin/OpeningBalancesPage';
 import UsersPage from './pages/admin/UsersPage';
 import AuditPage from './pages/admin/AuditPage';
 import BackupsPage from './pages/admin/BackupsPage';
+import SystemPage from './pages/admin/SystemPage';
 import { Spinner } from './components/ui';
 import type { ReactNode } from 'react';
 
@@ -99,6 +100,14 @@ export default function App() {
           element={
             <Protected roles={['admin']}>
               <BackupsPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="admin/system"
+          element={
+            <Protected roles={['admin']}>
+              <SystemPage />
             </Protected>
           }
         />

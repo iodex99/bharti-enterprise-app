@@ -5,6 +5,10 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Phase 10: installable phone app (PWA) with an update-safe service worker,
+  admin System Health panel with live inventory self-checks (conservation re-derived on
+  demand), configurable delayed-job threshold.
+
 - 2026-07-11 — Phase 9: owner dashboard — live KPI tiles for all seven stock stages and
   business pulse (open/delayed jobs, pending receipts, unresolved discrepancies, contractor
   dues), alerts panel (delayed jobs, discrepancies, idle checking/packing goods), and four
