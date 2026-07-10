@@ -32,7 +32,11 @@
   APIs (/summary, /raw with vendor lots, /:stage), idempotency-key middleware; purchases +
   inventory + opening-balance UI with Meters/DzPc inputs; conservation + FIFO + purchases
   test suites. **GitHub Release v1.0.1 published by CI — real pipeline verified.**
-- [ ] **Phase 5 — Cutting**: plan → actuals, variance + reasons, CUT stock.
+- [x] **Phase 5 — Cutting**: plan consumes a chosen RAW lot (purchase OR opening; explicit
+  batch selection per spec), actuals per size with mandatory variance reasons (incl.
+  better_yield) + unplanned sizes, discrepancy rows per variance, CUT stock by cutting_line
+  lot, admin void (restores RAW, removes CUT, blocked once issued), cutting UI with live
+  variance badges. NOTE: cutting_batches uses raw_lot_type/raw_lot_id (not purchase_id).
 - [ ] **Phase 6 — Job work**: cards+lines, FIFO allocations, partial/excess/unstitched
   receipts, discrepancies, admin close, WIP stock, contractor analytics + payments.
 - [ ] **Phase 7 — Checking + Packing + FG** + dispatch + REJECTED stage; full-chain
@@ -60,11 +64,13 @@ published. Update drill 13/13 locally.
 
 ## Next steps
 
-1. **Phase 5 — Cutting**: cutting plan (pick a raw batch → shows available meters → expected
-   dz+pc per size, multiple sizes), record actuals (variance % + highlight + reason incl.
-   better_yield, unplanned sizes allowed), ledger: RAW −meters_used (cutting_consume) on plan,
-   CUT +actual (cutting_output) per line on completion; CUT stock view; voids; tests + E2E.
-2. Then Phase 6 (job work + contractor payments).
+1. **Phase 6 — Job work**: job cards (header + per-size lines, rate snapshot from contractor
+   master, editable), FIFO job_allocations from CUT lots, partial receipts (stitched /
+   unstitched_return), excess-receipt genesis + discrepancy rows, per-line + card status
+   machine, auto-complete on match, admin-only close-with-discrepancy, WIP stock views,
+   contractor analytics (turnaround, discrepancy %, rankings) + payments (dues = stitched
+   received × rate − payments), UI + tests + E2E.
+2. Then Phase 7 (checking/packing/FG).
 
 ## Session notes
 

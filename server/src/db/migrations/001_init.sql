@@ -176,7 +176,11 @@ CREATE TABLE cutting_batches (
   id INTEGER PRIMARY KEY,
   doc_no TEXT NOT NULL UNIQUE,
   cut_date TEXT NOT NULL,
-  purchase_id INTEGER NOT NULL REFERENCES purchases(id),
+  -- the raw cloth lot consumed: a purchase batch or an opening-balance lot
+  raw_lot_type TEXT NOT NULL CHECK (raw_lot_type IN ('purchase','opening')),
+  raw_lot_id INTEGER NOT NULL,
+  model_id INTEGER NOT NULL REFERENCES models(id),
+  color_id INTEGER NOT NULL REFERENCES colors(id),
   meters_used_cm INTEGER NOT NULL CHECK (meters_used_cm > 0),
   status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','completed')),
   completed_at TEXT,
@@ -187,7 +191,7 @@ CREATE TABLE cutting_batches (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   created_by INTEGER REFERENCES users(id)
 );
-CREATE INDEX idx_cutting_purchase ON cutting_batches(purchase_id);
+CREATE INDEX idx_cutting_raw_lot ON cutting_batches(raw_lot_type, raw_lot_id);
 CREATE INDEX idx_cutting_status ON cutting_batches(status);
 
 CREATE TABLE cutting_lines (

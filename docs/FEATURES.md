@@ -14,7 +14,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Raw material purchases + RAW stock | ✅ | Phase 4 |
 | Opening balances | ✅ | Phase 4 |
 | Void-with-reversals | ✅ | Phase 4 |
-| Cutting plan/actual + variance + CUT stock | ⬜ | Phase 5 |
+| Cutting plan/actual + variance + CUT stock | ✅ | Phase 5 |
 | Job cards + partial receipts + discrepancies + WIP | ⬜ | Phase 6 |
 | Contractor analytics + rankings | ⬜ | Phase 6 |
 | Contractor payments (dues, statements) | ⬜ | Phase 6 |

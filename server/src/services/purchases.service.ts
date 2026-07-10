@@ -159,7 +159,8 @@ export function voidPurchase(
   if (bal !== (existing.qty_cm as number)) {
     const consumer = db
       .prepare(
-        `SELECT cb.doc_no FROM cutting_batches cb WHERE cb.purchase_id = ? AND cb.voided_at IS NULL
+        `SELECT cb.doc_no FROM cutting_batches cb
+         WHERE cb.raw_lot_type = 'purchase' AND cb.raw_lot_id = ? AND cb.voided_at IS NULL
          ORDER BY cb.id LIMIT 1`,
       )
       .get(id) as { doc_no: string } | undefined;

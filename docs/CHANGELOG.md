@@ -5,6 +5,11 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-10 — Phase 5: cutting module — plans consume a selected cloth batch (purchase or
+  opening lot) with availability checks; actuals per size enforce variance reasons and allow
+  unplanned sizes; CUT inventory tracked per cutting line; variance discrepancies recorded;
+  admin void with full stock restore; cutting UI with live variance calculation.
+
 - 2026-07-10 — Phase 4: stock ledger engine (conservation rules enforced at write time:
   genesis/terminal whitelists, balanced transfers, per-lot overdraw rejection, sync-
   transaction-only), purchases module (RM- batches, server-computed totals, financial-only

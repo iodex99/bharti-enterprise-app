@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STAFF_ROLES, STAGES } from './enums';
+import { CUTTING_VARIANCE_REASONS, STAFF_ROLES, STAGES } from './enums';
 import { isValidBusinessDate } from './dates';
 
 /**
@@ -114,6 +114,49 @@ export type PurchaseEditInput = z.infer<typeof purchaseEditSchema>;
 export const voidSchema = z.object({
   reason: z.string().trim().min(3, 'A reason is required').max(300),
 });
+
+export const cuttingPlanSchema = z
+  .object({
+    cutDate: businessDate,
+    rawLotType: z.enum(['purchase', 'opening']),
+    rawLotId: id,
+    /** cloth consumed by this cutting batch, integer cm */
+    metersUsedCm: z.number().int().positive().max(100_000_000),
+    notes: optionalText(500),
+    lines: z
+      .array(
+        z.object({
+          sizeId: id,
+          /** expected output in integer pieces */
+          expectedPcs: z.number().int().positive().max(10_000_000),
+        }),
+      )
+      .min(1, 'Add at least one size'),
+  })
+  .refine((p) => new Set(p.lines.map((l) => l.sizeId)).size === p.lines.length, {
+    message: 'Each size may appear only once',
+    path: ['lines'],
+  });
+export type CuttingPlanInput = z.infer<typeof cuttingPlanSchema>;
+
+export const cuttingActualsSchema = z
+  .object({
+    lines: z
+      .array(
+        z.object({
+          sizeId: id,
+          actualPcs: z.number().int().min(0).max(10_000_000),
+          varianceReason: z.enum(CUTTING_VARIANCE_REASONS).nullish(),
+          reasonNote: optionalText(300),
+        }),
+      )
+      .min(1),
+  })
+  .refine((p) => new Set(p.lines.map((l) => l.sizeId)).size === p.lines.length, {
+    message: 'Each size may appear only once',
+    path: ['lines'],
+  });
+export type CuttingActualsInput = z.infer<typeof cuttingActualsSchema>;
 
 export const openingBalanceSchema = z
   .object({

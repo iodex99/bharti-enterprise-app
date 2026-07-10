@@ -110,8 +110,8 @@ describe('ledger conservation rules', () => {
 
   it('balanced transfer moves stock between stages', () => {
     ctx.db.exec(`
-      INSERT INTO cutting_batches (id, doc_no, cut_date, purchase_id, meters_used_cm, status, created_by)
-      VALUES (1, 'CUT-0001', '2026-07-02', 1, 1000, 'completed', 1);
+      INSERT INTO cutting_batches (id, doc_no, cut_date, raw_lot_type, raw_lot_id, model_id, color_id, meters_used_cm, status, created_by)
+      VALUES (1, 'CUT-0001', '2026-07-02', 'purchase', 1, 1, 1, 1000, 'completed', 1);
       INSERT INTO cutting_lines (id, cutting_batch_id, size_id, expected_pcs, actual_pcs)
       VALUES (1, 1, 1, 120, 120);
       INSERT INTO job_cards (id, doc_no, issue_date, contractor_id, model_id, color_id, created_by)

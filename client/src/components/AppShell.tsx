@@ -19,7 +19,10 @@ const NAV: NavSection[] = [
   },
   {
     title: 'Production',
-    items: [{ to: '/purchases', label: 'Purchases', icon: '🧾' }],
+    items: [
+      { to: '/purchases', label: 'Purchases', icon: '🧾' },
+      { to: '/cutting', label: 'Cutting', icon: '✂️' },
+    ],
   },
   {
     title: 'Masters',

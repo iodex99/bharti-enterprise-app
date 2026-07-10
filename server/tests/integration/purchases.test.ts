@@ -180,8 +180,8 @@ describe('purchases', () => {
     // simulate a cutting consumption directly through the ledger
     ctx.db
       .prepare(
-        `INSERT INTO cutting_batches (doc_no, cut_date, purchase_id, meters_used_cm, status, created_by)
-         VALUES ('CUT-TEST', '2026-07-04', ?, 500, 'planned', 1)`,
+        `INSERT INTO cutting_batches (doc_no, cut_date, raw_lot_type, raw_lot_id, model_id, color_id, meters_used_cm, status, created_by)
+         VALUES ('CUT-TEST', '2026-07-04', 'purchase', ?, 1, 1, 500, 'planned', 1)`,
       )
       .run(id);
     ctx.db
