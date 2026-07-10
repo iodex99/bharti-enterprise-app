@@ -5,6 +5,11 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Phase 11: complete staff USER_GUIDE, office DEPLOYMENT guide (installer,
+  Cloudflare Tunnel, runbook, go-live checklist), final API/data-model/testing docs,
+  security-header assertions; final full verification (unit+integration+E2E) and update
+  drill re-run before release.
+
 - 2026-07-11 — Phase 10: installable phone app (PWA) with an update-safe service worker,
   admin System Health panel with live inventory self-checks (conservation re-derived on
   demand), configurable delayed-job threshold.

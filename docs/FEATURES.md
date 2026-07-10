@@ -25,4 +25,4 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Dashboard + alerts | ✅ | Phase 9 |
 | PWA install + polish | ✅ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |
-| Deployment docs (WinSW + Cloudflare Tunnel) | ⬜ | Phase 11 |
+| Deployment docs (WinSW + Cloudflare Tunnel) | ✅ | Phase 11 |

@@ -47,6 +47,8 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
 
   // issue 10dz to a contractor
   await page.goto('/jobs');
+  // the DataTable renders "N of M" once loaded — count() alone doesn't wait
+  await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
   const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
   await page.getByRole('button', { name: '+ New job card' }).click();
   await page.getByLabel('Contractor').selectOption({ label: 'Rafiq Tailors' });

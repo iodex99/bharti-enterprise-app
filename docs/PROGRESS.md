@@ -70,12 +70,17 @@
   /api freshness THROUGH the active SW), admin System Health page (live conservation
   self-checks incl. corrupted-ledger detection test, version/update state, editable
   delayed_job_days with whitelist + audit).
-- [ ] **Phase 11 — Hardening**: full E2E, security sweep, backup/restore + rollback drills,
-  USER_GUIDE, DEPLOYMENT (office PC + WinSW + Cloudflare Tunnel), final release.
+- [x] **Phase 11 — Hardening & ship**: final full gate (212 unit/integration + 42 E2E,
+  typecheck/lint/build), final update drill 13/13 (one-click update, session+data survival,
+  poisoned-release auto-rollback with DB restore), security-header assertions, complete
+  USER_GUIDE (per-module staff guide), DEPLOYMENT (installer, Cloudflare Tunnel, runbook,
+  go-live checklist), refreshed API/DATA_MODEL/TESTING/README docs. E2E count-wait flake
+  fixed (DataTable 'N of M' barrier before row counts).
 
 ## Current state
 
-Phases 0–10 complete. 211 unit/integration + 42 E2E tests green. Release pipeline VERIFIED
+ALL PHASES COMPLETE (0–11). 212 unit/integration + 42 E2E green; drill 13/13; every
+phase shipped through the real release pipeline (GitHub Releases v1.0.x). Release pipeline VERIFIED
 end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**
@@ -89,13 +94,10 @@ end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/
 
 ## Next steps
 
-1. **Phase 10 — PWA + polish + reconciliation**: manifest + icons + service worker (shell
-   only, never caches /api, must not mask update banner — explicit E2E), nightly
-   self-reconciliation surfaced on an admin system panel (conservation query), settings UI
-   for delayed_job_days, fast-search polish.
-2. **Phase 11 — Hardening & ship**: full E2E pass, security sweep, backup/restore drill,
-   final update drill, USER_GUIDE.md per module, DEPLOYMENT.md office install + Cloudflare
-   Tunnel step-by-step, README refresh, final release.
+1. Physical go-live at the office: run docs/DEPLOYMENT.md → Go-live checklist (install
+   service, tunnel, masters, opening balances, drills, staff walkthrough).
+2. Roadmap candidates when the owner asks: docs/ROADMAP.md (sales module, QR labels,
+   WhatsApp alerts, low-stock thresholds, rework flow…).
 
 ## Session notes
 

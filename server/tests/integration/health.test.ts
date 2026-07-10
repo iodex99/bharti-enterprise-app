@@ -17,4 +17,13 @@ describe('GET /api/system/health', () => {
     expect(res.status).toBe(404);
     expect(res.body.error).toBe('Not found');
   });
+
+  it('security headers are set (helmet)', async () => {
+    const app = createApp();
+    const res = await request(app).get('/api/system/health');
+    expect(res.headers['content-security-policy']).toContain("default-src 'self'");
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBeDefined();
+    expect(res.headers['x-powered-by']).toBeUndefined();
+  });
 });

@@ -51,6 +51,8 @@ test('purchase → cutting → job work → checking → packing → finished go
 
   // 3. job to contractor, receive all stitched
   await page.goto('/jobs');
+  // the DataTable renders "N of M" once loaded — count() alone doesn't wait
+  await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
   const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
   await page.getByRole('button', { name: '+ New job card' }).click();
   await page.getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
