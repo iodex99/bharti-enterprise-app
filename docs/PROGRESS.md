@@ -25,8 +25,13 @@
   while referenced, deactivate hides from new use), admin-only mutations / all-role reads,
   image pipeline (multer→sharp→webp in data/uploads, auth-gated serving, traversal-safe),
   config-driven MastersPage ×6, DataTable + MoneyInput + ImageInput components, masters E2E.
-- [ ] **Phase 4 — Ledger engine** + conservation tests + purchases (+void) + RAW stock +
-  opening balances.
+- [x] **Phase 4 — Ledger engine**: postMovements (sync-transaction-only, genesis/terminal/
+  transfer conservation rules, per-lot overdraw guard), availableLots + splitFifo +
+  stockByDimensions; purchases (server-computed totals, financial-only edits, admin void
+  with reversal blocked by downstream use), opening balances (all stages, admin), stock
+  APIs (/summary, /raw with vendor lots, /:stage), idempotency-key middleware; purchases +
+  inventory + opening-balance UI with Meters/DzPc inputs; conservation + FIFO + purchases
+  test suites. **GitHub Release v1.0.1 published by CI — real pipeline verified.**
 - [ ] **Phase 5 — Cutting**: plan → actuals, variance + reasons, CUT stock.
 - [ ] **Phase 6 — Job work**: cards+lines, FIFO allocations, partial/excess/unstitched
   receipts, discrepancies, admin close, WIP stock, contractor analytics + payments.
@@ -40,31 +45,26 @@
 
 ## Current state
 
-Phases 0–3 complete. 128 unit/integration tests + 20 E2E tests green. Update drill
-13/13 (seeded install → admin one-click update → session & data survive → poisoned
-release auto-rolls-back with DB restore). CI on GitHub (ubuntu + windows) runs
-typecheck/lint/test/build + E2E; release.yml publishes `v1.0.<run>` zips from green main.
+Phases 0–4 complete. 155 unit/integration + 26 E2E tests green. Release pipeline VERIFIED
+end-to-end on GitHub: push → CI (ubuntu+windows) → Release build → v1.0.1 zip + checksums
+published. Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**
-- Repo `iodex99/bharti-enterprise-app` is **private** — unauthenticated GitHub API gets 404;
-  git push works via Git Credential Manager. Office installs need a fine-grained PAT
+- Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
   (Contents: read) in supervisor config.json.
-- Windows: use `C:\Windows\System32\tar.exe` (bsdtar) explicitly for zip create/extract —
-  PATH `tar` may be Git's GNU tar (no zip support).
-- Playwright 1.61 starts `webServer` CONCURRENTLY with globalSetup → seed inside the
-  webServer command (scripts/e2e-server.mjs), never in globalSetup.
-- Playwright runs desktop then mobile projects against ONE server/DB: per-project usernames
-  (`fresh-desktop`/`fresh-mobile`), LOGIN_MAX_PER_MINUTE raised in E2E env.
-- In-app login rate limit is env-tunable (`LOGIN_MAX_PER_MINUTE`, default 10/min/IP).
+- Windows: use `C:\Windows\System32\tar.exe` (bsdtar) explicitly for zips — PATH tar may be GNU tar.
+- Playwright starts webServer CONCURRENTLY with globalSetup → seed inside scripts/e2e-server.mjs.
+- Playwright desktop+mobile share one server/DB → per-project usernames, raised login rate limit.
+- react-hooks v7 lint: no setState-in-effect-body, no refs during render — inputs use
+  initialize-once + remount-per-record (key=) pattern.
 
 ## Next steps
 
-1. **Phase 4 — Ledger engine**: `ledger.service.ts` (post movements inside sync
-   transactions, per-lot negative-balance guard, FIFO consumer, genesis/terminal ref_type
-   whitelists per docs/DATA_MODEL.md), conservation invariant test suite, purchases module
-   (+void with reversals, image), RAW stock views, opening balances (admin), DzPc/Meters
-   date inputs, idempotency-key middleware for document posts.
-2. Then Phase 5 (cutting).
+1. **Phase 5 — Cutting**: cutting plan (pick a raw batch → shows available meters → expected
+   dz+pc per size, multiple sizes), record actuals (variance % + highlight + reason incl.
+   better_yield, unplanned sizes allowed), ledger: RAW −meters_used (cutting_consume) on plan,
+   CUT +actual (cutting_output) per line on completion; CUT stock view; voids; tests + E2E.
+2. Then Phase 6 (job work + contractor payments).
 
 ## Session notes
 

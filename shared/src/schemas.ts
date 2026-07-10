@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { STAFF_ROLES } from './enums';
+import { STAFF_ROLES, STAGES } from './enums';
+import { isValidBusinessDate } from './dates';
 
 /**
  * API payload schemas shared by server validation and client forms.
@@ -76,3 +77,62 @@ export type SizeInput = z.infer<typeof sizeSchema>;
 export type VendorInput = z.infer<typeof vendorSchema>;
 export type ContractorInput = z.infer<typeof contractorSchema>;
 export type StaffInput = z.infer<typeof staffSchema>;
+
+export const businessDate = z
+  .string()
+  .refine(isValidBusinessDate, 'Enter a valid date (YYYY-MM-DD)');
+
+const id = z.number().int().positive();
+
+export const purchaseSchema = z
+  .object({
+    purchaseDate: businessDate,
+    receivedDate: businessDate,
+    vendorId: id,
+    modelId: id,
+    colorId: id,
+    /** integer centimeters (UI converts from meters) */
+    qtyCm: z.number().int().positive().max(100_000_000),
+    ratePaisePerMeter: z.number().int().min(0).max(100_000_00),
+    imagePath: z.string().max(300).nullish(),
+    notes: optionalText(500),
+  })
+  .refine((p) => p.receivedDate >= p.purchaseDate, {
+    message: 'Received date cannot be before the purchase date',
+    path: ['receivedDate'],
+  });
+export type PurchaseInput = z.infer<typeof purchaseSchema>;
+
+export const purchaseEditSchema = z.object({
+  // financial/reference fields only — quantity/model/color are immutable (void + re-enter)
+  ratePaisePerMeter: z.number().int().min(0).max(100_000_00),
+  imagePath: z.string().max(300).nullish(),
+  notes: optionalText(500),
+});
+export type PurchaseEditInput = z.infer<typeof purchaseEditSchema>;
+
+export const voidSchema = z.object({
+  reason: z.string().trim().min(3, 'A reason is required').max(300),
+});
+
+export const openingBalanceSchema = z
+  .object({
+    balanceDate: businessDate,
+    stage: z.enum(STAGES),
+    modelId: id,
+    colorId: id,
+    sizeId: id.nullish(),
+    contractorId: id.nullish(),
+    /** cm for RAW, pieces for all other stages */
+    qty: z.number().int().positive().max(100_000_000),
+    note: optionalText(300),
+  })
+  .refine((b) => (b.stage === 'RAW' ? true : b.sizeId != null), {
+    message: 'Size is required for this stage',
+    path: ['sizeId'],
+  })
+  .refine((b) => (b.stage === 'WIP' ? b.contractorId != null : true), {
+    message: 'Contractor is required for WIP stock',
+    path: ['contractorId'],
+  });
+export type OpeningBalanceInput = z.infer<typeof openingBalanceSchema>;

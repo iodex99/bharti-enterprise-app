@@ -10,10 +10,10 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Users admin | ✅ | Phase 2 |
 | Masters: Models / Colors / Sizes / Vendors / Contractors / Staff | ✅ | Phase 3 |
 | Image uploads (model refs, purchase refs) | ✅ | Phase 3 |
-| Stock ledger engine (7 stages) | ⬜ | Phase 4 |
-| Raw material purchases + RAW stock | ⬜ | Phase 4 |
-| Opening balances | ⬜ | Phase 4 |
-| Void-with-reversals | ⬜ | Phase 4 |
+| Stock ledger engine (7 stages) | ✅ | Phase 4 |
+| Raw material purchases + RAW stock | ✅ | Phase 4 |
+| Opening balances | ✅ | Phase 4 |
+| Void-with-reversals | ✅ | Phase 4 |
 | Cutting plan/actual + variance + CUT stock | ⬜ | Phase 5 |
 | Job cards + partial receipts + discrepancies + WIP | ⬜ | Phase 6 |
 | Contractor analytics + rankings | ⬜ | Phase 6 |

@@ -12,7 +12,14 @@ type NavSection = { title: string; items: NavItem[] };
 const NAV: NavSection[] = [
   {
     title: '',
-    items: [{ to: '/', label: 'Home', icon: '🏠' }],
+    items: [
+      { to: '/', label: 'Home', icon: '🏠' },
+      { to: '/stock/raw', label: 'Inventory', icon: '📦' },
+    ],
+  },
+  {
+    title: 'Production',
+    items: [{ to: '/purchases', label: 'Purchases', icon: '🧾' }],
   },
   {
     title: 'Masters',
@@ -28,6 +35,7 @@ const NAV: NavSection[] = [
   {
     title: 'Administration',
     items: [
+      { to: '/admin/opening-balances', label: 'Opening Balances', icon: '🧮', roles: ['admin'] },
       { to: '/admin/users', label: 'Users', icon: '👥', roles: ['admin'] },
       { to: '/admin/audit', label: 'Audit Log', icon: '📜', roles: ['admin'] },
       { to: '/admin/backups', label: 'Backups', icon: '💾', roles: ['admin'] },

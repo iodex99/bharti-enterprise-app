@@ -2,6 +2,118 @@ import { useRef, useState } from 'react';
 import { TextInput } from './ui';
 
 /**
+ * Meters entry (max 2 decimals), value held in integer CENTIMETERS.
+ * Initializes once — remount (key=) to load a different record.
+ */
+export function MetersInput({
+  cm,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  cm: number | null;
+  onChange: (cm: number | null) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [text, setText] = useState(() => (cm == null ? '' : (cm / 100).toString()));
+  return (
+    <div className="relative">
+      <TextInput
+        inputMode="decimal"
+        value={text}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(e) => {
+          const t = e.target.value;
+          if (!/^\d*(\.\d{0,2})?$/.test(t)) return;
+          setText(t);
+          if (t === '' || t === '.') {
+            onChange(null);
+            return;
+          }
+          const meters = Number.parseFloat(t);
+          onChange(Number.isFinite(meters) ? Math.round(meters * 100) : null);
+        }}
+      />
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-400">
+        m
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Dozens + pieces split entry, value held in integer PIECES (1dz = 12pc).
+ * Initializes once — remount (key=) to load a different record.
+ */
+export function DzPcInput({
+  pieces,
+  onChange,
+  disabled,
+}: {
+  pieces: number | null;
+  onChange: (pieces: number | null) => void;
+  disabled?: boolean;
+}) {
+  const [dzText, setDzText] = useState(() =>
+    pieces == null ? '' : String(Math.floor(pieces / 12)),
+  );
+  const [pcText, setPcText] = useState(() => (pieces == null ? '' : String(pieces % 12)));
+
+  const emit = (dz: string, pc: string) => {
+    if (dz === '' && pc === '') {
+      onChange(null);
+      return;
+    }
+    const d = dz === '' ? 0 : Number.parseInt(dz, 10);
+    const p = pc === '' ? 0 : Number.parseInt(pc, 10);
+    onChange(d * 12 + p);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1">
+        <TextInput
+          inputMode="numeric"
+          aria-label="Dozens"
+          value={dzText}
+          disabled={disabled}
+          onChange={(e) => {
+            const t = e.target.value;
+            if (!/^\d{0,5}$/.test(t)) return;
+            setDzText(t);
+            emit(t, pcText);
+          }}
+        />
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-400">
+          dz
+        </span>
+      </div>
+      <span className="text-gray-300">+</span>
+      <div className="relative w-24">
+        <TextInput
+          inputMode="numeric"
+          aria-label="Pieces"
+          value={pcText}
+          disabled={disabled}
+          onChange={(e) => {
+            const t = e.target.value;
+            if (!/^\d{0,2}$/.test(t)) return;
+            if (t !== '' && Number.parseInt(t, 10) > 11) return;
+            setPcText(t);
+            emit(dzText, t);
+          }}
+        />
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-400">
+          pc
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Money entry in rupees, value held in integer PAISE (or null while empty/invalid).
  * Text state stays local so partial entries like "12." don't fight the parser.
  * Initializes from the prop ONCE — parents must remount (key=) to load a new record.

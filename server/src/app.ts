@@ -10,6 +10,9 @@ import { usersRoutes } from './routes/users.routes';
 import { auditRoutes } from './routes/audit.routes';
 import { mastersRoutes } from './routes/masters.routes';
 import { uploadsRoutes, uploadsStatic } from './routes/uploads.routes';
+import { purchasesRoutes } from './routes/purchases.routes';
+import { stockRoutes } from './routes/stock.routes';
+import { openingRoutes } from './routes/opening.routes';
 
 export function createApp() {
   const app = express();
@@ -43,6 +46,9 @@ export function createApp() {
   app.use('/api/masters', mastersRoutes());
   app.use('/api/uploads', uploadsRoutes());
   app.use('/uploads', uploadsStatic());
+  app.use('/api/purchases', purchasesRoutes());
+  app.use('/api/stock', stockRoutes());
+  app.use('/api/opening-balances', openingRoutes());
 
   // Unknown API routes are a JSON 404, not the SPA fallback.
   app.use('/api', (_req, res) => {

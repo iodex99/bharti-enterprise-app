@@ -5,6 +5,14 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-10 — Phase 4: stock ledger engine (conservation rules enforced at write time:
+  genesis/terminal whitelists, balanced transfers, per-lot overdraw rejection, sync-
+  transaction-only), purchases module (RM- batches, server-computed totals, financial-only
+  edits, admin void with ledger reversal blocked by downstream use, idempotency keys),
+  opening balances for go-live stock (all 7 stages), inventory views (summary + per-stage +
+  RAW by vendor/lot), purchases & opening-balance & inventory UI, Meters/DzPc inputs.
+  First real GitHub Release (v1.0.1) published by the pipeline.
+
 - 2026-07-10 — Phase 3: all six masters (generic audited CRUD service; unique-name/code
   409s; soft delete blocked while referenced with "deactivate instead" guidance; admin-only
   mutations, all roles read), image upload pipeline (sharp → webp 1600px, EXIF stripped,

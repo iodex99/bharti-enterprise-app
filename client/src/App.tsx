@@ -5,6 +5,9 @@ import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import HomePage from './pages/HomePage';
 import MastersPage from './pages/masters/MastersPage';
+import PurchasesPage from './pages/purchases/PurchasesPage';
+import StockPage from './pages/stock/StockPage';
+import OpeningBalancesPage from './pages/admin/OpeningBalancesPage';
 import UsersPage from './pages/admin/UsersPage';
 import AuditPage from './pages/admin/AuditPage';
 import BackupsPage from './pages/admin/BackupsPage';
@@ -48,6 +51,17 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="account/password" element={<ChangePasswordPage />} />
         <Route path="masters/:master" element={<MastersPage />} />
+        <Route path="purchases" element={<PurchasesPage />} />
+        <Route path="stock" element={<StockPage />} />
+        <Route path="stock/:stage" element={<StockPage />} />
+        <Route
+          path="admin/opening-balances"
+          element={
+            <Protected roles={['admin']}>
+              <OpeningBalancesPage />
+            </Protected>
+          }
+        />
         <Route
           path="admin/users"
           element={
