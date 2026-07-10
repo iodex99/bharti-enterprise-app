@@ -47,6 +47,7 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
 
   // issue 10dz to a contractor
   await page.goto('/jobs');
+  const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
   await page.getByRole('button', { name: '+ New job card' }).click();
   await page.getByLabel('Contractor').selectOption({ label: 'Rafiq Tailors' });
   await page.getByLabel('Model').selectOption({ index: mobile ? 3 : 1 });
@@ -55,9 +56,8 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
   await page.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await expect(page.getByText(/Default rate ₹28.00/)).toBeVisible(); // auto-fetched rate
   await page.getByRole('button', { name: 'Issue job card' }).click();
-  await expect(page.getByRole('cell', { name: /JOB-\d+/ }).first()).toBeVisible();
-
-  // receipt 1: 4 dz -> partially received
+  // wait for the NEW row before clicking — every row has an "Open" button
+  await expect(page.getByRole('row', { name: /JOB-\d+/ })).toHaveCount(jobRowsBefore + 1);
   const jobRow = page.getByRole('row', { name: /JOB-\d+/ }).first();
   await jobRow.getByRole('button', { name: 'Open' }).click();
   const detail = page.getByRole('dialog', { name: /JOB-\d+/ });

@@ -57,14 +57,21 @@
   frozen header) with ?format=xlsx on every report, reports UI (grouped picker, dynamic
   filters, print CSS), trace UI (expandable tree, FIFO honesty note). Reports registry
   integration-tested report-by-report + xlsx round-trip parse.
-- [ ] **Phase 9 — Dashboard (KPIs + charts) + alerts panel.**
+- [x] **Phase 9 — Dashboard + alerts**: /api/dashboard (stage KPIs, jobs pulse, pending
+  receipts, unresolved discrepancies, contractor dues, monthly trend series, contractor
+  bars, rejection reasons, FG by model) + /api/dashboard/alerts (delayed jobs w/ threshold
+  from settings key delayed_job_days default 7, unresolved discrepancies, idle checking/
+  packing pools); owner HomePage with KPI tiles, alerts panel (icon+label severity), and
+  four Recharts charts using the validated dataviz palette (blue/aqua/yellow, ΔE 47.2;
+  direct end-labels as contrast relief). Numbers asserted against the fixture ledger.
 - [ ] **Phase 10 — PWA + polish + nightly self-reconciliation.**
 - [ ] **Phase 11 — Hardening**: full E2E, security sweep, backup/restore + rollback drills,
   USER_GUIDE, DEPLOYMENT (office PC + WinSW + Cloudflare Tunnel), final release.
 
 ## Current state
 
-Phases 0–8 complete. 204 unit/integration + 38 E2E tests green. Release pipeline VERIFIED
+Phases 0–9 complete. 205 unit/integration + 38 E2E tests green. Dashboard eyeballed via
+screenshot (renders correctly with live data). Release pipeline VERIFIED
 end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**
@@ -78,13 +85,13 @@ end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/
 
 ## Next steps
 
-1. **Phase 9 — Dashboard + alerts**: /api/dashboard (KPI tiles: per-stage stock, open/
-   delayed jobs, pending receipts/checks/packs, dues, discrepancy counts; chart series:
-   monthly production trends, contractor rankings, rejection breakdown, stock by model),
-   /api/alerts (open >N days, unresolved discrepancies, pending work), owner-focused
-   HomePage dashboard with Recharts (USE THE DATAVIZ SKILL before writing chart code),
-   alerts panel, threshold settings.
-2. Then Phase 10 (PWA + polish + nightly self-reconciliation).
+1. **Phase 10 — PWA + polish + reconciliation**: manifest + icons + service worker (shell
+   only, never caches /api, must not mask update banner — explicit E2E), nightly
+   self-reconciliation surfaced on an admin system panel (conservation query), settings UI
+   for delayed_job_days, fast-search polish.
+2. **Phase 11 — Hardening & ship**: full E2E pass, security sweep, backup/restore drill,
+   final update drill, USER_GUIDE.md per module, DEPLOYMENT.md office install + Cloudflare
+   Tunnel step-by-step, README refresh, final release.
 
 ## Session notes
 

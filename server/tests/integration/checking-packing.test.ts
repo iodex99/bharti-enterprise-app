@@ -288,6 +288,35 @@ describe('packing → finished goods → dispatch', () => {
     expect(stageTotal('FG')).toBe(110);
   });
 
+  it('dashboard KPIs and alerts reflect the fixture ledger exactly', async () => {
+    const res = await request(ctx.app).get('/api/dashboard').set('Cookie', owner);
+    expect(res.status).toBe(200);
+    const { kpis } = res.body as {
+      kpis: Record<string, number>;
+    };
+    expect(kpis.rawCm).toBe(4000);
+    expect(kpis.cutPcs).toBe(0);
+    expect(kpis.wipPcs).toBe(0);
+    expect(kpis.fgPcs).toBe(110);
+    expect(kpis.rejectedPcs).toBe(6);
+    expect(kpis.openJobs).toBe(0);
+    expect(kpis.completedJobs).toBe(1);
+    expect(kpis.unresolvedDiscrepancies).toBeGreaterThan(0); // missing + rejects + short
+    // dues: 120 pcs stitched @ ₹30/dz = ₹300 = 30000 paise, nothing paid
+    expect(kpis.duesPaise).toBe(30000);
+
+    const trends = (res.body as { trends: Array<{ cutPcs: number }> }).trends;
+    expect(trends.reduce((s, t) => s + t.cutPcs, 0)).toBe(120);
+
+    const alertsRes = await request(ctx.app).get('/api/dashboard/alerts').set('Cookie', owner);
+    expect(alertsRes.status).toBe(200);
+    const titles = (alertsRes.body.items as Array<{ title: string }>).map((a) => a.title);
+    expect(titles.some((t) => /discrepanc/i.test(t))).toBe(true);
+
+    const anon = await request(ctx.app).get('/api/dashboard');
+    expect(anon.status).toBe(401);
+  });
+
   it('FULL-CHAIN CONSERVATION: genesis minus terminal equals stock on hand, drift = 0', () => {
     const genesis = (
       ctx.db

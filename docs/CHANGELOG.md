@@ -5,6 +5,12 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Phase 9: owner dashboard — live KPI tiles for all seven stock stages and
+  business pulse (open/delayed jobs, pending receipts, unresolved discrepancies, contractor
+  dues), alerts panel (delayed jobs, discrepancies, idle checking/packing goods), and four
+  charts (production trend, contractor deliveries, rejection reasons, finished goods by
+  model) with a colorblind-validated palette.
+
 - 2026-07-11 — Phase 8: batch traceability (finished goods traced back through packer,
   checker, contractor, cutting batch to the cloth purchase and vendor; purchases traced
   forward), 15 filterable reports across inventory/production/contractors/quality/losses/

@@ -51,6 +51,7 @@ test('purchase → cutting → job work → checking → packing → finished go
 
   // 3. job to contractor, receive all stitched
   await page.goto('/jobs');
+  const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
   await page.getByRole('button', { name: '+ New job card' }).click();
   await page.getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
   await page.getByLabel('Model').selectOption({ index: modelIndex });
@@ -58,6 +59,9 @@ test('purchase → cutting → job work → checking → packing → finished go
   await page.getByLabel('Size 1').selectOption({ label: 'XL' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await page.getByRole('button', { name: 'Issue job card' }).click();
+  // wait until the NEW job's row renders — every row has an "Open" button, so clicking
+  // .first() before the refetch lands on the previous (completed) job
+  await expect(page.getByRole('row', { name: /JOB-\d+/ })).toHaveCount(jobRowsBefore + 1);
   const jobRow = page.getByRole('row', { name: /JOB-\d+/ }).first();
   await jobRow.getByRole('button', { name: 'Open' }).click();
   await page.getByRole('button', { name: 'Receive goods' }).click();
