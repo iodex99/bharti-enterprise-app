@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readFileSync } from 'node:fs';
+import { cpSync, readFileSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 // npm dependencies stay external (shipped via node_modules in the release zip);
@@ -20,4 +20,9 @@ await build({
   },
 });
 
-console.log('server built -> dist/index.js');
+// SQL migrations ship as files next to the bundle (read at boot by db/migrate.ts).
+cpSync(new URL('./src/db/migrations', import.meta.url), new URL('./dist/migrations', import.meta.url), {
+  recursive: true,
+});
+
+console.log('server built -> dist/index.js (+migrations)');

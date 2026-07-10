@@ -1,37 +1,79 @@
-import { useEffect, useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router';
+import { useAuth } from './lib/auth';
+import AppShell from './components/AppShell';
+import LoginPage from './pages/LoginPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
+import HomePage from './pages/HomePage';
+import MastersPage from './pages/masters/MastersPage';
+import UsersPage from './pages/admin/UsersPage';
+import AuditPage from './pages/admin/AuditPage';
+import BackupsPage from './pages/admin/BackupsPage';
+import { Spinner } from './components/ui';
+import type { ReactNode } from 'react';
 
-type Health = { ok: boolean; version: string };
+function FullScreenSpinner() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <Spinner className="h-8 w-8" />
+    </div>
+  );
+}
+
+/** Auth gate + forced password change interceptor. */
+function Protected({ children, roles }: { children: ReactNode; roles?: Array<'admin' | 'operator' | 'owner'> }) {
+  const { user, loading } = useAuth();
+  if (loading) return <FullScreenSpinner />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword) return <ChangePasswordPage forced />;
+  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/system/health')
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch(() => setError(true));
-  }, []);
+  const { user, loading } = useAuth();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-violet-50 to-fuchsia-100 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-600 text-3xl text-white">
-          B
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900">Bharti Enterprises</h1>
-        <p className="mt-1 text-sm text-gray-500">Production &amp; Inventory Management System</p>
-        <div className="mt-6 rounded-lg bg-gray-50 p-4 text-sm">
-          {error && <span className="text-red-600">Server not reachable</span>}
-          {!error && !health && <span className="text-gray-400">Checking server…</span>}
-          {health && (
-            <span className="text-emerald-600">
-              Server online · v{health.version}
-            </span>
-          )}
-        </div>
-        <p className="mt-6 text-xs text-gray-400">System under construction — Phase 0 scaffold</p>
-      </div>
-    </div>
+    <Routes>
+      <Route
+        path="/login"
+        element={loading ? <FullScreenSpinner /> : user ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      <Route
+        element={
+          <Protected>
+            <AppShell />
+          </Protected>
+        }
+      >
+        <Route index element={<HomePage />} />
+        <Route path="account/password" element={<ChangePasswordPage />} />
+        <Route path="masters/:master" element={<MastersPage />} />
+        <Route
+          path="admin/users"
+          element={
+            <Protected roles={['admin']}>
+              <UsersPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="admin/audit"
+          element={
+            <Protected roles={['admin']}>
+              <AuditPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="admin/backups"
+          element={
+            <Protected roles={['admin']}>
+              <BackupsPage />
+            </Protected>
+          }
+        />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

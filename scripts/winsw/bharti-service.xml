@@ -1,0 +1,16 @@
+<service>
+  <!-- WinSW config: wraps the SUPERVISOR, not the app. The service is installed once
+       and never touched by updates; the supervisor swaps app releases underneath it. -->
+  <id>bharti-app</id>
+  <name>Bharti Enterprises App</name>
+  <description>Bharti Enterprises Production &amp; Inventory Management System (supervisor)</description>
+  <executable>node</executable>
+  <arguments>"%BASE%\..\supervisor\supervisor.cjs"</arguments>
+  <workingdirectory>%BASE%\..</workingdirectory>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec"/>
+  <stoptimeout>20 sec</stoptimeout>
+</service>

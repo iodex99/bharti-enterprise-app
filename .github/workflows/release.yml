@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Built on windows-latest so native modules (better-sqlite3, sharp) ship the
+    # win32-x64 prebuilds matching the office machine and pinned Node ABI.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Self-contained gate: a release is only published if everything passes HERE.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Compute version
+        shell: pwsh
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+      - name: Package release zip
+        shell: pwsh
+        run: node scripts/package-release.mjs $env:VERSION
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v$env:VERSION" `
+            "dist-release/bharti-app-v$env:VERSION.zip" `
+            "dist-release/checksums.txt" `
+            --title "v$env:VERSION" `
+            --generate-notes

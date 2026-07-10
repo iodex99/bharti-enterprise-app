@@ -1,0 +1,68 @@
+import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
+import { api, ApiError } from '../api/client';
+import { useAuth } from '../lib/auth';
+import { Button, ErrorText, Field, TextInput } from '../components/ui';
+
+export default function LoginPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const { refresh } = useAuth();
+  const navigate = useNavigate();
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/api/auth/login', { username, password });
+      await refresh();
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reach the server.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-violet-50 to-fuchsia-100 p-6">
+      <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-600 text-2xl font-bold text-white">
+            B
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">Bharti Enterprises</h1>
+          <p className="text-sm text-gray-500">Production &amp; Inventory System</p>
+        </div>
+        <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+          <Field label="Username">
+            <TextInput
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              required
+              autoFocus
+            />
+          </Field>
+          <Field label="Password">
+            <TextInput
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </Field>
+          <ErrorText>{error}</ErrorText>
+          <Button type="submit" disabled={busy} className="w-full">
+            {busy ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}

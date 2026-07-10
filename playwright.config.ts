@@ -19,13 +19,16 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: 'node server/dist/index.js',
+    command: 'node scripts/e2e-server.mjs',
     port: PORT,
     reuseExistingServer: false,
     env: {
       PORT: String(PORT),
       NODE_ENV: 'production',
-      DATA_DIR: process.env.E2E_DATA_DIR ?? './test-results/e2e-data',
+      DATA_DIR: process.env.E2E_DATA_DIR ?? './.e2e-data',
+      UPDATE_POLL_MINUTES: '0', // no scheduled polling during E2E
+      UPDATE_FEED_URL: 'http://127.0.0.1:1', // banner checks fail fast, never hit GitHub
+      LOGIN_MAX_PER_MINUTE: '1000', // both browser projects share one server IP
     },
   },
 });

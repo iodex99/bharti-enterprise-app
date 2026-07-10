@@ -3,13 +3,19 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { config } from './config';
+import { attachUser, checkOrigin } from './middleware/auth';
 import { systemRoutes } from './routes/system.routes';
+import { authRoutes } from './routes/auth.routes';
+import { usersRoutes } from './routes/users.routes';
+import { auditRoutes } from './routes/audit.routes';
+import { mastersRoutes } from './routes/masters.routes';
+import { uploadsRoutes, uploadsStatic } from './routes/uploads.routes';
 
 export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
-  // Behind Cloudflare Tunnel / reverse proxies we trust the first hop for req.ip.
+  // Behind Cloudflare Tunnel / reverse proxies we trust the first hop for req.ip/req.secure.
   app.set('trust proxy', 1);
 
   app.use(
@@ -27,8 +33,16 @@ export function createApp() {
   );
   app.use(express.json({ limit: '2mb' }));
   app.use(cookieParser());
+  app.use(checkOrigin);
+  app.use(attachUser);
 
   app.use('/api/system', systemRoutes());
+  app.use('/api/auth', authRoutes());
+  app.use('/api/users', usersRoutes());
+  app.use('/api/audit', auditRoutes());
+  app.use('/api/masters', mastersRoutes());
+  app.use('/api/uploads', uploadsRoutes());
+  app.use('/uploads', uploadsStatic());
 
   // Unknown API routes are a JSON 404, not the SPA fallback.
   app.use('/api', (_req, res) => {

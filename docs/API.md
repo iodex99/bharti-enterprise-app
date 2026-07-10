@@ -10,6 +10,35 @@
 |---|---|---|---|
 | GET | /api/system/health | public | `{ ok, version, uptimeSeconds }` |
 | GET | /api/system/version | public | `{ version }` |
+| GET | /api/system/update-status | any signed-in | update state machine + latest/current versions |
+| GET | /api/system/update-check | any signed-in | forces a poll of the release feed |
+| POST | /api/system/update | admin | 202 starts download→stage→restart; 400 dev/no-update; 409 busy |
+| GET | /api/system/backups | admin | list daily/manual/pre-update backups |
+| POST | /api/system/backups | admin | run a manual backup now |
+| GET | /api/system/backups/download?name= | admin | download a backup file |
+
+### Auth
+| Method | Path | Roles | Notes |
+|---|---|---|---|
+| POST | /api/auth/login | public (rate-limited) | sets httpOnly session cookie; 423 when locked |
+| POST | /api/auth/logout | signed-in | revokes session |
+| GET | /api/auth/me | signed-in | `{ user }` incl. mustChangePassword |
+| POST | /api/auth/change-password | signed-in | revokes other sessions |
+
+### Users (admin only)
+| Method | Path | Notes |
+|---|---|---|
+| GET | /api/users | list |
+| POST | /api/users | create (username unique, temp password, must-change) |
+| PATCH | /api/users/:id | displayName/role; role change revokes sessions |
+| POST | /api/users/:id/deactivate | revokes sessions instantly; cannot self-deactivate |
+| POST | /api/users/:id/reactivate | |
+| POST | /api/users/:id/reset-password | temp password + must-change + revoke sessions |
+
+### Audit (admin only)
+| Method | Path | Notes |
+|---|---|---|
+| GET | /api/audit?limit&offset&entityType&entityId | newest first, old/new JSON |
 
 ## Planned route groups (built per phase)
 
