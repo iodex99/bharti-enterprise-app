@@ -82,6 +82,7 @@ export const GENESIS_REF_TYPES = [
 
 export const TERMINAL_REF_TYPES = [
   'cutting_consume',
+  'job_shortage',
   'check_missing',
   'pack_short',
   'reject_writeoff',

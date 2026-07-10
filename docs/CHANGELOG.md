@@ -5,6 +5,12 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Phase 6: contractor job work — multi-size job cards with auto-fetched
+  editable rates, FIFO issue with recorded allocations, partial receipts (10dz as 2+3+5),
+  excess receipts with mandatory reasons, unstitched cloth returns, auto-completion on
+  exact match, admin-only discrepancy close with shortage write-off, contractor performance
+  analytics (rankings, turnaround, discrepancy %) and payments ledger with dues tracking.
+
 - 2026-07-10 — Phase 5: cutting module — plans consume a selected cloth batch (purchase or
   opening lot) with availability checks; actuals per size enforce variance reasons and allow
   unplanned sizes; CUT inventory tracked per cutting line; variance discrepancies recorded;

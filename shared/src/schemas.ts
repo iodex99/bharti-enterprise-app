@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { CUTTING_VARIANCE_REASONS, STAFF_ROLES, STAGES } from './enums';
+import {
+  CUTTING_VARIANCE_REASONS,
+  JOB_DISCREPANCY_REASONS,
+  PAYMENT_MODES,
+  RECEIPT_RETURN_TYPES,
+  STAFF_ROLES,
+  STAGES,
+  UNIT_TYPES,
+} from './enums';
 import { isValidBusinessDate } from './dates';
 
 /**
@@ -157,6 +165,64 @@ export const cuttingActualsSchema = z
     path: ['lines'],
   });
 export type CuttingActualsInput = z.infer<typeof cuttingActualsSchema>;
+
+export const jobCardSchema = z
+  .object({
+    issueDate: businessDate,
+    contractorId: id,
+    modelId: id,
+    colorId: id,
+    notes: optionalText(500),
+    lines: z
+      .array(
+        z.object({
+          sizeId: id,
+          qtyIssuedPcs: z.number().int().positive().max(10_000_000),
+          unitEntered: z.enum(UNIT_TYPES).default('dozens'),
+          ratePaisePerDozen: z.number().int().min(0).max(100_000_00),
+        }),
+      )
+      .min(1, 'Add at least one size'),
+  })
+  .refine((p) => new Set(p.lines.map((l) => l.sizeId)).size === p.lines.length, {
+    message: 'Each size may appear only once',
+    path: ['lines'],
+  });
+export type JobCardInput = z.infer<typeof jobCardSchema>;
+
+export const jobReceiptSchema = z.object({
+  receiptDate: businessDate,
+  notes: optionalText(500),
+  lines: z
+    .array(
+      z.object({
+        jobCardLineId: id,
+        qtyPcs: z.number().int().positive().max(10_000_000),
+        returnType: z.enum(RECEIPT_RETURN_TYPES).default('stitched'),
+        /** required by the service when this line creates a discrepancy (excess) */
+        discrepancyReason: z.enum(JOB_DISCREPANCY_REASONS).nullish(),
+        discrepancyNote: optionalText(300),
+      }),
+    )
+    .min(1, 'Enter at least one received quantity'),
+});
+export type JobReceiptInput = z.infer<typeof jobReceiptSchema>;
+
+export const jobCloseSchema = z.object({
+  reason: z.enum(JOB_DISCREPANCY_REASONS),
+  note: z.string().trim().min(3, 'Describe what happened').max(500),
+});
+export type JobCloseInput = z.infer<typeof jobCloseSchema>;
+
+export const paymentSchema = z.object({
+  contractorId: id,
+  paymentDate: businessDate,
+  amountPaise: z.number().int().positive().max(100_000_000_00),
+  mode: z.enum(PAYMENT_MODES),
+  reference: optionalText(100),
+  notes: optionalText(300),
+});
+export type PaymentInput = z.infer<typeof paymentSchema>;
 
 export const openingBalanceSchema = z
   .object({

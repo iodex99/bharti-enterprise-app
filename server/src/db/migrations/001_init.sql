@@ -434,7 +434,7 @@ CREATE TABLE stock_ledger (
   qty INTEGER NOT NULL CHECK (qty != 0),         -- +in / -out; cm for RAW, pieces otherwise
   ref_type TEXT NOT NULL CHECK (ref_type IN
     ('opening','purchase','cutting_output','receipt_excess','adjustment_in',
-     'cutting_consume','check_missing','pack_short','reject_writeoff','dispatch','adjustment_out',
+     'cutting_consume','job_shortage','check_missing','pack_short','reject_writeoff','dispatch','adjustment_out',
      'job_issue','job_receipt','unstitched_return','check_issue','check_pass','check_reject',
      'pack_issue','pack_output','void_reversal')),
   ref_id INTEGER NOT NULL,
@@ -447,33 +447,37 @@ CREATE INDEX idx_ledger_lot ON stock_ledger(stage, lot_type, lot_id);
 CREATE INDEX idx_ledger_ref ON stock_ledger(ref_type, ref_id);
 CREATE INDEX idx_ledger_contractor ON stock_ledger(contractor_id) WHERE contractor_id IS NOT NULL;
 
--- lineage: FIFO allocations recorded at each downstream hop
+-- lineage: FIFO allocations recorded at each downstream hop.
+-- Lots are typed because opening-balance lots participate at every stage.
 CREATE TABLE job_allocations (
   id INTEGER PRIMARY KEY,
   job_card_line_id INTEGER NOT NULL REFERENCES job_card_lines(id),
-  cutting_line_id INTEGER NOT NULL REFERENCES cutting_lines(id),
+  cut_lot_type TEXT NOT NULL CHECK (cut_lot_type IN ('cutting_line','opening')),
+  cut_lot_id INTEGER NOT NULL,
   qty_pcs INTEGER NOT NULL CHECK (qty_pcs > 0)
 );
 CREATE INDEX idx_job_alloc_line ON job_allocations(job_card_line_id);
-CREATE INDEX idx_job_alloc_cutting ON job_allocations(cutting_line_id);
+CREATE INDEX idx_job_alloc_cut_lot ON job_allocations(cut_lot_type, cut_lot_id);
 
 CREATE TABLE check_allocations (
   id INTEGER PRIMARY KEY,
   check_issue_id INTEGER NOT NULL REFERENCES check_issues(id),
-  job_receipt_line_id INTEGER NOT NULL REFERENCES job_receipt_lines(id),
+  checking_lot_type TEXT NOT NULL CHECK (checking_lot_type IN ('receipt_line','opening')),
+  checking_lot_id INTEGER NOT NULL,
   qty_pcs INTEGER NOT NULL CHECK (qty_pcs > 0)
 );
 CREATE INDEX idx_check_alloc_issue ON check_allocations(check_issue_id);
-CREATE INDEX idx_check_alloc_receipt ON check_allocations(job_receipt_line_id);
+CREATE INDEX idx_check_alloc_lot ON check_allocations(checking_lot_type, checking_lot_id);
 
 CREATE TABLE pack_allocations (
   id INTEGER PRIMARY KEY,
   pack_issue_id INTEGER NOT NULL REFERENCES pack_issues(id),
-  check_issue_id INTEGER NOT NULL REFERENCES check_issues(id),
+  packing_lot_type TEXT NOT NULL CHECK (packing_lot_type IN ('check_issue','opening')),
+  packing_lot_id INTEGER NOT NULL,
   qty_pcs INTEGER NOT NULL CHECK (qty_pcs > 0)
 );
 CREATE INDEX idx_pack_alloc_issue ON pack_allocations(pack_issue_id);
-CREATE INDEX idx_pack_alloc_check ON pack_allocations(check_issue_id);
+CREATE INDEX idx_pack_alloc_lot ON pack_allocations(packing_lot_type, packing_lot_id);
 
 ------------------------------------------------------------------------------
 -- views

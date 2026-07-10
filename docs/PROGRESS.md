@@ -37,8 +37,12 @@
   better_yield) + unplanned sizes, discrepancy rows per variance, CUT stock by cutting_line
   lot, admin void (restores RAW, removes CUT, blocked once issued), cutting UI with live
   variance badges. NOTE: cutting_batches uses raw_lot_type/raw_lot_id (not purchase_id).
-- [ ] **Phase 6 — Job work**: cards+lines, FIFO allocations, partial/excess/unstitched
-  receipts, discrepancies, admin close, WIP stock, contractor analytics + payments.
+- [x] **Phase 6 — Job work**: job cards with per-size lines (rate snapshot, editable), FIFO
+  issue across CUT lots recorded in job_allocations (lot-typed), partial receipts, excess
+  receipts (genesis + mandatory reason + discrepancy row), unstitched returns back onto the
+  allocated CUT lots (LIFO), auto-complete on exact settlement, admin-only
+  close-with-discrepancy (job_shortage writeoff), void for unstarted jobs, contractor
+  analytics (turnaround/discrepancy %/cost/dues) + payments module with voids, full UI.
 - [ ] **Phase 7 — Checking + Packing + FG** + dispatch + REJECTED stage; full-chain
   conservation test.
 - [ ] **Phase 8 — Traceability tree + reports (~15) + Excel export + print CSS.**
@@ -49,9 +53,8 @@
 
 ## Current state
 
-Phases 0–4 complete. 155 unit/integration + 26 E2E tests green. Release pipeline VERIFIED
-end-to-end on GitHub: push → CI (ubuntu+windows) → Release build → v1.0.1 zip + checksums
-published. Update drill 13/13 locally.
+Phases 0–5 complete. 163 unit/integration + 28 E2E tests green. Release pipeline VERIFIED
+end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**
 - Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
@@ -64,13 +67,13 @@ published. Update drill 13/13 locally.
 
 ## Next steps
 
-1. **Phase 6 — Job work**: job cards (header + per-size lines, rate snapshot from contractor
-   master, editable), FIFO job_allocations from CUT lots, partial receipts (stitched /
-   unstitched_return), excess-receipt genesis + discrepancy rows, per-line + card status
-   machine, auto-complete on match, admin-only close-with-discrepancy, WIP stock views,
-   contractor analytics (turnaround, discrepancy %, rankings) + payments (dues = stitched
-   received × rate − payments), UI + tests + E2E.
-2. Then Phase 7 (checking/packing/FG).
+1. **Phase 7 — Checking + Packing + FG**: check issues (FIFO from CHECKING pool lots),
+   incremental check results (passed→PACKING, rejected→REJECTED, missing→terminal loss +
+   discrepancy), rejection reasons breakdown, pack issues (FIFO from PACKING pool),
+   pack results (packed→FG, short→terminal + discrepancy), same-person checker+packer
+   supported (staff role both), FG dispatch (admin stock-out), full-chain conservation
+   integration test (purchase→FG drift = 0), UI + E2E.
+2. Then Phase 8 (traceability + reports + Excel).
 
 ## Session notes
 

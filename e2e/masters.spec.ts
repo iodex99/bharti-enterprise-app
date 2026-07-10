@@ -58,8 +58,8 @@ test('operator sees masters read-only', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
 
-  await openNav(page);
-  await page.getByRole('link', { name: 'Contractors' }).click();
+  // direct URL: the nav has both a Contractors master AND a Contractors hub
+  await page.goto('/masters/contractors');
   await expect(page.getByRole('heading', { name: 'Contractors' })).toBeVisible();
   await expect(page.getByText('Meena Stitching Works')).toBeVisible();
   // no mutation controls for non-admin

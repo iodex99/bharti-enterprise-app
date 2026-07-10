@@ -120,6 +120,8 @@ export function Modal({
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        role="dialog"
+        aria-label={title}
         className={clsx(
           'max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl',
           wide ? 'sm:max-w-3xl' : 'sm:max-w-md',

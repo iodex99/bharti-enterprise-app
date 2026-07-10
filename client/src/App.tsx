@@ -7,6 +7,8 @@ import HomePage from './pages/HomePage';
 import MastersPage from './pages/masters/MastersPage';
 import PurchasesPage from './pages/purchases/PurchasesPage';
 import CuttingPage from './pages/cutting/CuttingPage';
+import JobsPage from './pages/jobs/JobsPage';
+import ContractorsPage from './pages/contractors/ContractorsPage';
 import StockPage from './pages/stock/StockPage';
 import OpeningBalancesPage from './pages/admin/OpeningBalancesPage';
 import UsersPage from './pages/admin/UsersPage';
@@ -54,6 +56,8 @@ export default function App() {
         <Route path="masters/:master" element={<MastersPage />} />
         <Route path="purchases" element={<PurchasesPage />} />
         <Route path="cutting" element={<CuttingPage />} />
+        <Route path="jobs" element={<JobsPage />} />
+        <Route path="contractors" element={<ContractorsPage />} />
         <Route path="stock" element={<StockPage />} />
         <Route path="stock/:stage" element={<StockPage />} />
         <Route

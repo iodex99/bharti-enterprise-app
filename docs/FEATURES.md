@@ -15,9 +15,9 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Opening balances | ✅ | Phase 4 |
 | Void-with-reversals | ✅ | Phase 4 |
 | Cutting plan/actual + variance + CUT stock | ✅ | Phase 5 |
-| Job cards + partial receipts + discrepancies + WIP | ⬜ | Phase 6 |
-| Contractor analytics + rankings | ⬜ | Phase 6 |
-| Contractor payments (dues, statements) | ⬜ | Phase 6 |
+| Job cards + partial receipts + discrepancies + WIP | ✅ | Phase 6 |
+| Contractor analytics + rankings | ✅ | Phase 6 |
+| Contractor payments (dues, statements) | ✅ | Phase 6 |
 | Checking (pass/reject/missing) + REJECTED stage | ⬜ | Phase 7 |
 | Packing + FG inventory + dispatch | ⬜ | Phase 7 |
 | Traceability tree (FG ↔ vendor) | ⬜ | Phase 8 |
