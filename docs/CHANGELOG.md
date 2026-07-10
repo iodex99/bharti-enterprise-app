@@ -5,6 +5,12 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Phase 8: batch traceability (finished goods traced back through packer,
+  checker, contractor, cutting batch to the cloth purchase and vendor; purchases traced
+  forward), 15 filterable reports across inventory/production/contractors/quality/losses/
+  management, one-click Excel export on every report (typed columns, totals, Indian
+  formats), print view.
+
 - 2026-07-11 — Phase 7: checking (issue to checker, incremental pass/reject/missing results
   with reason breakdowns, REJECTED stage), packing (issue to packer, packed→finished goods,
   shortages with reasons), same-person checker+packer support, admin FG dispatches with

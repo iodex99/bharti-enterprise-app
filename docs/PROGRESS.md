@@ -50,7 +50,13 @@
   reason), staff-role validation (checker/packer/both — same-person scenario), admin FG
   dispatch with void-via-ledger-replay, voids for unstarted issues, checking/packing/
   dispatch UI. FULL-CHAIN CONSERVATION TEST: genesis − terminal = on-hand, drift 0.
-- [ ] **Phase 8 — Traceability tree + reports (~15) + Excel export + print CSS.**
+- [x] **Phase 8 — Traceability + reports + Excel**: trace service (FG→vendor qty-weighted
+  tree via allocations incl. opening-lot ends; purchase→forward), 15-report registry with
+  typed columns shared by screen + exporter, shared filter parser (date/model/color/size/
+  contractor/staff/vendor), generic exceljs exporter (title, typed formats, totals row,
+  frozen header) with ?format=xlsx on every report, reports UI (grouped picker, dynamic
+  filters, print CSS), trace UI (expandable tree, FIFO honesty note). Reports registry
+  integration-tested report-by-report + xlsx round-trip parse.
 - [ ] **Phase 9 — Dashboard (KPIs + charts) + alerts panel.**
 - [ ] **Phase 10 — PWA + polish + nightly self-reconciliation.**
 - [ ] **Phase 11 — Hardening**: full E2E, security sweep, backup/restore + rollback drills,
@@ -58,8 +64,7 @@
 
 ## Current state
 
-Phases 0–7 complete. 180 unit/integration + 34 E2E tests green (incl. browser-driven
-purchase→FG chain on desktop AND mobile, and the ledger conservation proof). Release pipeline VERIFIED
+Phases 0–8 complete. 204 unit/integration + 38 E2E tests green. Release pipeline VERIFIED
 end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
 
 **Environment quirks discovered (don't relearn these):**
@@ -73,12 +78,13 @@ end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/
 
 ## Next steps
 
-1. **Phase 8 — Traceability + reports + Excel**: trace API (FG lot → pack → check →
-   receipt → job/contractor → cutting → purchase/vendor tree, and forward from purchase),
-   expandable tree UI; ~15 reports with shared filters (date/model/color/size/contractor/
-   checker/packer/vendor); generic exceljs exporter sharing column defs; ?format=xlsx on
-   every report; print CSS.
-2. Then Phase 9 (dashboard + alerts).
+1. **Phase 9 — Dashboard + alerts**: /api/dashboard (KPI tiles: per-stage stock, open/
+   delayed jobs, pending receipts/checks/packs, dues, discrepancy counts; chart series:
+   monthly production trends, contractor rankings, rejection breakdown, stock by model),
+   /api/alerts (open >N days, unresolved discrepancies, pending work), owner-focused
+   HomePage dashboard with Recharts (USE THE DATAVIZ SKILL before writing chart code),
+   alerts panel, threshold settings.
+2. Then Phase 10 (PWA + polish + nightly self-reconciliation).
 
 ## Session notes
 

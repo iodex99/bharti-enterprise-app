@@ -20,8 +20,8 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Contractor payments (dues, statements) | ✅ | Phase 6 |
 | Checking (pass/reject/missing) + REJECTED stage | ✅ | Phase 7 |
 | Packing + FG inventory + dispatch | ✅ | Phase 7 |
-| Traceability tree (FG ↔ vendor) | ⬜ | Phase 8 |
-| Reports (~15) + Excel export + print | ⬜ | Phase 8 |
+| Traceability tree (FG ↔ vendor) | ✅ | Phase 8 |
+| Reports (~15) + Excel export + print | ✅ | Phase 8 |
 | Dashboard + alerts | ⬜ | Phase 9 |
 | PWA install + polish | ⬜ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |

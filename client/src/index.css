@@ -9,3 +9,19 @@
 html {
   -webkit-text-size-adjust: 100%;
 }
+
+/* Print view (spec: reports support print): only the report content, full width */
+@media print {
+  header,
+  aside,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+  main {
+    width: 100% !important;
+  }
+  body {
+    background: white !important;
+  }
+}

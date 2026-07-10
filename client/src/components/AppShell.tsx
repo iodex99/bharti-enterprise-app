@@ -15,6 +15,8 @@ const NAV: NavSection[] = [
     items: [
       { to: '/', label: 'Home', icon: '🏠' },
       { to: '/stock/raw', label: 'Inventory', icon: '📦' },
+      { to: '/reports', label: 'Reports', icon: '📊' },
+      { to: '/trace', label: 'Traceability', icon: '🧭' },
     ],
   },
   {
