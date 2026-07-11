@@ -51,6 +51,7 @@ export async function makeTestContext(): Promise<TestContext> {
     cleanup: () => {
       closeDb();
       fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(`${dir}-demo`, { recursive: true, force: true }); // demo sibling, if a test made one
     },
   };
 }

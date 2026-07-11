@@ -3,14 +3,13 @@
 ## Topology
 
 ```
-[phones/tablets/laptops anywhere]
-        │ https
-[Cloudflare Tunnel]  ← free; no router ports opened; hides the office IP
-        │
+[phones/tablets/laptops anywhere, signed into Tailscale]
+        │ https (tailscale serve — no domain, no open ports)
 [Office Windows PC]
   WinSW service → supervisor.cjs → node releases\v1.0.N\server\dist\index.js
                                      │
-  C:\bharti\data\  (app.db, uploads\, backups\)   ← NEVER touched by updates
+  C:\bharti\data\        (app.db, uploads\, backups\)  ← NEVER touched by updates
+  C:\bharti\data-demo\   (demo database — buttons in Admin → System Health)
 ```
 
 ## One-time office PC installation
@@ -40,43 +39,45 @@ Open `http://localhost:8787` — sign in with the initial admin credentials from
 `C:\bharti\data\initial-admin-password.txt` (created on first boot; the password must be
 changed at first sign-in, then delete the file).
 
-## Remote access — Cloudflare Tunnel (recommended)
+## Remote access — Tailscale (recommended: NO domain needed)
 
-1. Create a free Cloudflare account and add a domain (a cheap/existing one; the tunnel
-   needs a zone to attach a hostname to).
-2. On the office PC (elevated PowerShell):
+The business has no domain, so Tailscale is the best fit: free, very secure (the app is
+never exposed to the public internet at all), and it provides HTTPS automatically.
 
-```powershell
-winget install Cloudflare.cloudflared
-cloudflared tunnel login                 # opens the browser to authorize
-cloudflared tunnel create bharti
-cloudflared tunnel route dns bharti app.YOURDOMAIN.com
-```
-
-3. Create `C:\Users\<user>\.cloudflared\config.yml`:
-
-```yaml
-tunnel: bharti
-credentials-file: C:\Users\<user>\.cloudflared\<TUNNEL-ID>.json
-ingress:
-  - hostname: app.YOURDOMAIN.com
-    service: http://localhost:8787
-  - service: http_status:404
-```
-
-4. Install it as a service so it survives reboots:
+**On the office PC** (elevated PowerShell):
 
 ```powershell
-cloudflared service install
-Start-Service cloudflared
+winget install Tailscale.Tailscale
+tailscale up            # opens the browser — sign in with ONE account for the business
+                        # (a Google account works; every device uses this same account)
+tailscale serve --bg localhost:8787
+tailscale dns status    # note the machine's name, e.g. office-pc.tail1a2b3c.ts.net
 ```
 
-Staff now reach the app at `https://app.YOURDOMAIN.com` from anywhere. The app already
-sets `trust proxy` and secure cookies behind https.
+`tailscale serve` gives the app a real **https://office-pc.tail1a2b3c.ts.net** address
+with a valid certificate — so the phone-app install (PWA) and secure cookies work
+exactly as they would on a domain. (If the HTTPS feature prompts you, enable
+**MagicDNS + HTTPS certificates** once in the Tailscale admin console → DNS.)
 
-*Alternatives:* **Tailscale** (simplest private option — install on the PC and every
-user device, share the tailnet, use `http://<pc-name>:8787`) or router **port
-forwarding + dynamic DNS** (not recommended: exposes the office IP directly).
+**On each staff phone/laptop:** install the Tailscale app (Play Store / App Store /
+tailscale.com/download), sign in with the **same business account**, switch the VPN
+toggle on, then open `https://office-pc.tail1a2b3c.ts.net` in the browser and
+"Add to Home Screen". The free plan comfortably covers a small team's devices under
+one account. Devices NOT signed into Tailscale simply cannot reach the app at all —
+that's the security model.
+
+### Alternatives
+
+- **Cloudflare Tunnel** — better *if the business ever buys a domain* (any ~₹100–800/yr
+  domain works): no per-device app needed, staff just open a normal https link.
+  Setup: `winget install Cloudflare.cloudflared`, `cloudflared tunnel login`,
+  `cloudflared tunnel create bharti`, `cloudflared tunnel route dns bharti app.DOMAIN`,
+  config.yml pointing at `http://localhost:8787`, `cloudflared service install`.
+- **Cloudflare Quick Tunnel** (`cloudflared tunnel --url http://localhost:8787`) —
+  instant public https URL with **no account and no domain**, but the URL changes on
+  every restart. Good for a one-off external demo, wrong for daily use.
+- **Router port forwarding + dynamic DNS** — not recommended: exposes the office IP
+  and the login page to the whole internet.
 
 ## How updates flow
 
@@ -109,7 +110,7 @@ copy it over, extract to `C:\bharti\releases\v1.0.N\`, write that version into
 | Symptom | Do this |
 |---|---|
 | App unreachable locally | `Get-Service bharti-app` → start it; check `C:\bharti\logs\supervisor.log` and `app.log` |
-| Unreachable remotely only | `Get-Service cloudflared` → start; check tunnel status in Cloudflare dashboard |
+| Unreachable remotely only | Tailscale toggle on the device? `tailscale status` on the PC; `tailscale serve status` shows the https proxy |
 | Update banner never appears | Token expired? Update `supervisor\config.json` → `githubToken`, restart service |
 | Update failed | Nothing to do — it rolled back automatically; check `update-status.json` + logs, fix, push a new release |
 | "Inventory self-check" shows ❌ | Stop entering data, take a manual backup, contact the developer |
@@ -123,7 +124,8 @@ configuration, but the UPS avoids interrupted work sessions).
 1. ☐ Office PC: Node 24 installed, service installed via `install-service.ps1`, app
    answers on `http://localhost:8787`.
 2. ☐ Initial admin password changed; `initial-admin-password.txt` deleted.
-3. ☐ Cloudflare Tunnel up; app reachable from a phone on mobile data (not office Wi-Fi).
+3. ☐ Remote access up (Tailscale serve); app reachable from a phone on mobile data
+   (not office Wi-Fi) at the https://…ts.net address.
 4. ☐ Users created (operators + owner) with temporary passwords; each signed in once.
 5. ☐ Masters entered: models, colors, sizes, vendors, contractors, checkers/packers.
 6. ☐ **Opening balances** entered from the registers (Admin → Opening Balances) for all

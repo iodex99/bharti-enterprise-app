@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from '../config';
+import { activeDataDir } from './dataDirs';
 
 export type Db = Database.Database;
 
@@ -17,11 +17,15 @@ export function openDatabase(file: string): Db {
   return db;
 }
 
-/** The single app-wide connection (one process, one connection — see ARCHITECTURE.md). */
+/**
+ * The single app-wide connection (one process, one connection — see ARCHITECTURE.md).
+ * Resolves through activeDataDir() so demo mode can swap the database after closeDb().
+ */
 export function getDb(): Db {
   if (!instance) {
-    fs.mkdirSync(config.dataDir, { recursive: true });
-    instance = openDatabase(path.join(config.dataDir, 'app.db'));
+    const dir = activeDataDir();
+    fs.mkdirSync(dir, { recursive: true });
+    instance = openDatabase(path.join(dir, 'app.db'));
   }
   return instance;
 }

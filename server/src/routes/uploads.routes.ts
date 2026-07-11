@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from '../config';
+import { activeDataDir } from '../db/dataDirs';
 import { requireAuth, requireRole } from '../middleware/auth';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -28,7 +28,7 @@ export function uploadsRoutes(): Router {
       return;
     }
     const month = new Date().toISOString().slice(0, 7);
-    const dir = path.join(config.dataDir, 'uploads', month);
+    const dir = path.join(activeDataDir(), 'uploads', month);
     fs.mkdirSync(dir, { recursive: true });
     const name = `${crypto.randomBytes(8).toString('hex')}.webp`;
     try {
@@ -52,7 +52,7 @@ export function uploadsStatic(): Router {
   const router = Router();
   router.get('/{*splat}', requireAuth, (req, res) => {
     const rel = decodeURIComponent(req.path).replace(/^\/+/, '');
-    const base = path.join(config.dataDir, 'uploads');
+    const base = path.join(activeDataDir(), 'uploads');
     const full = path.normalize(path.join(base, rel));
     if (!full.startsWith(base) || !fs.existsSync(full) || !fs.statSync(full).isFile()) {
       res.status(404).json({ error: 'Not found' });

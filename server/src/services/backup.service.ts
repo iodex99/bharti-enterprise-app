@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import cron from 'node-cron';
-import { config } from '../config';
 import { getDb } from '../db/connection';
+import { activeDataDir } from '../db/dataDirs';
 
 const KEEP_DAILY = 30;
 
 function backupsDir(): string {
-  const dir = path.join(config.dataDir, 'backups');
+  // follows the ACTIVE data dir, so demo-mode backups stay inside the demo folder
+  const dir = path.join(activeDataDir(), 'backups');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

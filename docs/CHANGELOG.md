@@ -5,6 +5,12 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — In-app demo mode: Admin → System Health buttons to enter/exit/rebuild/
+  remove a physically separate demo database (runtime connection switch; sessions,
+  uploads and backups all follow the active database; DEMO banner app-wide; login-page
+  hint; audited in the real DB). Deployment guide rewritten for no-domain remote access
+  (Tailscale with HTTPS via tailscale serve as the primary path).
+
 - 2026-07-11 — Demo mode + hardening: `npm run seed:demo` builds a fully separate demo
   database (data-demo/) with ~3 months of realistic business driven through the service
   layer and verified by the reconciliation checks; `npm run dev:demo` runs against it;

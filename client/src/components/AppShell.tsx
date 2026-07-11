@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import clsx from 'clsx';
 import { useAuth } from '../lib/auth';
+import { useHealth } from '../api/health';
 import { UpdateBanner } from './UpdateBanner';
 import { Badge } from './ui';
 
@@ -58,6 +59,7 @@ const ROLE_TONE = { admin: 'violet', operator: 'blue', owner: 'green' } as const
 
 export default function AppShell() {
   const { user, logout } = useAuth();
+  const { data: health } = useHealth();
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   if (!user) return null;
@@ -110,6 +112,22 @@ export default function AppShell() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {health?.demoMode && (
+        <div
+          role="status"
+          className="border-b border-amber-300 bg-amber-100 px-4 py-1.5 text-center text-sm font-semibold text-amber-900"
+        >
+          🎭 DEMO MODE — sample data only. Real records are untouched.
+          {user.role === 'admin' && (
+            <button
+              className="ml-2 underline"
+              onClick={() => navigate('/admin/system')}
+            >
+              Exit from System Health
+            </button>
+          )}
+        </div>
+      )}
       <UpdateBanner canUpdate={user.role === 'admin'} />
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-gray-200 bg-white px-4">
         <button

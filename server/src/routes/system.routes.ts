@@ -6,6 +6,8 @@ import { audit } from '../services/audit.service';
 import { checkForUpdate, getUpdateStatus, startUpdate } from '../services/update.service';
 import { backupFilePath, listBackups, runBackup } from '../services/backup.service';
 import { runReconciliation } from '../services/reconciliation.service';
+import { demoStatus, enterDemoMode, exitDemoMode, removeDemoData } from '../services/demo.service';
+import { isDemoMode } from '../db/dataDirs';
 import { EXIT_APPLY_UPDATE, gracefulExit } from '../lifecycle';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
@@ -31,6 +33,7 @@ export function systemRoutes(): Router {
       ok: true,
       version: config.version,
       uptimeSeconds: Math.round(process.uptime()),
+      demoMode: isDemoMode(),
     });
   });
 
@@ -70,6 +73,40 @@ export function systemRoutes(): Router {
 
   router.get('/reconciliation', requireRole('admin'), (_req, res) => {
     res.json(runReconciliation(getDb()));
+  });
+
+  // ---- demo mode (admin): a physically separate database, switchable live ----
+  router.get('/demo', requireRole('admin'), (_req, res) => {
+    res.json(demoStatus());
+  });
+
+  router.post('/demo/enter', requireRole('admin'), (req, res) => {
+    const fresh = req.query.fresh === '1';
+    const result = enterDemoMode(fresh, req.user!.id, req.ip ?? null);
+    if (!result.ok) {
+      res.status(result.code).json({ error: result.error });
+      return;
+    }
+    // the session lives in the REAL database — the client must sign in again
+    res.json({ ok: true, note: 'Demo mode active. Sign in with admin / Admin@123.' });
+  });
+
+  router.post('/demo/exit', requireRole('admin'), (_req, res) => {
+    const result = exitDemoMode();
+    if (!result.ok) {
+      res.status(result.code).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true, note: 'Back on real data. Sign in with your usual account.' });
+  });
+
+  router.post('/demo/remove', requireRole('admin'), (req, res) => {
+    const result = removeDemoData(req.user!.id, req.ip ?? null);
+    if (!result.ok) {
+      res.status(result.code).json({ error: result.error });
+      return;
+    }
+    res.json({ ok: true });
   });
 
   router.get('/settings', requireRole('admin'), (_req, res) => {

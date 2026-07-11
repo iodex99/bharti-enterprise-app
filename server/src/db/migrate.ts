@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Db } from './connection';
-import { config } from '../config';
+import { activeDataDir } from './dataDirs';
 
 /**
  * Transactional, additive-only migration runner.
@@ -45,7 +45,7 @@ export function migrate(db: Db, dbFilePath?: string): string[] {
         n: number;
       }).n > 1;
     if (hasTables) {
-      const backupDir = path.join(config.dataDir, 'backups');
+      const backupDir = path.join(activeDataDir(), 'backups');
       fs.mkdirSync(backupDir, { recursive: true });
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       db.pragma('wal_checkpoint(TRUNCATE)');

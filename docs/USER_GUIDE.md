@@ -112,20 +112,18 @@ Every change is recorded in **Administration → Audit Log** — who, when, and 
 
 ## Giving a demo (separate demo data)
 
-The app can run against a completely separate DEMO database so you can present the
-system with three months of realistic data without touching real records:
+**Admin → System Health → Demo mode** has one-click buttons:
 
-```bash
-npm run seed:demo   # build/refresh the demo database (data-demo folder)
-npm run dev:demo    # run the app against it — sign in: admin / Admin@123
-```
+- **Enter demo mode** — switches the whole app onto a separate sample database with
+  ~3 months of realistic business (every screen, chart, alert and report has data).
+  Everyone is signed out; sign in with `admin / Admin@123`. A bright **DEMO MODE**
+  banner stays visible so nobody mistakes sample data for real records.
+- **Rebuild fresh & enter** — resets the demo to its original state first.
+- **Exit demo mode** — back to real data, sign in with your usual account.
+- **Remove demo data** — deletes the demo database entirely (real data unaffected).
 
-The demo contains purchases, cutting batches (with variances), contractor jobs
-(partial receipts, an excess, an unstitched return, a shortage close, two delayed
-jobs), checking/packing in every state, dispatches, payments and dues — so every
-screen, chart, alert and report has something to show. Re-running `seed:demo`
-resets it to fresh; deleting the `data-demo` folder removes it entirely. The real
-database (`data/`) is never read or written in demo mode.
+Anything entered during a demo stays in the demo database and vanishes with it.
+Developers can also use `npm run seed:demo` + `npm run dev:demo` from a checkout.
 
 ## For the Admin
 

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../lib/auth';
+import { useHealth } from '../api/health';
 import { Button, ErrorText, Field, TextInput } from '../components/ui';
 
 export default function LoginPage() {
@@ -10,6 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const { refresh } = useAuth();
+  const { data: health } = useHealth();
   const navigate = useNavigate();
 
   const submit = async (e: FormEvent) => {
@@ -37,6 +39,12 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold text-gray-900">Bharti Enterprises</h1>
           <p className="text-sm text-gray-500">Production &amp; Inventory System</p>
         </div>
+        {health?.demoMode && (
+          <p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm text-amber-900">
+            🎭 <strong>Demo mode</strong> — sign in with <code>admin</code> /{' '}
+            <code>Admin@123</code>
+          </p>
+        )}
         <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">
           <Field label="Username">
             <TextInput

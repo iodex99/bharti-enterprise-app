@@ -79,9 +79,11 @@
 
 ## Current state
 
-ALL PHASES COMPLETE (0–11) + post-ship demo mode & hardening. 234 unit/integration +
-42 E2E green; update drill 13/13; every phase shipped through the real release pipeline
-(GitHub Releases v1.0.x publish on every green push to main).
+ALL PHASES COMPLETE (0–11) + post-ship additions. 242 unit/integration + 44 E2E green;
+update drill 13/13. IN-APP DEMO MODE: Admin → System Health buttons switch the live app
+onto a separate demo database (data-demo sibling; sessions/uploads/backups follow the
+active DB via db/dataDirs.ts activeDataDir(); flag file survives restarts). Remote
+access documented for NO-DOMAIN reality: Tailscale + tailscale serve (https) primary.
 
 **Environment quirks discovered (don't relearn these):**
 - Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
