@@ -14,7 +14,7 @@ export type ServiceResult<T = { id: number }> =
   | ({ ok: true } & T)
   | { ok: false; code: number; error: string };
 
-function assertActive(db: Db, table: string, id: number, label: string): string | null {
+export function assertActive(db: Db, table: string, id: number, label: string): string | null {
   const row = db
     .prepare(`SELECT is_active FROM ${table} WHERE id = ? AND deleted_at IS NULL`)
     .get(id) as { is_active: number } | undefined;

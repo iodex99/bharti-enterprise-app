@@ -4,6 +4,7 @@ import { getDb } from '../db/connection';
 import { audit } from '../services/audit.service';
 import { hashPassword, revokeAllSessions } from '../services/auth.service';
 import { requireRole } from '../middleware/auth';
+import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { ROLES } from '@shared';
 
@@ -39,6 +40,7 @@ type UserListRow = {
 
 export function usersRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
   router.use(requireRole('admin'));
 
   router.get('/', (_req, res) => {

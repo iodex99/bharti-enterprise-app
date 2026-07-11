@@ -5,6 +5,13 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Demo mode + hardening: `npm run seed:demo` builds a fully separate demo
+  database (data-demo/) with ~3 months of realistic business driven through the service
+  layer and verified by the reconciliation checks; `npm run dev:demo` runs against it;
+  deleting the folder removes the demo. Edge-case fixes: non-numeric ids in URLs now 404
+  (were 500), unknown foreign keys and malformed JSON now return clean 400s, opening
+  balances and job cards validate active masters. 22 new hostile-input tests.
+
 - 2026-07-11 — Phase 11: complete staff USER_GUIDE, office DEPLOYMENT guide (installer,
   Cloudflare Tunnel, runbook, go-live checklist), final API/data-model/testing docs,
   security-header assertions; final full verification (unit+integration+E2E) and update

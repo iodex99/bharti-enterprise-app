@@ -4,7 +4,7 @@ import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
 import { LedgerError, postMovements } from './ledger.service';
-import type { ServiceResult } from './purchases.service';
+import { assertActive, type ServiceResult } from './purchases.service';
 
 /**
  * Opening balances bring the paper-register stock into the system at go-live
@@ -17,6 +17,19 @@ export function createOpeningBalance(
   userId: number,
   ip: string | null,
 ): ServiceResult<{ id: number; docNo: string }> {
+  // opening balances are an ENTRY point — masters must exist and be active
+  const checks: Array<[string, number | null | undefined, string]> = [
+    ['models', input.modelId, 'Model'],
+    ['colors', input.colorId, 'Color'],
+    ['sizes', input.stage === 'RAW' ? null : input.sizeId, 'Size'],
+    ['contractors', input.stage === 'WIP' ? input.contractorId : null, 'Contractor'],
+  ];
+  for (const [table, id, label] of checks) {
+    if (id == null) continue;
+    const err = assertActive(db, table, id, label);
+    if (err) return { ok: false, code: 400, error: err };
+  }
+
   let id = 0;
   let docNo = '';
   const tx = db.transaction(() => {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { formatBusinessDate } from '@shared';
 import { getDb } from '../db/connection';
 import { requireAuth } from '../middleware/auth';
+import { idParamGuard } from '../middleware/params';
 import { getReport, REPORTS, type ReportFilters } from '../services/reports.service';
 import { sendXlsx } from '../utils/excel';
 import { listFgLots, traceFgLot, tracePurchaseForward } from '../services/trace.service';
@@ -71,6 +72,8 @@ export function reportsRoutes(): Router {
 
 export function traceRoutes(): Router {
   const router = Router();
+  router.param('packIssueId', idParamGuard);
+  router.param('purchaseId', idParamGuard);
   router.use(requireAuth);
 
   router.get('/fg-lots', (_req, res) => {

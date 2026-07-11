@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { jobCardSchema, jobCloseSchema, jobReceiptSchema, paymentSchema, voidSchema } from '@shared';
 import { getDb } from '../db/connection';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
 import {
@@ -21,6 +22,7 @@ import {
 
 export function jobsRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
 
   router.get('/', requireAuth, (req, res) => {
     const num = (v: unknown) => (v && !Number.isNaN(Number(v)) ? Number(v) : undefined);
@@ -107,6 +109,7 @@ export function jobsRoutes(): Router {
 
 export function contractorsRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
 
   router.get('/analytics', requireAuth, (_req, res) => {
     res.json({ items: contractorAnalytics(getDb()) });

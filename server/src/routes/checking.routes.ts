@@ -9,6 +9,7 @@ import {
 } from '@shared';
 import { getDb } from '../db/connection';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
 import {
@@ -29,6 +30,7 @@ import {
 
 export function checkingRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
 
   router.get('/', requireAuth, (_req, res) => {
     res.json({ items: listCheckIssues(getDb()) });
@@ -81,6 +83,7 @@ export function checkingRoutes(): Router {
 
 export function packingRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
 
   router.get('/', requireAuth, (_req, res) => {
     res.json({ items: listPackIssues(getDb()) });
@@ -133,6 +136,7 @@ export function packingRoutes(): Router {
 
 export function dispatchesRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
 
   router.get('/', requireAuth, (_req, res) => {
     res.json({ items: listDispatches(getDb()) });

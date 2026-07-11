@@ -79,9 +79,9 @@
 
 ## Current state
 
-ALL PHASES COMPLETE (0–11). 212 unit/integration + 42 E2E green; drill 13/13; every
-phase shipped through the real release pipeline (GitHub Releases v1.0.x). Release pipeline VERIFIED
-end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/13 locally.
+ALL PHASES COMPLETE (0–11) + post-ship demo mode & hardening. 234 unit/integration +
+42 E2E green; update drill 13/13; every phase shipped through the real release pipeline
+(GitHub Releases v1.0.x publish on every green push to main).
 
 **Environment quirks discovered (don't relearn these):**
 - Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
@@ -100,6 +100,12 @@ end-to-end on GitHub (v1.0.x zips publish on every green push). Update drill 13/
    WhatsApp alerts, low-stock thresholds, rework flow…).
 
 ## Session notes
+
+- 2026-07-11 (post-ship): demo-data system added (separate data-demo DB, seed-demo.ts via
+  service layer + reconciliation gate, dev:demo script); edge-case hardening (id param
+  guards on all routers, SQLITE_CONSTRAINT→400 + body-parser 4xx passthrough in the
+  central error handler, active-master checks at opening-balance/job-card entry points);
+  234 unit/integration tests.
 
 - 2026-07-10: project started; plan approved; Phases 0–2 built and verified. First push done
   (CI green on GitHub). Release pipeline live: every push to main publishes v1.0.<run_number>.

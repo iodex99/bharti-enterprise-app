@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed": "tsx src/db/seed.ts"
+    "seed": "tsx src/db/seed.ts",
+    "seed:demo": "tsx src/db/seed-demo.ts",
+    "dev:demo": "tsx watch src/demo-entry.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -10,7 +10,7 @@ import {
   splitFifo,
   type Movement,
 } from './ledger.service';
-import type { ServiceResult } from './purchases.service';
+import { assertActive, type ServiceResult } from './purchases.service';
 
 /**
  * Module 5/6: contractor job work.
@@ -81,6 +81,14 @@ export function createJobCard(
   if (!contractor) return { ok: false, code: 400, error: 'Contractor not found.' };
   if (!contractor.is_active) {
     return { ok: false, code: 400, error: 'Contractor is deactivated — no new job cards.' };
+  }
+  // job cards are new documents — model/color must exist and be active
+  for (const [table, refId, label] of [
+    ['models', input.modelId, 'Model'],
+    ['colors', input.colorId, 'Color'],
+  ] as const) {
+    const err = assertActive(db, table, refId, label);
+    if (err) return { ok: false, code: 400, error: err };
   }
 
   let id = 0;

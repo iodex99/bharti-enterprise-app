@@ -8,6 +8,7 @@ client/dist/
 
 # runtime data — NEVER in git; survives updates
 data/
+data-demo/
 
 # env & secrets
 .env

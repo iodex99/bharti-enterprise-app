@@ -110,6 +110,23 @@ Nothing is ever deleted. If a document was entered wrongly:
 
 Every change is recorded in **Administration → Audit Log** — who, when, and what changed.
 
+## Giving a demo (separate demo data)
+
+The app can run against a completely separate DEMO database so you can present the
+system with three months of realistic data without touching real records:
+
+```bash
+npm run seed:demo   # build/refresh the demo database (data-demo folder)
+npm run dev:demo    # run the app against it — sign in: admin / Admin@123
+```
+
+The demo contains purchases, cutting batches (with variances), contractor jobs
+(partial receipts, an excess, an unstitched return, a shortage close, two delayed
+jobs), checking/packing in every state, dispatches, payments and dues — so every
+screen, chart, alert and report has something to show. Re-running `seed:demo`
+resets it to fresh; deleting the `data-demo` folder removes it entirely. The real
+database (`data/`) is never read or written in demo mode.
+
 ## For the Admin
 
 - **Users** — create accounts, set roles, deactivate instantly, reset passwords.

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/connection';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import {
   createMaster,
@@ -22,6 +23,7 @@ export function mastersRoutes(): Router {
 
   for (const [key, cfg] of Object.entries(MASTERS) as [MasterKey, (typeof MASTERS)[MasterKey]][]) {
     const sub = Router();
+    sub.param('id', idParamGuard);
 
     sub.get('/', requireAuth, (req, res) => {
       const q = typeof req.query.q === 'string' ? req.query.q : undefined;

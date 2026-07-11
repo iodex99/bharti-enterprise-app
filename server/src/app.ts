@@ -78,6 +78,21 @@ export function createApp() {
 
   // Central error handler — Express 5 forwards async throws here automatically.
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    // SQLite constraint violations (unknown foreign key, CHECK breach) are client
+    // errors — a well-formed request can never trigger them.
+    const code = (err as { code?: string }).code;
+    if (typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT')) {
+      res.status(400).json({
+        error: 'A referenced record does not exist or the values break a data rule.',
+      });
+      return;
+    }
+    // body-parser errors (malformed JSON, oversized payloads) carry their own 4xx status
+    const status = (err as { status?: number }).status;
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+      res.status(status).json({ error: 'Invalid request body.' });
+      return;
+    }
     console.error('[error]', err);
     res.status(500).json({ error: 'Internal server error' });
   });

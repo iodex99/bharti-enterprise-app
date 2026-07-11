@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { openingBalanceSchema, voidSchema } from '@shared';
 import { getDb } from '../db/connection';
 import { requireRole } from '../middleware/auth';
+import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
 import {
@@ -12,6 +13,7 @@ import {
 
 export function openingRoutes(): Router {
   const router = Router();
+  router.param('id', idParamGuard);
   router.use(requireRole('admin'));
 
   router.get('/', (_req, res) => {
