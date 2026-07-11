@@ -138,7 +138,9 @@ Developers can also use `npm run seed:demo` + `npm run dev:demo` from a checkout
 
 - **Users** — create accounts, set roles, deactivate instantly, reset passwords.
 - **Opening Balances** — one-time entry of existing register stock at go-live.
-- **Backups** — automatic daily at 2 AM + before every update. For off-site copies,
+- **Backups** — automatic daily at 1 PM; if the computer was off or the backup failed,
+  it catches up by itself (hourly and whenever the app starts) until the day's backup
+  exists. Also before every update. For off-site copies,
   install Google Drive for Desktop, sign in with the owner's Google account, and set the
   synced folder on the Backups page — every backup is then copied to the owner's Drive
   automatically.

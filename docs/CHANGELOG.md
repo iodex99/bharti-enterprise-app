@@ -5,6 +5,11 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Backup schedule moved to 1 PM IST with catch-up/retry: the last successful
+  daily backup is tracked in settings and re-attempted hourly and at every start-up until
+  the day's backup exists (PC off at 1 PM or a failed run no longer means a missed day);
+  Backups page shows the last daily backup date; backup filenames now millisecond-unique.
+
 - 2026-07-11 — Cloud backups, Complete Business Report, filters everywhere: backups now
   mirror automatically into a Google Drive/OneDrive-synced folder (set on the Backups
   page; owner signs into Drive for Desktop once — no API keys); a Complete Business

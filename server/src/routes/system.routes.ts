@@ -7,6 +7,7 @@ import { checkForUpdate, getUpdateStatus, startUpdate } from '../services/update
 import {
   backupFilePath,
   cloudBackupDir,
+  lastDailyBackupDate,
   listBackups,
   mirrorToCloud,
   runBackup,
@@ -71,7 +72,11 @@ export function systemRoutes(): Router {
   });
 
   router.get('/backups', requireRole('admin'), (_req, res) => {
-    res.json({ backups: listBackups(), cloudDir: cloudBackupDir(getDb()) });
+    res.json({
+      backups: listBackups(),
+      cloudDir: cloudBackupDir(getDb()),
+      lastDailyBackupDate: lastDailyBackupDate(getDb()),
+    });
   });
 
   router.post('/backups', requireRole('admin'), async (_req, res) => {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
-import { formatTimestampIST } from '@shared';
+import { formatBusinessDate, formatTimestampIST } from '@shared';
 import { Button, EmptyState, ErrorText, Field, Spinner, TextInput } from '../../components/ui';
 
 type BackupInfo = { name: string; sizeBytes: number; modifiedAt: string };
@@ -10,7 +10,10 @@ export default function BackupsPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['backups'],
-    queryFn: () => api.get<{ backups: BackupInfo[]; cloudDir: string | null }>('/api/system/backups'),
+    queryFn: () =>
+      api.get<{ backups: BackupInfo[]; cloudDir: string | null; lastDailyBackupDate: string | null }>(
+        '/api/system/backups',
+      ),
   });
 
   const backupNow = useMutation({
@@ -24,8 +27,14 @@ export default function BackupsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Backups</h1>
           <p className="text-sm text-gray-500">
-            Daily at 2:00 AM automatically, before every update, and on demand. Keep a copy of
-            the newest file outside this computer.
+            Daily at 1:00 PM automatically — and if the computer was off or the backup
+            failed, it catches up on its own (hourly and at start-up) until today's backup
+            exists. Also before every update, and on demand.
+            {data?.lastDailyBackupDate && (
+              <span className="ml-1 font-medium text-emerald-700">
+                Last daily backup: {formatBusinessDate(data.lastDailyBackupDate)}
+              </span>
+            )}
           </p>
         </div>
         <Button onClick={() => backupNow.mutate()} disabled={backupNow.isPending}>

@@ -15,7 +15,7 @@ function backupsDir(): string {
 
 /** Online, WAL-consistent backup via SQLite's backup API — safe while serving. */
 export async function runBackup(prefix = 'daily'): Promise<string> {
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const stamp = new Date().toISOString().slice(0, 23).replace(/[:T.]/g, '-');
   const file = path.join(backupsDir(), `${prefix}-${stamp}.db`);
   await getDb().backup(file);
   pruneBackups(prefix);
@@ -69,11 +69,74 @@ export function backupFilePath(name: string): string | null {
   return full;
 }
 
+// ---------------------------------------------------------------------------
+// daily schedule: 13:00 IST, with catch-up. The office PC may be off at any given
+// moment, so instead of a single fire-and-forget cron we track the last successful
+// daily backup and re-attempt hourly (and at boot) until today's backup exists.
+// ---------------------------------------------------------------------------
+
+const DAILY_BACKUP_HOUR_IST = 13; // 1 PM
+
+function nowIst(): { date: string; hour: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    hour: Number(get('hour')) % 24,
+  };
+}
+
+export function lastDailyBackupDate(db: import('../db/connection').Db): string | null {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE key = 'last_daily_backup_date'")
+    .get() as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export type EnsureResult = 'already_done' | 'too_early' | 'ran' | 'failed';
+
+/**
+ * Run today's daily backup if it hasn't happened yet and it's past the scheduled hour.
+ * Idempotent — safe to call at boot, from the crons, or repeatedly: the settings row
+ * `last_daily_backup_date` is only advanced on SUCCESS, so any failure (or the PC
+ * being off at 1 PM) is retried at the next hourly tick or the next start-up.
+ */
+export async function ensureDailyBackup(
+  db: import('../db/connection').Db,
+  now: { date: string; hour: number } = nowIst(),
+): Promise<EnsureResult> {
+  if (lastDailyBackupDate(db) === now.date) return 'already_done';
+  if (now.hour < DAILY_BACKUP_HOUR_IST) return 'too_early';
+  try {
+    await runBackup('daily');
+    db.prepare(
+      `INSERT INTO settings (key, value) VALUES ('last_daily_backup_date', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
+    ).run(now.date);
+    console.log(`[backup] daily backup done for ${now.date}`);
+    return 'ran';
+  } catch (err) {
+    console.error('[backup] daily backup failed (will retry hourly):', err);
+    return 'failed';
+  }
+}
+
 export function startBackupCron(): void {
-  // 02:00 IST daily
-  cron.schedule('0 2 * * *', () => void runBackup().catch((e) => console.error('[backup]', e)), {
-    timezone: 'Asia/Kolkata',
-  });
+  const attempt = () => void ensureDailyBackup(getDb());
+  // the scheduled slot: 13:00 IST
+  cron.schedule('0 13 * * *', attempt, { timezone: 'Asia/Kolkata' });
+  // catch-up/retry: every hour at :10 — no-ops once today's backup exists
+  cron.schedule('10 * * * *', attempt, { timezone: 'Asia/Kolkata' });
+  // boot catch-up (PC switched on after 1 PM): give the app a moment to settle
+  setTimeout(attempt, 15_000).unref();
 }
 
 // ---------------------------------------------------------------------------

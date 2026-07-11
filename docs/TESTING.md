@@ -58,7 +58,9 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
 - dashboard numbers vs fixture ledger; alerts feed
 - reports: all 15 run + column shape, filters narrow, losses completeness, xlsx
   round-trip parse (title/headers/values); trace to-vendor + forward; 404s
-- system: reconciliation green + corrupted-row detection, settings whitelist + audit
+- system: reconciliation green + corrupted-row detection, settings whitelist + audit,
+  daily-backup catch-up state machine (too-early/ran/idempotent/failure-retry/boot),
+  cloud mirror lifecycle, full-report HTML+XLSX round-trips, demo-mode lifecycle
 - migrations idempotent; full schema presence
 
 **E2E (21 scenarios × desktop + mobile viewports):** login/logout/forced-change,
