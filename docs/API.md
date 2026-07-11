@@ -15,7 +15,8 @@ original id with `replayed: true`).
 | POST | /api/system/update | A | 202 download→stage→restart; 400 dev/no-update; 409 busy |
 | GET | /api/system/reconciliation | A | live ledger conservation checks |
 | GET/PUT | /api/system/settings | A | whitelisted keys (delayed_job_days) |
-| GET/POST | /api/system/backups | A | list / run now |
+| GET/POST | /api/system/backups | A | list / run now (+cloudDir in listing) |
+| POST | /api/system/backups/sync | A | copy backups into the cloud-synced folder |
 | GET | /api/system/backups/download?name= | A | |
 
 ### Auth & users
@@ -51,5 +52,6 @@ POST /api/uploads (A O, multipart `image` → webp path) · GET /uploads/* (all 
 | GET /api/jobs?status&contractorId · /api/jobs/:id/receipts | job list with per-line settlement |
 | GET /api/contractors/analytics | performance + dues |
 | GET /api/reports · /api/reports/:key?filters&format=xlsx | 15-report registry; xlsx export |
+| GET /api/reports/full?from&to&format=html|xlsx | Complete Business Report (styled HTML / multi-sheet workbook) |
 | GET /api/trace/fg-lots · /fg/:packIssueId · /purchase/:purchaseId | traceability trees |
 | GET /api/dashboard · /api/dashboard/alerts | owner dashboard + alert feed |

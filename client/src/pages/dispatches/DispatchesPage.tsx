@@ -77,6 +77,11 @@ export default function DispatchesPage() {
         rows={data?.items}
         loading={isLoading}
         emptyTitle="No dispatches yet"
+        facets={[
+          { key: 'model', label: 'Model', value: (r) => r.modelCode },
+          { key: 'color', label: 'Color', value: (r) => r.colorName },
+        ]}
+        dateRange={{ label: 'Dispatch date', value: (r) => r.dispatchDate }}
         actions={
           isAdmin
             ? (row) =>

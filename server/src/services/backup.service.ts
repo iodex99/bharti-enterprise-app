@@ -19,6 +19,7 @@ export async function runBackup(prefix = 'daily'): Promise<string> {
   const file = path.join(backupsDir(), `${prefix}-${stamp}.db`);
   await getDb().backup(file);
   pruneBackups(prefix);
+  mirrorQuietly(getDb());
   return path.basename(file);
 }
 
@@ -73,4 +74,64 @@ export function startBackupCron(): void {
   cron.schedule('0 2 * * *', () => void runBackup().catch((e) => console.error('[backup]', e)), {
     timezone: 'Asia/Kolkata',
   });
+}
+
+// ---------------------------------------------------------------------------
+// cloud mirror: copy backups into a folder synced by Google Drive for Desktop /
+// OneDrive / Dropbox. The sync app (signed in with the owner's email) does the
+// uploading — no Google API keys or OAuth tokens to manage or expire.
+// ---------------------------------------------------------------------------
+
+export function cloudBackupDir(db: import('../db/connection').Db): string | null {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE key = 'cloud_backup_dir'")
+    .get() as { value: string } | undefined;
+  const dir = row?.value?.trim();
+  return dir ? dir : null;
+}
+
+export type CloudMirrorResult =
+  | { ok: true; dir: string; copied: number; total: number }
+  | { ok: false; error: string };
+
+/** Copy any backup files missing from the cloud folder; keep the newest 30 there. */
+export function mirrorToCloud(db: import('../db/connection').Db): CloudMirrorResult {
+  const dir = cloudBackupDir(db);
+  if (!dir) return { ok: false, error: 'No cloud backup folder is configured.' };
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch {
+    return { ok: false, error: `Cannot create or access the folder: ${dir}` };
+  }
+  try {
+    const source = backupsDir();
+    const files = fs
+      .readdirSync(source)
+      .filter((f) => f.endsWith('.db') && (f.startsWith('daily-') || f.startsWith('manual-')));
+    let copied = 0;
+    for (const file of files) {
+      const dest = path.join(dir, file);
+      if (!fs.existsSync(dest)) {
+        fs.copyFileSync(path.join(source, file), dest);
+        copied++;
+      }
+    }
+    // prune the mirror to the newest 30 backup files
+    const mirrored = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith('.db') && (f.startsWith('daily-') || f.startsWith('manual-')))
+      .sort()
+      .reverse();
+    for (const f of mirrored.slice(KEEP_DAILY)) fs.rmSync(path.join(dir, f), { force: true });
+    return { ok: true, dir, copied, total: Math.min(mirrored.length, KEEP_DAILY) };
+  } catch (err) {
+    return { ok: false, error: `Copy failed: ${(err as Error).message}` };
+  }
+}
+
+/** Best-effort mirror after each backup — a broken cloud folder must never break backups. */
+export function mirrorQuietly(db: import('../db/connection').Db): void {
+  if (!cloudBackupDir(db)) return;
+  const result = mirrorToCloud(db);
+  if (!result.ok) console.warn('[backup] cloud mirror failed:', result.error);
 }

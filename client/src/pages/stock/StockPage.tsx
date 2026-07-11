@@ -122,6 +122,11 @@ function RawStock() {
       ]}
       rows={rows}
       loading={isLoading}
+      facets={[
+        { key: 'model', label: 'Model', value: (r) => r.modelCode },
+        { key: 'color', label: 'Color', value: (r) => r.colorName },
+        { key: 'vendor', label: 'Vendor', value: (r) => r.vendorName },
+      ]}
       emptyTitle="No raw material in stock"
       emptyHint="Record a purchase or an opening balance to see cloth here."
     />
@@ -172,6 +177,11 @@ function StageStock({ stage }: { stage: string }) {
       columns={columns}
       rows={rows}
       loading={isLoading}
+      facets={[
+        { key: 'model', label: 'Model', value: (r) => r.modelCode },
+        { key: 'color', label: 'Color', value: (r) => r.colorName },
+        { key: 'size', label: 'Size', value: (r) => r.sizeCode },
+      ]}
       emptyTitle={`Nothing in ${stageLabel(stage)} right now`}
     />
   );

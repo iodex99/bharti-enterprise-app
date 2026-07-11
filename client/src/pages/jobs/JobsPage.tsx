@@ -68,12 +68,10 @@ export default function JobsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailFor, setDetailFor] = useState<number | null>(null);
   const [voidFor, setVoidFor] = useState<JobCard | null>(null);
-  const [statusFilter, setStatusFilter] = useState('');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['jobs', statusFilter],
-    queryFn: () =>
-      api.get<{ items: JobCard[] }>(`/api/jobs${statusFilter ? `?status=${statusFilter}` : ''}`),
+    queryKey: ['jobs'],
+    queryFn: () => api.get<{ items: JobCard[] }>('/api/jobs'),
   });
 
   const invalidate = () => {
@@ -137,20 +135,12 @@ export default function JobsPage() {
         loading={isLoading}
         emptyTitle="No job cards yet"
         emptyHint={canWrite ? 'Issue cut pieces to a contractor with “+ New job card”.' : undefined}
-        toolbar={
-          <Select
-            aria-label="Filter status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-44"
-          >
-            <option value="">All statuses</option>
-            <option value="open">Open</option>
-            <option value="partially_received">Partially received</option>
-            <option value="completed">Completed</option>
-            <option value="closed_with_discrepancy">Closed w/ discrepancy</option>
-          </Select>
-        }
+        facets={[
+          { key: 'status', label: 'Status', value: (r) => enumLabel(r.status) },
+          { key: 'contractor', label: 'Contractor', value: (r) => r.contractorName },
+          { key: 'model', label: 'Model', value: (r) => r.modelCode },
+        ]}
+        dateRange={{ label: 'Issue date', value: (r) => r.issueDate }}
         actions={(row) => (
           <>
             <Button variant="ghost" onClick={() => setDetailFor(row.id)}>

@@ -5,6 +5,13 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-11 — Cloud backups, Complete Business Report, filters everywhere: backups now
+  mirror automatically into a Google Drive/OneDrive-synced folder (set on the Backups
+  page; owner signs into Drive for Desktop once — no API keys); a Complete Business
+  Report bundles every report + KPIs + charts into a styled HTML document or a
+  multi-sheet Excel workbook with date range; every list gained dropdown filters,
+  a date-range filter and click-to-sort column headers.
+
 - 2026-07-11 — In-app demo mode: Admin → System Health buttons to enter/exit/rebuild/
   remove a physically separate demo database (runtime connection switch; sessions,
   uploads and backups all follow the active database; DEMO banner app-wide; login-page

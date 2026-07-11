@@ -174,6 +174,11 @@ export default function ContractorsPage() {
           ]}
           rows={payments?.items}
           emptyTitle="No payments recorded"
+          facets={[
+            { key: 'contractor', label: 'Contractor', value: (r) => r.contractorName },
+            { key: 'mode', label: 'Mode', value: (r) => enumLabel(r.mode) },
+          ]}
+          dateRange={{ label: 'Payment date', value: (r) => r.paymentDate }}
           actions={
             isAdmin
               ? (row) =>

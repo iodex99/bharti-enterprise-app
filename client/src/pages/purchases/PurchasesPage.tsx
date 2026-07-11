@@ -107,6 +107,12 @@ export default function PurchasesPage() {
         loading={isLoading}
         emptyTitle="No purchases recorded yet"
         emptyHint={canWrite ? 'Press “+ New purchase” to record the first cloth purchase.' : undefined}
+        facets={[
+          { key: 'vendor', label: 'Vendor', value: (r) => r.vendorName },
+          { key: 'model', label: 'Model', value: (r) => r.modelCode },
+          { key: 'color', label: 'Color', value: (r) => r.colorName },
+        ]}
+        dateRange={{ label: 'Purchase date', value: (r) => r.purchaseDate }}
         toolbar={
           <label className="flex items-center gap-1.5 text-sm text-gray-500">
             <input

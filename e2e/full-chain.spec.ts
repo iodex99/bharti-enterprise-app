@@ -25,29 +25,29 @@ test('purchase → cutting → job work → checking → packing → finished go
   // 1. purchase 60m
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
-  await page.getByLabel('Vendor').selectOption({ index: 2 });
-  await page.getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByLabel('Color').selectOption({ label: color });
-  await page.getByLabel('Quantity (meters)').fill('60');
-  await page.getByLabel('Rate per meter').fill('42');
+  await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 2 });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
+  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('60');
+  await page.getByRole('dialog').getByLabel('Rate per meter').fill('42');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByRole('cell', { name: /RM-\d+/ }).first()).toBeVisible();
 
   // 2. cut 5 dz XL
   await page.goto('/cutting');
   await page.getByRole('button', { name: '+ New cutting plan' }).click();
-  const lotSelect = page.getByLabel('Cloth batch (raw material)');
+  const lotSelect = page.getByRole('dialog').getByLabel('Cloth batch (raw material)');
   const lotLabel = await lotSelect.locator('option', { hasText: color }).first().textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await page.getByLabel('Cloth to use (meters)').fill('30');
-  await page.getByLabel('Size 1').selectOption({ label: 'XL' });
+  await page.getByRole('dialog').getByLabel('Cloth to use (meters)').fill('30');
+  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'XL' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await page.getByRole('button', { name: 'Save cutting plan' }).click();
   const cutRow = page.getByRole('row', { name: /CUT-\d+/ }).first();
   await cutRow.getByRole('button', { name: 'Record actuals' }).click();
   await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await page.getByRole('button', { name: 'Complete cutting' }).click();
-  await expect(page.getByText('completed').first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
 
   // 3. job to contractor, receive all stitched
   await page.goto('/jobs');
@@ -55,10 +55,10 @@ test('purchase → cutting → job work → checking → packing → finished go
   await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
   const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
   await page.getByRole('button', { name: '+ New job card' }).click();
-  await page.getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
-  await page.getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByLabel('Color').selectOption({ label: color });
-  await page.getByLabel('Size 1').selectOption({ label: 'XL' });
+  await page.getByRole('dialog').getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
+  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'XL' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await page.getByRole('button', { name: 'Issue job card' }).click();
   // wait until the NEW job's row renders — every row has an "Open" button, so clicking
@@ -75,10 +75,10 @@ test('purchase → cutting → job work → checking → packing → finished go
   // 4. checking: 4dz pass, 6pc reject (stitching), 6pc missing
   await page.goto('/checking');
   await page.getByRole('button', { name: '+ Issue to checker' }).click();
-  await page.getByLabel('Checker').selectOption({ index: 1 }); // Pooja (checker)
-  await page.getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByLabel('Color').selectOption({ label: color });
-  await page.getByLabel('Size').selectOption({ label: 'XL' });
+  await page.getByRole('dialog').getByLabel('Checker').selectOption({ index: 1 }); // Pooja (checker)
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
+  await page.getByRole('dialog').getByLabel('Size').selectOption({ label: 'XL' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await page.getByRole('button', { name: 'Issue for checking' }).click();
   const chkRow = page.getByRole('row', { name: /CHK-\d+/ }).first();
@@ -91,15 +91,15 @@ test('purchase → cutting → job work → checking → packing → finished go
   await resultDialog.getByLabel('Rejection reason 1').selectOption({ label: 'Stitching Issue' });
   await resultDialog.getByRole('textbox', { name: 'Pieces' }).nth(2).fill('6');
   await resultDialog.getByRole('button', { name: /Record result/ }).click();
-  await expect(page.getByText('completed').first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
 
   // 5. packing: all 4dz packed by Kavita (checker+packer role)
   await page.goto('/packing');
   await page.getByRole('button', { name: '+ Issue to packer' }).click();
-  await page.getByLabel('Packer').selectOption({ index: 2 }); // Kavita (both)
-  await page.getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByLabel('Color').selectOption({ label: color });
-  await page.getByLabel('Size').selectOption({ label: 'XL' });
+  await page.getByRole('dialog').getByLabel('Packer').selectOption({ index: 2 }); // Kavita (both)
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
+  await page.getByRole('dialog').getByLabel('Size').selectOption({ label: 'XL' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('4');
   await page.getByRole('button', { name: 'Issue for packing' }).click();
   const pckRow = page.getByRole('row', { name: /PCK-\d+/ }).first();
@@ -107,7 +107,7 @@ test('purchase → cutting → job work → checking → packing → finished go
   const packDialog = page.getByRole('dialog', { name: /Packing result/ });
   await packDialog.getByRole('textbox', { name: 'Dozens' }).nth(0).fill('4'); // Packed
   await packDialog.getByRole('button', { name: 'Record packing result' }).click();
-  await expect(page.getByText('completed').first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
 
   // 6. finished goods inventory shows 4dz
   await page.goto('/stock/fg');

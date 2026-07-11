@@ -142,6 +142,12 @@ export default function CuttingPage() {
         loading={isLoading}
         emptyTitle="No cutting batches yet"
         emptyHint={canWrite ? 'Press “+ New cutting plan” to plan the first cut.' : undefined}
+        facets={[
+          { key: 'status', label: 'Status', value: (r) => (r.voidedAt ? 'voided' : r.status) },
+          { key: 'model', label: 'Model', value: (r) => r.modelCode },
+          { key: 'color', label: 'Color', value: (r) => r.colorName },
+        ]}
+        dateRange={{ label: 'Cutting date', value: (r) => r.cutDate }}
         actions={(row) => (
           <>
             <Button variant="ghost" onClick={() => setDetailFor(row)}>

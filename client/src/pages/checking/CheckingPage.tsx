@@ -109,6 +109,12 @@ export default function CheckingPage() {
         loading={isLoading}
         emptyTitle="Nothing issued for checking yet"
         emptyHint={canWrite ? 'Receive stitched goods from a contractor first, then issue them here.' : undefined}
+        facets={[
+          { key: 'checker', label: 'Checker', value: (r) => r.staffName },
+          { key: 'status', label: 'Status', value: (r) => r.status },
+          { key: 'size', label: 'Size', value: (r) => r.sizeCode },
+        ]}
+        dateRange={{ label: 'Issue date', value: (r) => r.issueDate }}
         actions={(row) => (
           <>
             {canWrite && row.status === 'open' && (

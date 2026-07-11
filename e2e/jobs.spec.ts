@@ -19,31 +19,31 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
   // fixture: purchase + cutting so CUT stock exists
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
-  await page.getByLabel('Vendor').selectOption({ index: 1 });
-  await page.getByLabel('Model').selectOption({ index: mobile ? 3 : 1 });
-  await page.getByLabel('Color').selectOption({ label: mobile ? 'White' : 'Black' });
-  await page.getByLabel('Quantity (meters)').fill('100');
-  await page.getByLabel('Rate per meter').fill('40');
+  await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 1 });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: mobile ? 3 : 1 });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: mobile ? 'White' : 'Black' });
+  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('100');
+  await page.getByRole('dialog').getByLabel('Rate per meter').fill('40');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByRole('cell', { name: /RM-\d+/ }).first()).toBeVisible();
 
   await page.goto('/cutting');
   await page.getByRole('button', { name: '+ New cutting plan' }).click();
-  const lotSelect = page.getByLabel('Cloth batch (raw material)');
+  const lotSelect = page.getByRole('dialog').getByLabel('Cloth batch (raw material)');
   const lotLabel = await lotSelect
     .locator('option', { hasText: mobile ? 'White' : 'Black' })
     .first()
     .textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await page.getByLabel('Cloth to use (meters)').fill('50');
-  await page.getByLabel('Size 1').selectOption({ label: 'S2' });
+  await page.getByRole('dialog').getByLabel('Cloth to use (meters)').fill('50');
+  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'S2' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await page.getByRole('button', { name: 'Save cutting plan' }).click();
   const cutRow = page.getByRole('row', { name: /CUT-\d+/ }).first();
   await cutRow.getByRole('button', { name: 'Record actuals' }).click();
   await page.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await page.getByRole('button', { name: 'Complete cutting' }).click();
-  await expect(page.getByText('completed').first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
 
   // issue 10dz to a contractor
   await page.goto('/jobs');
@@ -51,10 +51,10 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
   await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
   const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
   await page.getByRole('button', { name: '+ New job card' }).click();
-  await page.getByLabel('Contractor').selectOption({ label: 'Rafiq Tailors' });
-  await page.getByLabel('Model').selectOption({ index: mobile ? 3 : 1 });
-  await page.getByLabel('Color').selectOption({ label: mobile ? 'White' : 'Black' });
-  await page.getByLabel('Size 1').selectOption({ label: 'S2' });
+  await page.getByRole('dialog').getByLabel('Contractor').selectOption({ label: 'Rafiq Tailors' });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: mobile ? 3 : 1 });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: mobile ? 'White' : 'Black' });
+  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'S2' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await expect(page.getByText(/Default rate ₹28.00/)).toBeVisible(); // auto-fetched rate
   await page.getByRole('button', { name: 'Issue job card' }).click();

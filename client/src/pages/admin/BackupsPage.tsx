@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { formatTimestampIST } from '@shared';
-import { Button, EmptyState, Spinner } from '../../components/ui';
+import { Button, EmptyState, ErrorText, Field, Spinner, TextInput } from '../../components/ui';
 
 type BackupInfo = { name: string; sizeBytes: number; modifiedAt: string };
 
@@ -9,7 +10,7 @@ export default function BackupsPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['backups'],
-    queryFn: () => api.get<{ backups: BackupInfo[] }>('/api/system/backups'),
+    queryFn: () => api.get<{ backups: BackupInfo[]; cloudDir: string | null }>('/api/system/backups'),
   });
 
   const backupNow = useMutation({
@@ -31,6 +32,8 @@ export default function BackupsPage() {
           {backupNow.isPending ? 'Backing up…' : 'Backup now'}
         </Button>
       </div>
+
+      <CloudBackupCard currentDir={data?.cloudDir ?? null} />
 
       {isLoading && <Spinner />}
       {data && data.backups.length === 0 && (
@@ -70,5 +73,72 @@ export default function BackupsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function CloudBackupCard({ currentDir }: { currentDir: string | null }) {
+  const queryClient = useQueryClient();
+  const [dir, setDir] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [syncNote, setSyncNote] = useState('');
+  const effectiveDir = dir ?? currentDir ?? '';
+
+  const save = useMutation({
+    mutationFn: (value: string) => api.put('/api/system/settings', { key: 'cloud_backup_dir', value }),
+    onSuccess: () => {
+      setError('');
+      setSyncNote('Folder saved. New backups will be copied there automatically.');
+      void queryClient.invalidateQueries({ queryKey: ['backups'] });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not save.'),
+  });
+
+  const syncNow = useMutation({
+    mutationFn: () => api.post<{ copied: number; total: number; dir: string }>('/api/system/backups/sync'),
+    onSuccess: (r) => {
+      setError('');
+      setSyncNote(`Copied ${r.copied} new file(s) — ${r.total} backups now in the cloud folder.`);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Sync failed.'),
+  });
+
+  return (
+    <section className="mb-5 rounded-2xl border border-sky-200 bg-sky-50/50 p-4">
+      <h2 className="mb-1 text-sm font-bold text-gray-900">☁️ Cloud backup (Google Drive)</h2>
+      <p className="mb-3 text-sm text-gray-600">
+        Install <strong>Google Drive for Desktop</strong> on this computer and sign in with
+        the owner's Google account (that sign-in is the only permission Google needs).
+        Create a folder inside “My Drive”, paste its path below, and every backup is
+        copied there automatically — Drive then uploads it to the owner's account.
+        OneDrive or Dropbox folders work the same way.
+      </p>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate(effectiveDir.trim());
+        }}
+      >
+        <div className="min-w-[20rem] flex-1">
+          <Field label="Synced folder path (empty = off)">
+            <TextInput
+              value={effectiveDir}
+              placeholder="e.g. G:\My Drive\BhartiBackups"
+              onChange={(e) => setDir(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button type="submit" disabled={save.isPending}>
+          {save.isPending ? 'Saving…' : 'Save folder'}
+        </Button>
+        {currentDir && (
+          <Button type="button" variant="secondary" disabled={syncNow.isPending} onClick={() => syncNow.mutate()}>
+            {syncNow.isPending ? 'Copying…' : 'Copy all backups now'}
+          </Button>
+        )}
+      </form>
+      {syncNote && <p className="mt-2 text-sm text-emerald-700">{syncNote}</p>}
+      <ErrorText>{error}</ErrorText>
+    </section>
   );
 }

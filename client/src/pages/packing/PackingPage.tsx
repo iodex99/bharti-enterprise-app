@@ -107,6 +107,12 @@ export default function PackingPage() {
         loading={isLoading}
         emptyTitle="Nothing issued for packing yet"
         emptyHint={canWrite ? 'Pass goods through checking first, then issue them to a packer.' : undefined}
+        facets={[
+          { key: 'packer', label: 'Packer', value: (r) => r.staffName },
+          { key: 'status', label: 'Status', value: (r) => r.status },
+          { key: 'size', label: 'Size', value: (r) => r.sizeCode },
+        ]}
+        dateRange={{ label: 'Issue date', value: (r) => r.issueDate }}
         actions={(row) => (
           <>
             {canWrite && row.status === 'open' && (

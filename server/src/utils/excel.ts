@@ -20,7 +20,33 @@ export async function sendXlsx(
 ): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Bharti Enterprises System';
-  const sheet = workbook.addWorksheet(opts.title.slice(0, 31), {
+  addReportSheet(workbook, opts);
+  await streamWorkbook(res, workbook, opts.filename);
+}
+
+export async function streamWorkbook(
+  res: Response,
+  workbook: ExcelJS.Workbook,
+  filename: string,
+): Promise<void> {
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  await workbook.xlsx.write(res);
+  res.end();
+}
+
+/** One styled worksheet per report — shared by single-report and full-report exports. */
+export function addReportSheet(
+  workbook: ExcelJS.Workbook,
+  opts: {
+    title: string;
+    subtitle?: string;
+    columns: ReportColumn[];
+    rows: Array<Record<string, unknown>>;
+    sheetName?: string;
+  },
+): void {
+  const sheet = workbook.addWorksheet((opts.sheetName ?? opts.title).slice(0, 31), {
     views: [{ state: 'frozen', ySplit: opts.subtitle ? 3 : 2 }],
   });
 
@@ -82,11 +108,6 @@ export async function sendXlsx(
     );
     sheet.getColumn(i + 1).width = Math.min(Math.max(maxData + 2, 10), 40);
   });
-
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="${opts.filename}"`);
-  await workbook.xlsx.write(res);
-  res.end();
 }
 
 function cellValue(column: ReportColumn, value: unknown): unknown {

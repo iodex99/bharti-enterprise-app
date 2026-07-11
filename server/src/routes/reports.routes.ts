@@ -39,6 +39,22 @@ export function reportsRoutes(): Router {
     });
   });
 
+  // Complete Business Report — must be registered BEFORE the /:key route.
+  router.get('/full', async (req, res) => {
+    const { buildFullReportHtml, buildFullWorkbook } = await import('../utils/fullreport');
+    const filters = parseFilters(req.query as Record<string, unknown>);
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (req.query.format === 'xlsx') {
+      const { streamWorkbook } = await import('../utils/excel');
+      await streamWorkbook(res, buildFullWorkbook(getDb(), filters), `business-report-${stamp}.xlsx`);
+      return;
+    }
+    const html = buildFullReportHtml(getDb(), filters);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="business-report-${stamp}.html"`);
+    res.send(html);
+  });
+
   router.get('/:key', async (req, res) => {
     const report = getReport(String(req.params.key));
     if (!report) {

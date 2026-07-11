@@ -17,26 +17,26 @@ test('full cutting flow: purchase cloth, plan, record actuals with variance, see
   // 1. a purchase to cut from
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
-  await page.getByLabel('Vendor').selectOption({ index: 1 });
-  await page.getByLabel('Model').selectOption({ index: project === 'mobile' ? 2 : 1 });
-  await page.getByLabel('Color').selectOption({ label: project === 'mobile' ? 'Navy Blue' : 'Emerald' });
-  await page.getByLabel('Quantity (meters)').fill('80');
-  await page.getByLabel('Rate per meter').fill('50');
+  await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 1 });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: project === 'mobile' ? 2 : 1 });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: project === 'mobile' ? 'Navy Blue' : 'Emerald' });
+  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('80');
+  await page.getByRole('dialog').getByLabel('Rate per meter').fill('50');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByRole('cell', { name: /RM-\d+/ }).first()).toBeVisible();
 
   // 2. plan a cut from that batch
   await page.goto('/cutting');
   await page.getByRole('button', { name: '+ New cutting plan' }).click();
-  const lotSelect = page.getByLabel('Cloth batch (raw material)');
+  const lotSelect = page.getByRole('dialog').getByLabel('Cloth batch (raw material)');
   const optionLabel = project === 'mobile' ? /Navy Blue/ : /Emerald/;
   await lotSelect.selectOption({ label: (await lotSelect.locator('option', { hasText: optionLabel }).first().textContent())! });
-  await page.getByLabel('Cloth to use (meters)').fill('60');
-  await page.getByLabel('Size 1').selectOption({ label: 'XS' });
+  await page.getByRole('dialog').getByLabel('Cloth to use (meters)').fill('60');
+  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'XS' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await page.getByRole('button', { name: 'Save cutting plan' }).click();
   await expect(page.getByRole('cell', { name: /CUT-\d+/ }).first()).toBeVisible();
-  await expect(page.getByText('planned').first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'planned' }).first()).toBeVisible();
 
   // 3. record actuals with a shortfall — reason required, then saved
   const row = page.getByRole('row', { name: /CUT-\d+/ }).first();
@@ -46,10 +46,10 @@ test('full cutting flow: purchase cloth, plan, record actuals with variance, see
   // try saving without a reason
   await page.getByRole('button', { name: 'Complete cutting' }).click();
   await expect(page.getByText(/needs a reason/i)).toBeVisible();
-  await page.getByLabel('Reason for XS').selectOption({ label: 'Wastage' });
+  await page.getByRole('dialog').getByLabel('Reason for XS').selectOption({ label: 'Wastage' });
   await page.getByRole('button', { name: 'Complete cutting' }).click();
 
-  await expect(page.getByText('completed').first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
   await expect(page.getByText('-10%').first()).toBeVisible(); // 108 vs 120
 
   // 4. CUT stock shows the yield

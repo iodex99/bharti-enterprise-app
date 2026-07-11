@@ -4,7 +4,13 @@ import { config } from '../config';
 import { getDb } from '../db/connection';
 import { audit } from '../services/audit.service';
 import { checkForUpdate, getUpdateStatus, startUpdate } from '../services/update.service';
-import { backupFilePath, listBackups, runBackup } from '../services/backup.service';
+import {
+  backupFilePath,
+  cloudBackupDir,
+  listBackups,
+  mirrorToCloud,
+  runBackup,
+} from '../services/backup.service';
 import { runReconciliation } from '../services/reconciliation.service';
 import { demoStatus, enterDemoMode, exitDemoMode, removeDemoData } from '../services/demo.service';
 import { isDemoMode } from '../db/dataDirs';
@@ -18,6 +24,8 @@ const EDITABLE_SETTINGS: Record<string, z.ZodType> = {
     .string()
     .regex(/^\d{1,3}$/, 'Enter a number of days (1–999)')
     .refine((v) => Number(v) > 0, 'Must be at least 1 day'),
+  // path of a folder synced by Google Drive for Desktop / OneDrive; '' turns it off
+  cloud_backup_dir: z.string().trim().max(300),
 };
 
 const settingSchema = z.object({
@@ -63,12 +71,22 @@ export function systemRoutes(): Router {
   });
 
   router.get('/backups', requireRole('admin'), (_req, res) => {
-    res.json({ backups: listBackups() });
+    res.json({ backups: listBackups(), cloudDir: cloudBackupDir(getDb()) });
   });
 
   router.post('/backups', requireRole('admin'), async (_req, res) => {
     const name = await runBackup('manual');
     res.status(201).json({ ok: true, name });
+  });
+
+  /** Copy all backups into the configured cloud-synced folder right now. */
+  router.post('/backups/sync', requireRole('admin'), (_req, res) => {
+    const result = mirrorToCloud(getDb());
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
   });
 
   router.get('/reconciliation', requireRole('admin'), (_req, res) => {

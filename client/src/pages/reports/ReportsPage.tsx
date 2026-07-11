@@ -33,6 +33,40 @@ const FILTER_LABEL: Record<string, string> = {
   vendorId: 'Vendor',
 };
 
+function FullReportCard() {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  const base = `/api/reports/full?${qs.toString()}${qs.toString() ? '&' : ''}`;
+
+  return (
+    <section className="mb-6 rounded-2xl border border-violet-200 bg-violet-50/50 p-4 print:hidden">
+      <h2 className="text-sm font-bold text-gray-900">📑 Complete Business Report</h2>
+      <p className="mb-3 text-sm text-gray-600">
+        Everything in one document — summary figures, charts, and all {''}
+        reports together. Download as a visual report (opens in any browser, prints
+        beautifully) or as an Excel workbook with one sheet per report.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="From (optional)">
+          <TextInput type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label="To (optional)">
+          <TextInput type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </Field>
+        <a href={`${base}format=html`}>
+          <Button>⬇ Visual report (HTML)</Button>
+        </a>
+        <a href={`${base}format=xlsx`}>
+          <Button variant="secondary">⬇ Excel workbook</Button>
+        </a>
+      </div>
+    </section>
+  );
+}
+
 function renderCell(column: ReportColumn, value: unknown): string {
   if (value == null || value === '') return '—';
   switch (column.type) {
@@ -93,6 +127,8 @@ export default function ReportsPage() {
           Every report can be filtered, printed and downloaded as Excel
         </p>
       </div>
+
+      <FullReportCard />
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
         <Field label="Report">

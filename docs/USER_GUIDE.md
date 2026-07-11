@@ -80,6 +80,12 @@ given, returned, lost (shortage), extra (excess), their discrepancy %, average t
 days, the job-work cost earned and **dues** (cost − payments). Record payments here
 (cash/UPI/bank/cheque).
 
+## Finding things fast
+
+Every list has instant **search**, **dropdown filters** (vendor, contractor, model,
+color, size, status, checker/packer…), a **date range**, and **click-to-sort column
+headings** (click once for ascending, again for descending).
+
 ## Inventory
 
 **Inventory** shows live stock at all seven stages. Nothing here can be edited by hand —
@@ -89,6 +95,9 @@ trustworthy.
 ## Reports & Excel
 
 **Reports** — pick a report, set filters, then **⬇ Download Excel** or **🖨 Print**.
+At the top of the page, the **Complete Business Report** downloads EVERYTHING in one
+document: a visual HTML report (opens in any browser, prints cleanly) or an Excel
+workbook with one sheet per report — both with an optional date range.
 Everything the owner asked for lives here: stock, expected-vs-actual cutting, contractor
 performance and pending work, checker performance, rejection analysis, all losses,
 inventory aging, monthly production trends.
@@ -129,8 +138,10 @@ Developers can also use `npm run seed:demo` + `npm run dev:demo` from a checkout
 
 - **Users** — create accounts, set roles, deactivate instantly, reset passwords.
 - **Opening Balances** — one-time entry of existing register stock at go-live.
-- **Backups** — automatic daily at 2 AM + before every update; download a copy weekly and
-  keep it outside the office computer.
+- **Backups** — automatic daily at 2 AM + before every update. For off-site copies,
+  install Google Drive for Desktop, sign in with the owner's Google account, and set the
+  synced folder on the Backups page — every backup is then copied to the owner's Drive
+  automatically.
 - **System Health** — inventory self-checks (all should always be ✅) and the
   delayed-job threshold.
 - **Updates** — when a banner says a new version is available, press **Update now**. The

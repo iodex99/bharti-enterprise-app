@@ -20,11 +20,11 @@ test('operator records a purchase and sees it in raw stock', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Raw Material Purchases' })).toBeVisible();
 
   await page.getByRole('button', { name: '+ New purchase' }).click();
-  await page.getByLabel('Vendor').selectOption({ label: 'Sharma Textiles' });
-  await page.getByLabel('Model').selectOption({ index: 1 });
-  await page.getByLabel('Color').selectOption({ label: 'Maroon' });
-  await page.getByLabel('Quantity (meters)').fill('125.5');
-  await page.getByLabel('Rate per meter').fill('45.50');
+  await page.getByRole('dialog').getByLabel('Vendor').selectOption({ label: 'Sharma Textiles' });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: 1 });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: 'Maroon' });
+  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('125.5');
+  await page.getByRole('dialog').getByLabel('Rate per meter').fill('45.50');
   await expect(page.locator('form').getByText('₹5,710.25')).toBeVisible(); // auto total preview
   await page.getByRole('button', { name: 'Save purchase' }).click();
 
@@ -42,13 +42,13 @@ test('purchase validation: received date before purchase date is rejected', asyn
   await signIn(page, 'operator', 'Operator@123');
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
-  await page.getByLabel('Purchase date').fill('2026-07-05');
-  await page.getByLabel('Date received').fill('2026-07-01');
-  await page.getByLabel('Vendor').selectOption({ index: 1 });
-  await page.getByLabel('Model').selectOption({ index: 1 });
-  await page.getByLabel('Color').selectOption({ index: 1 });
-  await page.getByLabel('Quantity (meters)').fill('10');
-  await page.getByLabel('Rate per meter').fill('40');
+  await page.getByRole('dialog').getByLabel('Purchase date').fill('2026-07-05');
+  await page.getByRole('dialog').getByLabel('Date received').fill('2026-07-01');
+  await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 1 });
+  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: 1 });
+  await page.getByRole('dialog').getByLabel('Color').selectOption({ index: 1 });
+  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('10');
+  await page.getByRole('dialog').getByLabel('Rate per meter').fill('40');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByText(/received date cannot be before/i)).toBeVisible();
 });
