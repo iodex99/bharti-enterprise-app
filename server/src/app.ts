@@ -16,6 +16,7 @@ import { openingRoutes } from './routes/opening.routes';
 import { cuttingRoutes } from './routes/cutting.routes';
 import { contractorsRoutes, jobsRoutes } from './routes/jobs.routes';
 import { checkingRoutes, dispatchesRoutes, packingRoutes } from './routes/checking.routes';
+import { discrepanciesRoutes } from './routes/discrepancies.routes';
 import { reportsRoutes, traceRoutes } from './routes/reports.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 
@@ -60,6 +61,7 @@ export function createApp() {
   app.use('/api/checking', checkingRoutes());
   app.use('/api/packing', packingRoutes());
   app.use('/api/dispatches', dispatchesRoutes());
+  app.use('/api/discrepancies', discrepanciesRoutes());
   app.use('/api/reports', reportsRoutes());
   app.use('/api/trace', traceRoutes());
   app.use('/api/dashboard', dashboardRoutes());

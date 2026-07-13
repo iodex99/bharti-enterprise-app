@@ -125,6 +125,12 @@ export const voidSchema = z.object({
   reason: z.string().trim().min(3, 'A reason is required').max(300),
 });
 
+export const resolveDiscrepancySchema = z.object({
+  // acknowledgement-only: what was decided/settled — never a stock movement
+  note: z.string().trim().min(3, 'A resolution note is required').max(500),
+});
+export type ResolveDiscrepancyInput = z.infer<typeof resolveDiscrepancySchema>;
+
 export const cuttingPlanSchema = z
   .object({
     cutDate: businessDate,

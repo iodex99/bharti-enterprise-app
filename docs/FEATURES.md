@@ -23,6 +23,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Traceability tree (FG ↔ vendor) | ✅ | Phase 8 |
 | Reports (~15) + Excel export + print | ✅ | Phase 8 |
 | Dashboard + alerts | ✅ | Phase 9 |
+| Discrepancy review page + admin resolve (acknowledgement-only) | ✅ | post-ship |
 | PWA install + polish | ✅ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |
 | Deployment docs (WinSW + Cloudflare Tunnel) | ✅ | Phase 11 |

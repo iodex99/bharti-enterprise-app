@@ -28,3 +28,6 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   inventory can decrease; the full sales module stays on the roadmap.
 - **ADR-012** Supervisor is CommonJS (`supervisor.cjs`), zero npm dependencies, installed
   once, never auto-updated — it must survive any app-release bug.
+- **ADR-013** Resolving a discrepancy is an acknowledgement (admin-only note + who/when),
+  NEVER a stock movement — the ledger effect already happened when the difference was
+  recorded. Keeps the review workflow unable to corrupt inventory.

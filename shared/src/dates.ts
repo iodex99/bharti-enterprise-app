@@ -23,8 +23,14 @@ export function formatBusinessDate(s: string): string {
 
 /** Current business date in IST (the factory's timezone), as 'YYYY-MM-DD'. */
 export function todayIST(): string {
-  const now = new Date();
-  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  return istDateOf(new Date().toISOString());
+}
+
+/** UTC ISO timestamp -> the 'YYYY-MM-DD' date it falls on in IST. */
+export function istDateOf(iso: string): string {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return iso.slice(0, 10);
+  const ist = new Date(t.getTime() + 5.5 * 60 * 60 * 1000);
   return ist.toISOString().slice(0, 10);
 }
 

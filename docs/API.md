@@ -45,6 +45,12 @@ POST /api/uploads (A O, multipart `image` → webp path) · GET /uploads/* (all 
 | /api/dispatches | A | | A (ledger replay) |
 | /api/contractors/payments | A O | | A |
 
+### Discrepancies (review workflow)
+| Method | Path | Roles | Notes |
+|---|---|---|---|
+| GET | /api/discrepancies | A O W | all recorded differences with source doc, item, party; unresolved first |
+| POST | /api/discrepancies/:id/resolve | A | `{ note }` — acknowledgement only, never a stock movement; 409 if already resolved |
+
 ### Read models
 | Path | Notes |
 |---|---|

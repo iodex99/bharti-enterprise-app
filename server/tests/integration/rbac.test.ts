@@ -71,6 +71,16 @@ const MATRIX: MatrixRow[] = [
   },
   { method: 'get', path: '/api/audit', admin: 'pass', operator: 403, owner: 403, anon: 401 },
   { method: 'get', path: '/api/auth/me', admin: 'pass', operator: 'pass', owner: 'pass', anon: 401 },
+  { method: 'get', path: '/api/discrepancies', admin: 'pass', operator: 'pass', owner: 'pass', anon: 401 },
+  {
+    method: 'post',
+    path: '/api/discrepancies/1/resolve',
+    body: { note: 'rbac probe' },
+    admin: 'pass',
+    operator: 403,
+    owner: 403,
+    anon: 401,
+  },
 ];
 
 describe('RBAC matrix', () => {

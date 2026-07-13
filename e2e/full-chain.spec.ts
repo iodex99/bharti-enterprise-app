@@ -117,4 +117,27 @@ test('purchase → cutting → job work → checking → packing → finished go
   // rejected stage shows the 6pc
   await page.goto('/stock/rejected');
   await expect(page.getByRole('row', { name: new RegExp(color) }).first().getByText('6pc')).toBeVisible();
+
+  // 7. the checking shortfall landed on the Discrepancies review page
+  await page.goto('/discrepancies');
+  const missingRow = page
+    .getByRole('row', { name: new RegExp(color) })
+    .filter({ hasText: 'Missing' })
+    .first();
+  await expect(missingRow).toBeVisible();
+  await expect(missingRow.getByText('unresolved', { exact: true })).toBeVisible();
+  // operator can review but not resolve
+  await expect(missingRow.getByRole('button', { name: 'Resolve' })).toHaveCount(0);
+
+  // admin resolves it with a note; the badge flips
+  await page.request.post('/api/auth/logout');
+  await signIn(page, 'admin', 'Admin@123');
+  await page.goto('/discrepancies');
+  await missingRow.getByRole('button', { name: 'Resolve' }).click();
+  await page
+    .getByRole('dialog', { name: 'Resolve discrepancy' })
+    .getByLabel('Resolution note')
+    .fill('checker recount — settled against contractor dues');
+  await page.getByRole('button', { name: 'Mark resolved' }).click();
+  await expect(missingRow.getByText('resolved', { exact: true })).toBeVisible();
 });

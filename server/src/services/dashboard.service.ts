@@ -189,8 +189,8 @@ export function alerts(db: Db): Alert[] {
     out.push({
       severity: 'warning',
       title: `${d.n} unresolved ${d.stage} discrepanc${d.n === 1 ? 'y' : 'ies'}`,
-      detail: `${d.pcs} pcs affected — review and resolve in the ${d.stage.toLowerCase()} records.`,
-      link: '/reports',
+      detail: `${d.pcs} pcs affected — review and resolve on the Discrepancies page.`,
+      link: '/discrepancies',
     });
   }
 

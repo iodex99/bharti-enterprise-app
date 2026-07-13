@@ -80,6 +80,20 @@ given, returned, lost (shortage), extra (excess), their discrepancy %, average t
 days, the job-work cost earned and **dues** (cost − payments). Record payments here
 (cash/UPI/bank/cheque).
 
+## Discrepancies (review & close the loop)
+
+Whenever actual differs from expected anywhere — cutting variance, contractor excess or
+shortage, missing/rejected pieces at checking, packing shortfalls — the system records a
+**discrepancy** automatically. **Production → Discrepancies** (also reached by clicking
+the dashboard alerts or the "Unresolved discrepancies" tile) lists them all with the
+source document, item and contractor/staff involved.
+
+Once the matter is looked into, the **Admin** presses **Resolve** and writes what was
+decided ("recovered from contractor", "written off", "counting error confirmed"…).
+Resolving only records the review — stock was already adjusted the moment the difference
+was recorded, so nothing moves again. Resolved items keep their note, who resolved them
+and when, and drop off the dashboard warnings.
+
 ## Finding things fast
 
 Every list has instant **search**, **dropdown filters** (vendor, contractor, model,

@@ -12,6 +12,7 @@ import ContractorsPage from './pages/contractors/ContractorsPage';
 import CheckingPage from './pages/checking/CheckingPage';
 import PackingPage from './pages/packing/PackingPage';
 import DispatchesPage from './pages/dispatches/DispatchesPage';
+import DiscrepanciesPage from './pages/discrepancies/DiscrepanciesPage';
 import ReportsPage from './pages/reports/ReportsPage';
 import TracePage from './pages/trace/TracePage';
 import StockPage from './pages/stock/StockPage';
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="checking" element={<CheckingPage />} />
         <Route path="packing" element={<PackingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
+        <Route path="discrepancies" element={<DiscrepanciesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="trace" element={<TracePage />} />
         <Route path="stock" element={<StockPage />} />

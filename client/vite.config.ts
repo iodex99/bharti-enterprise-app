@@ -17,8 +17,12 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8787',
-      '/uploads': 'http://localhost:8787',
+      // changeOrigin:false keeps the browser's Host header (localhost:5173) so it
+      // matches the Origin header — the server's CSRF checkOrigin guard requires
+      // Origin host === Host. In production Express serves client+API same-origin,
+      // so this split only exists in dev.
+      '/api': { target: 'http://localhost:8787', changeOrigin: false },
+      '/uploads': { target: 'http://localhost:8787', changeOrigin: false },
     },
   },
   build: {

@@ -27,8 +27,9 @@ cutting_lines · job_cards (JOB-) + job_card_lines (multi-size, per-line rate sn
 job_receipts (RCT-) + job_receipt_lines (return_type stitched|unstitched_return) ·
 check_issues (CHK-) + check_results (incremental sessions) + check_result_rejections ·
 pack_issues (PCK-) + pack_results (incremental) · discrepancies (generic: powers loss
-reports + alerts; resolved_at/by) · fg_dispatches (DSP-) · opening_balances (OPB-) ·
-contractor_payments (PAY-)
+reports + alerts; resolved_at/by/resolution_note set by the admin-only resolve workflow —
+an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_balances
+(OPB-) · contractor_payments (PAY-)
 
 **Engine:**
 - `stock_ledger` — append-only signed rows. stage ∈ RAW/CUT/WIP/CHECKING/PACKING/FG/REJECTED;

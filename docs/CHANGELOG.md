@@ -5,6 +5,15 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-13 — Discrepancy review workflow: new Production → Discrepancies page listing
+  every recorded difference (cutting variance, job excess/shortage, checking
+  missing/rejected, packing short) with its source document, item and contractor/staff;
+  admin-only Resolve with a mandatory note (acknowledgement only — never a stock
+  movement, ADR-013); dashboard discrepancy alerts and the "Unresolved discrepancies"
+  tile now open this page instead of Reports; demo data ships with resolved + unresolved
+  examples. Dev-only fix: Vite proxy now preserves the Host header so sign-in works on
+  the dev server (the CSRF origin guard was rejecting proxied logins).
+
 - 2026-07-11 — Backup schedule moved to 1 PM IST with catch-up/retry: the last successful
   daily backup is tracked in settings and re-attempted hourly and at every start-up until
   the day's backup exists (PC off at 1 PM or a failed run no longer means a missed day);

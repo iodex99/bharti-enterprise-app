@@ -30,6 +30,7 @@ const NAV: NavSection[] = [
       { to: '/checking', label: 'Checking', icon: '🔍' },
       { to: '/packing', label: 'Packing', icon: '📦' },
       { to: '/dispatches', label: 'Dispatches', icon: '🚚' },
+      { to: '/discrepancies', label: 'Discrepancies', icon: '⚖️' },
     ],
   },
   {

@@ -14,6 +14,7 @@ import { closeJobWithDiscrepancy, createJobCard, createReceipt } from '../servic
 import { createPayment } from '../services/contractors.service';
 import { createCheckIssue, recordCheckResult } from '../services/checking.service';
 import { createDispatch, createPackIssue, recordPackResult } from '../services/packing.service';
+import { resolveDiscrepancy } from '../services/discrepancies.service';
 import { runReconciliation } from '../services/reconciliation.service';
 
 const ADMIN = 1;
@@ -396,6 +397,13 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   must(createPayment(db, { contractorId: CT.MEENA, paymentDate: daysAgo(12), amountPaise: 20000, mode: 'cash', reference: '', notes: 'advance adjusted' }, OPERATOR, null), 'pay2');
   must(createPayment(db, { contractorId: CT.RAFIQ, paymentDate: daysAgo(30), amountPaise: 30000, mode: 'bank_transfer', reference: 'NEFT-88123', notes: '' }, OPERATOR, null), 'pay3');
   must(createPayment(db, { contractorId: CT.SUNITA, paymentDate: daysAgo(20), amountPaise: 25000, mode: 'cash', reference: '', notes: '' }, OPERATOR, null), 'pay4');
+
+  // resolve the two oldest discrepancies so a demo shows both review states
+  const toResolve = db
+    .prepare('SELECT id FROM discrepancies ORDER BY created_at ASC, id ASC LIMIT 2')
+    .all() as Array<{ id: number }>;
+  const notes = ['counting error at cutting table — register corrected', 'settled with contractor against dues'];
+  toResolve.forEach((d, i) => must(resolveDiscrepancy(db, d.id, notes[i]!, ADMIN, null), `resolve d${d.id}`));
 
   return runReconciliation(db);
 }

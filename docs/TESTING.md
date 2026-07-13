@@ -54,6 +54,9 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
   lots, admin-only close with shortage writeoff, void rules, payments + dues math
 - checking/packing: staff-role gates, incremental sessions, breakdown-sum rule,
   over-session rejection, REJECTED stage, FG output, dispatch + ledger-replay void
+- discrepancies: list joins source docs (unresolved first), admin-only resolve
+  (acknowledgement — ledger row count proven unchanged), audit row, 409 double-resolve,
+  alert links point at /discrepancies
 - FULL-CHAIN CONSERVATION: genesis − terminal = on-hand, drift 0 (pieces) + RAW (cm)
 - dashboard numbers vs fixture ledger; alerts feed
 - reports: all 15 run + column shape, filters narrow, losses completeness, xlsx
@@ -66,7 +69,8 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
 **E2E (21 scenarios × desktop + mobile viewports):** login/logout/forced-change,
 RBAC walls, masters CRUD, purchase → raw stock, cutting with live variance + reason
 enforcement, job partial receipts → auto-complete → contractor analytics, the whole
-purchase→cutting→job→checking→packing→FG chain, reports Excel download, traceability
+purchase→cutting→job→checking→packing→FG chain (ends with the missing-pieces
+discrepancy reviewed and resolved by the admin), reports Excel download, traceability
 tree, PWA (SW active + /api freshness through it), System Health + settings.
 
 **Ops drills (scripts/update-drill.mjs, 13 steps):** seeded install boots under the
