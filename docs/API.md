@@ -15,9 +15,16 @@ original id with `replayed: true`).
 | POST | /api/system/update | A | 202 download→stage→restart; 400 dev/no-update; 409 busy |
 | GET | /api/system/reconciliation | A | live ledger conservation checks |
 | GET/PUT | /api/system/settings | A | whitelisted keys (delayed_job_days) |
-| GET/POST | /api/system/backups | A | list / run now (+cloudDir in listing) |
-| POST | /api/system/backups/sync | A | copy backups into the cloud-synced folder |
-| GET | /api/system/backups/download?name= | A | |
+| GET/POST | /api/system/backups | A | list / run now (+cloudDir, lastDailyBackupDate) |
+| POST | /api/system/backups/sync | A | copy DB backups into the cloud-synced folder |
+| GET | /api/system/backups/download?name= | A | download one daily/manual `.db` |
+| GET | /api/system/backups/complete | A | download a complete snapshot (.zip: DB + photos + manifest); 409 in demo |
+| POST | /api/system/backups/complete-to-cloud | A | write a complete snapshot into the cloud folder |
+| GET | /api/system/restore/candidates | A | complete snapshots found in the cloud folder |
+| POST | /api/system/restore/upload | A | multipart `backup`; parks the file, returns {token, manifest, compatible} |
+| POST | /api/system/restore/commit | A | `{token}` or `{cloudName}` → atomic swap + auto-rollback; clears sessions; 409 in demo |
+| GET | /api/system/setup-state | A O W | `{ needsSetup }` — fresh-install wizard gate |
+| POST | /api/system/setup/complete | A | dismiss the setup wizard |
 
 ### Auth & users
 | Method | Path | Roles |

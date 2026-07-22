@@ -16,6 +16,14 @@ import { activeDataDir } from './dataDirs';
 
 const migrationsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
 
+/** All migration filenames this build knows how to apply (sorted). */
+export function knownMigrationNames(): string[] {
+  return fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+}
+
 export function pendingMigrations(db: Db): string[] {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
     id INTEGER PRIMARY KEY,

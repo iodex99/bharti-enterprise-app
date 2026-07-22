@@ -101,6 +101,9 @@ const seedAll = db.transaction(() => {
   insertStaff.run('Pooja', '9867890123', 'checker');
   insertStaff.run('Ravi', '9878901234', 'packer');
   insertStaff.run('Kavita', '9889012345', 'both');
+
+  // This is a configured, ready-to-use business — past the first-run setup wizard.
+  db.prepare("INSERT INTO settings (key, value, updated_by) VALUES ('setup_complete', '1', 1)").run();
 });
 
 seedAll();

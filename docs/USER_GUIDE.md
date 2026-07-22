@@ -158,6 +158,14 @@ Developers can also use `npm run seed:demo` + `npm run dev:demo` from a checkout
   install Google Drive for Desktop, sign in with the owner's Google account, and set the
   synced folder on the Backups page — every backup is then copied to the owner's Drive
   automatically.
+- **Complete backup & moving to a new computer** — the daily backups hold the database
+  only. A **complete backup** (Backups → *Download complete backup*) is one file with the
+  database **and every photo** — the file you move to a new PC. To move: install the app on
+  the new computer, sign in, and the **setup screen** offers *"Move from another computer"* —
+  give it the complete backup (a downloaded file, or one you sent to Google Drive) and it
+  restores everything. **Restore** replaces all current data, so it always asks you to type
+  RESTORE first, copies the old data aside, and undoes itself automatically if anything
+  goes wrong. Everyone signs in again afterwards.
 - **System Health** — inventory self-checks (all should always be ✅) and the
   delayed-job threshold.
 - **Updates** — when a banner says a new version is available, press **Update now**. The

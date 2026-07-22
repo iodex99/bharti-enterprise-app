@@ -20,6 +20,9 @@
 
 **Masters:** models, colors, sizes, vendors, contractors, staff
 
+**Settings keys (app-managed, not migrations):** `delayed_job_days`, `cloud_backup_dir`,
+`last_daily_backup_date`, `setup_complete` (first-run wizard dismissed).
+
 **Documents:**
 purchases (RM-) · cutting_batches (CUT-; consumes a typed raw lot:
 `raw_lot_type ∈ purchase|opening` + `raw_lot_id`, model/color denormalized) +

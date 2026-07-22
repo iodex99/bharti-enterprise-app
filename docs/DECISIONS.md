@@ -31,3 +31,13 @@ One line per locked decision; expand only when the reasoning is non-obvious.
 - **ADR-013** Resolving a discrepancy is an acknowledgement (admin-only note + who/when),
   NEVER a stock movement — the ledger effect already happened when the difference was
   recorded. Keeps the review workflow unable to corrupt inventory.
+- **ADR-014** A "complete backup" is a single `.zip` (database + uploads/ + manifest),
+  built/read with `adm-zip` (pure-JS, no native ABI concerns). Manifest carries the app
+  version + applied migrations so restore can refuse a backup from a NEWER app (additive
+  migrations are forward-only). This is the migration unit.
+- **ADR-015** In-app restore reuses the demo-mode runtime connection swap (close → replace
+  files → reopen), but runs the swap FULLY SYNCHRONOUSLY so no request can observe a
+  half-swapped data dir — no supervisor/exit-code involvement. The pre-restore state is
+  moved aside first and restored automatically on any failure; sessions are cleared so
+  everyone re-authenticates against the restored data. Restore/complete-backup are refused
+  in demo mode (they must act on real data).

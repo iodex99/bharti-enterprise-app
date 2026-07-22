@@ -5,6 +5,15 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-22 — One-file migration to a new computer: a **complete backup** bundles the
+  database AND every uploaded photo into one `.zip` (Backups → *Download complete backup*,
+  or *Send to Google Drive*). A safe **in-app Restore** replaces all data atomically — it
+  copies the current data aside, swaps in the backup, re-checks integrity and rolls back
+  automatically on any failure, then signs everyone out to re-authenticate against the
+  restored data. Restore refuses a backup from a newer app version, and is blocked in demo
+  mode. A **first-run setup wizard** now greets a brand-new install: *start fresh* or
+  *move from another computer*. (adm-zip added; ADR-014/015.)
+
 - 2026-07-13 — Discrepancy review workflow: new Production → Discrepancies page listing
   every recorded difference (cutting variance, job excess/shortage, checking
   missing/rejected, packing short) with its source document, item and contractor/staff;

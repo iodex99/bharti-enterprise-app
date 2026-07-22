@@ -82,6 +82,9 @@ describe('demo mode lifecycle', () => {
     expect(
       (await request(ctx.app).post('/api/system/demo/enter').set('Cookie', demoAdmin)).status,
     ).toBe(409);
+    // complete-backup / restore act on REAL data, so they are refused while in demo mode
+    expect((await request(ctx.app).get('/api/system/backups/complete').set('Cookie', demoAdmin)).status).toBe(409);
+    expect((await request(ctx.app).post('/api/system/restore/upload').set('Cookie', demoAdmin)).status).toBe(409);
   });
 
   it('demo-mode writes stay in the demo database', async () => {

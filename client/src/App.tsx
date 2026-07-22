@@ -4,6 +4,7 @@ import AppShell from './components/AppShell';
 import LoginPage from './pages/LoginPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import HomePage from './pages/HomePage';
+import SetupPage from './pages/SetupPage';
 import MastersPage from './pages/masters/MastersPage';
 import PurchasesPage from './pages/purchases/PurchasesPage';
 import CuttingPage from './pages/cutting/CuttingPage';
@@ -50,6 +51,14 @@ export default function App() {
       <Route
         path="/login"
         element={loading ? <FullScreenSpinner /> : user ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/setup"
+        element={
+          <Protected roles={['admin']}>
+            <SetupPage />
+          </Protected>
+        }
       />
       <Route
         element={

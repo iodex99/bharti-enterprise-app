@@ -71,6 +71,13 @@ const MATRIX: MatrixRow[] = [
   },
   { method: 'get', path: '/api/audit', admin: 'pass', operator: 403, owner: 403, anon: 401 },
   { method: 'get', path: '/api/auth/me', admin: 'pass', operator: 'pass', owner: 'pass', anon: 401 },
+  { method: 'get', path: '/api/system/setup-state', admin: 'pass', operator: 'pass', owner: 'pass', anon: 401 },
+  { method: 'post', path: '/api/system/setup/complete', admin: 'pass', operator: 403, owner: 403, anon: 401 },
+  { method: 'get', path: '/api/system/backups/complete', admin: 'pass', operator: 403, owner: 403, anon: 401 },
+  { method: 'post', path: '/api/system/backups/complete-to-cloud', admin: 'pass', operator: 403, owner: 403, anon: 401 },
+  { method: 'get', path: '/api/system/restore/candidates', admin: 'pass', operator: 403, owner: 403, anon: 401 },
+  { method: 'post', path: '/api/system/restore/upload', admin: 'pass', operator: 403, owner: 403, anon: 401 },
+  { method: 'post', path: '/api/system/restore/commit', body: { token: 'deadbeef' }, admin: 'pass', operator: 403, owner: 403, anon: 401 },
   { method: 'get', path: '/api/discrepancies', admin: 'pass', operator: 'pass', owner: 'pass', anon: 401 },
   {
     method: 'post',

@@ -97,13 +97,43 @@ copy it over, extract to `C:\bharti\releases\v1.0.N\`, write that version into
 
 ## Backups & restore
 
-- Automatic: daily 02:00 IST (`data\backups\daily-*.db`, keep 30) + a pre-update copy
-  before every version change.
+- Automatic: daily 13:00 IST (`data\backups\daily-*.db`, keep 30, with catch-up if the PC
+  was off) + a pre-update copy before every version change + a `pre-restore-*` copy before
+  any in-app restore.
 - Manual: Administration → Backups → *Backup now* / *Download*. **Take a copy off the
-  office PC weekly** (pen drive or cloud drive).
-- **Restore drill:** stop the service (`Stop-Service bharti-app`), replace
-  `C:\bharti\data\app.db` with the chosen backup file (delete `app.db-wal`/`app.db-shm`
-  if present), start the service, verify System Health shows all checks ✅.
+  office PC weekly** (pen drive or cloud drive) — or configure the Google Drive folder so
+  it happens automatically.
+- **Complete backup vs daily backup:** the daily `.db` files hold the database only. A
+  **complete backup** (Backups → *Download complete backup*) is a single `.zip` holding the
+  database **and every uploaded photo** — this is the file you use to move to a new PC.
+- **Restore drill (manual, DB only):** stop the service (`Stop-Service bharti-app`),
+  replace `C:\bharti\data\app.db` with the chosen backup file (delete `app.db-wal`/
+  `app.db-shm` if present), start the service, verify System Health shows all checks ✅.
+- **Restore drill (in-app, complete):** Administration → Backups → *Restore* → choose a
+  complete-backup file (or a Google Drive one) → type RESTORE. The app copies the current
+  data aside (`backups\pre-restore-*`), swaps in the backup, re-checks integrity, and
+  **rolls back automatically** if anything fails. Everyone is signed out; sign in with an
+  account from the restored data.
+
+## Migrating to a new computer
+
+The whole business is portable. On the **new PC**:
+
+1. Install the app exactly like a first go-live (Node 24 + `install-service.ps1`, above).
+2. Open the app and sign in as admin. Because there is no data yet, the **first-run setup
+   wizard** appears — choose **"Move from another computer"**.
+3. Provide the complete backup, either way:
+   - **File:** on the OLD PC, Backups → *Download complete backup*; copy that `.zip` to the
+     new PC (pen drive / email / Drive) and pick it in the wizard; **or**
+   - **Google Drive:** on the OLD PC, Backups → *Send a complete backup to Google Drive*;
+     install Drive for Desktop on the new PC signed into the same account, and the wizard's
+     restore card lists it — pick the latest.
+4. Type RESTORE. The app restores the database **and all photos**, then signs you out.
+   Sign in with the usual accounts (they came across in the backup) and verify System
+   Health is all ✅.
+
+The old PC is untouched — keep it until the new one is verified. Nothing about the account
+passwords, masters, ledger, audit trail or photos is lost.
 
 ## Runbook
 
@@ -135,4 +165,5 @@ configuration, but the UPS avoids interrupted work sessions).
 9. ☐ Update drill on the real install: push a trivial change → banner appears →
    *Update now* → new version live, data intact.
 10. ☐ Restore drill rehearsed once (stop service, swap DB from backup, start, verify).
-11. ☐ Staff walked through docs/USER_GUIDE.md on their own phones.
+11. ☐ Complete backup downloaded once and kept off-site (this is the migration file).
+12. ☐ Staff walked through docs/USER_GUIDE.md on their own phones.

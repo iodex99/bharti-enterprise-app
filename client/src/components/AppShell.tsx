@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { NavLink, Navigate, Outlet, useNavigate } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
+import { api } from '../api/client';
 import { useAuth } from '../lib/auth';
 import { useHealth } from '../api/health';
 import { UpdateBanner } from './UpdateBanner';
@@ -61,9 +63,19 @@ const ROLE_TONE = { admin: 'violet', operator: 'blue', owner: 'green' } as const
 export default function AppShell() {
   const { user, logout } = useAuth();
   const { data: health } = useHealth();
+  const { data: setup } = useQuery({
+    queryKey: ['setup-state'],
+    queryFn: () => api.get<{ needsSetup: boolean }>('/api/system/setup-state'),
+    staleTime: 60_000,
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   if (!user) return null;
+
+  // Brand-new install with no data yet → one-time setup wizard (admin only, real data only).
+  if (user.role === 'admin' && !health?.demoMode && setup?.needsSetup) {
+    return <Navigate to="/setup" replace />;
+  }
 
   const visibleSections = NAV.map((s) => ({
     ...s,

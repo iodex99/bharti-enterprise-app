@@ -79,13 +79,17 @@
 
 ## Current state
 
-ALL PHASES COMPLETE (0–11) + post-ship additions. 265 unit/integration + 48 E2E green;
+ALL PHASES COMPLETE (0–11) + post-ship additions. 273 unit/integration + 49 E2E green;
 update drill 13/13. IN-APP DEMO MODE: Admin → System Health buttons switch the live app
 onto a separate demo database (data-demo sibling; sessions/uploads/backups follow the
 active DB via db/dataDirs.ts activeDataDir(); flag file survives restarts). Remote
 access documented for NO-DOMAIN reality: Tailscale + tailscale serve (https) primary.
 Discrepancy review workflow live: /discrepancies page (all roles view, admin resolves
 with a note — acknowledgement-only per ADR-013); dashboard alerts + KPI tile link there.
+MIGRATION/COMPLETE BACKUP live (ADR-014/015): one-zip snapshot (DB+photos+manifest) via
+snapshot.service.ts; safe in-app restore = synchronous connection-swap + auto-rollback +
+session clear; first-run setup wizard (/setup) for a new PC; Backups page has download /
+send-to-Drive / restore. adm-zip@0.6.0 dependency added.
 
 **Environment quirks discovered (don't relearn these):**
 - Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
@@ -104,6 +108,14 @@ with a note — acknowledgement-only per ADR-013); dashboard alerts + KPI tile l
    WhatsApp alerts, low-stock thresholds, rework flow…).
 
 ## Session notes
+
+- 2026-07-22 (post-ship): Complete backup + one-file migration. New snapshot.service.ts
+  (build/inspect/restore/cloud) reuses the demo runtime connection-swap but SYNCHRONOUSLY
+  so the file swap is atomic vs other requests; pre-restore copy + auto-rollback; clears
+  sessions; audits as system (userId null — restoring admin's id is a FK to the OLD db).
+  First-run setup wizard gates a fresh install. adm-zip (0.6.0, patched DoS advisory).
+  Watch-outs for future: restore/complete-backup MUST refuse demo mode (getDb() would hit
+  the demo dir); snapshot is DB+uploads only (never the whole data dir).
 
 - 2026-07-13 (post-ship): Discrepancies review page + admin resolve (user found alert
   links dumping into Reports; root cause was bigger — resolved_at columns existed but NO

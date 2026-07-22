@@ -24,6 +24,8 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Reports (~15) + Excel export + print | ✅ | Phase 8 |
 | Dashboard + alerts | ✅ | Phase 9 |
 | Discrepancy review page + admin resolve (acknowledgement-only) | ✅ | post-ship |
+| Complete backup (DB+photos zip) + one-click download + send-to-Drive | ✅ | post-ship |
+| In-app restore (atomic swap + auto-rollback) + first-run setup wizard | ✅ | post-ship |
 | PWA install + polish | ✅ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |
 | Deployment docs (WinSW + Cloudflare Tunnel) | ✅ | Phase 11 |

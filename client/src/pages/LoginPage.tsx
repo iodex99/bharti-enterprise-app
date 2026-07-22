@@ -45,6 +45,11 @@ export default function LoginPage() {
             <code>Admin@123</code>
           </p>
         )}
+        {typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('restored') && (
+          <p className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-900">
+            ✅ <strong>Data restored.</strong> Sign in with an account from the restored data.
+          </p>
+        )}
         <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">
           <Field label="Username">
             <TextInput

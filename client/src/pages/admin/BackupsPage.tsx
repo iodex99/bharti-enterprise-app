@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { formatBusinessDate, formatTimestampIST } from '@shared';
 import { Button, EmptyState, ErrorText, Field, Spinner, TextInput } from '../../components/ui';
+import { RestoreCard } from '../../components/RestoreCard';
 
 type BackupInfo = { name: string; sizeBytes: number; modifiedAt: string };
 
@@ -42,6 +43,10 @@ export default function BackupsPage() {
         </Button>
       </div>
 
+      <CompleteBackupCard cloudDir={data?.cloudDir ?? null} />
+      <div className="mb-5">
+        <RestoreCard />
+      </div>
       <CloudBackupCard currentDir={data?.cloudDir ?? null} />
 
       {isLoading && <Spinner />}
@@ -82,6 +87,43 @@ export default function BackupsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function CompleteBackupCard({ cloudDir }: { cloudDir: string | null }) {
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const toCloud = useMutation({
+    mutationFn: () => api.post<{ name: string }>('/api/system/backups/complete-to-cloud'),
+    onSuccess: (r) => { setError(''); setNote(`Sent “${r.name}” to the cloud folder — it will upload to Google Drive.`); },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not send to cloud.'),
+  });
+
+  return (
+    <section className="mb-5 rounded-2xl border border-emerald-300 bg-emerald-50/50 p-4">
+      <h2 className="mb-1 text-sm font-bold text-gray-900">📦 Complete backup (for moving to a new computer)</h2>
+      <p className="mb-3 text-sm text-gray-600">
+        A <strong>complete backup</strong> is one file containing <em>everything</em> — the
+        database <strong>and</strong> all uploaded photos. Use it to move the whole business to a
+        new computer: download it here, then on the new PC install the app and use
+        “Restore” below. (The daily backups above cover the database only.)
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+          href="/api/system/backups/complete"
+        >
+          ⬇ Download complete backup
+        </a>
+        {cloudDir && (
+          <Button variant="secondary" disabled={toCloud.isPending} onClick={() => toCloud.mutate()}>
+            {toCloud.isPending ? 'Sending…' : 'Send a complete backup to Google Drive'}
+          </Button>
+        )}
+      </div>
+      {note && <p className="mt-2 text-sm text-emerald-700">{note}</p>}
+      <ErrorText>{error}</ErrorText>
+    </section>
   );
 }
 

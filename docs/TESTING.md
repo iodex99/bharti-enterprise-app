@@ -64,6 +64,11 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
 - system: reconciliation green + corrupted-row detection, settings whitelist + audit,
   daily-backup catch-up state machine (too-early/ran/idempotent/failure-retry/boot),
   cloud mirror lifecycle, full-report HTML+XLSX round-trips, demo-mode lifecycle
+- complete backup + restore: snapshot zip carries DB+photos+manifest; restore rewinds all
+  data AND photos atomically (later purchase + photo vanish), pre-restore safety copy kept,
+  data_restore audited, reconciliation green after; rejects non-backup zip and a
+  newer-version backup (forged future migration); refused in demo mode; first-run
+  setup-state flips false once dismissed (admin-only)
 - migrations idempotent; full schema presence
 
 **E2E (21 scenarios × desktop + mobile viewports):** login/logout/forced-change,
@@ -71,7 +76,9 @@ RBAC walls, masters CRUD, purchase → raw stock, cutting with live variance + r
 enforcement, job partial receipts → auto-complete → contractor analytics, the whole
 purchase→cutting→job→checking→packing→FG chain (ends with the missing-pieces
 discrepancy reviewed and resolved by the admin), reports Excel download, traceability
-tree, PWA (SW active + /api freshness through it), System Health + settings.
+tree, PWA (SW active + /api freshness through it), System Health + settings, complete
+backup download → Restore preview/confirm-gate UI (desktop only; the atomic swap +
+rollback itself is integration-tested).
 
 **Ops drills (scripts/update-drill.mjs, 13 steps):** seeded install boots under the
 supervisor → admin one-click update → session + data survive → poisoned release
