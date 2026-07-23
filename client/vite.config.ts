@@ -58,6 +58,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss(), stampVersion],
     define: {
       __APP_VERSION__: JSON.stringify(version),
+      // Where installed apps look for updates: a small PUBLIC releases repo, so devices
+      // need no credentials while the source stays private.
+      __UPDATE_FEED__: JSON.stringify(process.env.UPDATE_FEED_URL ?? ''),
     },
     resolve: {
       alias: [

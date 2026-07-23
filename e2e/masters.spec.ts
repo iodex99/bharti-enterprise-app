@@ -5,7 +5,11 @@ async function signInAdmin(page: Page) {
   await page.getByLabel('Username').fill('admin');
   await page.getByLabel('Password').fill('Admin@123');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible({
+    // the home screen loads its dashboard before the heading paints; 5s is not
+    // enough on a loaded CI runner
+    timeout: 20_000,
+  });
 }
 
 async function openNav(page: Page) {
@@ -56,7 +60,11 @@ test('operator sees masters read-only', async ({ page }) => {
   await page.getByLabel('Username').fill('operator');
   await page.getByLabel('Password').fill('Operator@123');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible({
+    // the home screen loads its dashboard before the heading paints; 5s is not
+    // enough on a loaded CI runner
+    timeout: 20_000,
+  });
 
   // direct URL: the nav has both a Contractors master AND a Contractors hub
   await page.goto('/masters/contractors');

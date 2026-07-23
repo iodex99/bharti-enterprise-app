@@ -51,6 +51,8 @@ jobs:
       - name: Build the app bundle
         env:
           APP_VERSION: ${{ env.VERSION }}
+          # Installed devices poll the PUBLIC releases repo, so they need no credentials.
+          UPDATE_FEED_URL: https://api.github.com/repos/${{ vars.RELEASES_REPO || 'iodex99/bharti-releases' }}/releases/latest
         run: npm run build:app
 
       # ---- native shell ----------------------------------------------------
@@ -99,20 +101,41 @@ jobs:
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
         run: node scripts/package-app-bundle.mjs "$VERSION" "$APK_PATH"
 
+      # Published to a small PUBLIC repository so devices can check for and download
+      # updates with no credentials, while this source repository stays private.
+      # Requires: that repo to exist (with a README, so it has a default branch) and a
+      # fine-grained PAT with Contents: read+write on it, as secret RELEASES_REPO_TOKEN.
+      # Until that is set up, releases land here instead and devices will not see them.
       - name: Publish the release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO || 'iodex99/bharti-releases' }}
+          # via env, never interpolated into the script: a commit message is arbitrary text
+          NOTES: ${{ github.event.head_commit.message }}
         run: |
-          # Re-running a workflow reuses its run number. The rebuilt assets are equivalent,
-          # so replace the release rather than failing the run.
-          if gh release view "v$VERSION" >/dev/null 2>&1; then
+          set -euo pipefail
+          if [ -n "$RELEASES_TOKEN" ]; then
+            export GH_TOKEN="$RELEASES_TOKEN"
+            TARGET="$RELEASES_REPO"
+          else
+            export GH_TOKEN="$FALLBACK_TOKEN"
+            TARGET="$GITHUB_REPOSITORY"
+            echo "::warning title=Update feed not configured::RELEASES_REPO_TOKEN is not set, so v$VERSION was published to the private repo $TARGET. Installed devices poll $RELEASES_REPO and will NOT see this release. See docs/DEPLOYMENT.md → Releasing."
+          fi
+          echo "Publishing v$VERSION to $TARGET"
+
+          # Re-running a workflow reuses its run number; the rebuilt assets are
+          # equivalent, so replace the release rather than failing the run.
+          if gh release view "v$VERSION" --repo "$TARGET" >/dev/null 2>&1; then
             echo "v$VERSION already exists — replacing it."
-            gh release delete "v$VERSION" --yes --cleanup-tag
+            gh release delete "v$VERSION" --repo "$TARGET" --yes --cleanup-tag
           fi
           gh release create "v$VERSION" \
             dist-release/*.zip \
             dist-release/*.apk \
             dist-release/app-manifest.json \
             dist-release/checksums.txt \
+            --repo "$TARGET" \
             --title "v$VERSION" \
-            --generate-notes
+            --notes "${NOTES:-Release v$VERSION}"

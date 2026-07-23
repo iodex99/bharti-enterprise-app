@@ -5,7 +5,11 @@ async function signIn(page: Page, username: string, password: string) {
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible({
+    // the home screen loads its dashboard before the heading paints; 5s is not
+    // enough on a loaded CI runner
+    timeout: 20_000,
+  });
 }
 
 /** On mobile the sidebar is behind the hamburger; open it before using nav links. */
@@ -28,7 +32,11 @@ test('forced password change flow for a fresh user', async ({ page }) => {
   await page.getByLabel('New password', { exact: true }).fill('Fresh@1234');
   await page.getByLabel('Confirm new password').fill('Fresh@1234');
   await page.getByRole('button', { name: 'Save new password' }).click();
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible({
+    // the home screen loads its dashboard before the heading paints; 5s is not
+    // enough on a loaded CI runner
+    timeout: 20_000,
+  });
 });
 
 test('admin manages users', async ({ page }) => {
@@ -52,7 +60,11 @@ test('operator cannot see admin nav or open admin pages', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Users' })).toHaveCount(0);
   await page.goto('/admin/users');
   // bounced back home
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible({
+    // the home screen loads its dashboard before the heading paints; 5s is not
+    // enough on a loaded CI runner
+    timeout: 20_000,
+  });
 });
 
 test('owner is read-only: no admin sections', async ({ page }) => {

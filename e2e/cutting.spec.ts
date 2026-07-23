@@ -5,7 +5,11 @@ async function signIn(page: Page, username: string, password: string) {
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible({
+    // the home screen loads its dashboard before the heading paints; 5s is not
+    // enough on a loaded CI runner
+    timeout: 20_000,
+  });
 }
 
 test('full cutting flow: purchase cloth, plan, record actuals with variance, see CUT stock', async ({

@@ -29,7 +29,9 @@ internet at all; the internet is used only to look for updates.
 1. On the phone/tablet: **Settings → Apps → Special access → Install unknown apps** and
    allow the browser (or Files) to install apps. This is needed because the app is not
    distributed through the Play Store.
-2. Open the latest release on GitHub and download `bharti-v1.1.<N>.apk`.
+2. Open the latest release at `github.com/iodex99/bharti-releases/releases/latest` and
+   download `bharti-v1.1.<N>.apk` — that repo is public, so the device can fetch it
+   directly with no GitHub account.
 3. Open the downloaded file and confirm the install.
 4. Open the app. On first run it creates the admin account and **shows the username and
    password on the sign-in screen** — write them down. You are taken straight to
@@ -60,9 +62,27 @@ fails to start twice is rolled back to the previous one automatically.
 
 ### Releasing (for the developer)
 
+**Set up the public releases repo first (do this once).** This source repository is
+private, so `api.github.com/.../releases/latest` answers **404** to anyone without a
+token — an installed app would never see an update, and the APK would not be downloadable
+without a GitHub login. Releases therefore go to a small **public** repository instead,
+which keeps the source private while letting devices update with no credentials at all:
+
+1. Create a public repo `iodex99/bharti-releases`, **ticking "Add a README"** (it needs a
+   default branch before a release can be attached to it).
+2. GitHub → Settings → Developer settings → **Fine-grained tokens** → generate one with
+   *Repository access: only `bharti-releases`* and *Permissions → Contents: Read and
+   write*.
+3. Add it to **this** repo as the secret `RELEASES_REPO_TOKEN`.
+4. Optional: set the repository variable `RELEASES_REPO` if you name it something else.
+
+Until that secret exists, releases are published here instead and the workflow prints a
+warning saying devices will not see them — CI stays green, but updates do not reach the
+tablet.
+
 `.github/workflows/android-release.yml` runs on every push to `main`. It gates on
 typecheck + lint + the full unit/integration suite + all three E2E projects, then
-publishes `v1.1.<run_number>` with:
+publishes `v1.1.<run_number>` to the releases repo with:
 
 | Asset | What it is |
 |---|---|

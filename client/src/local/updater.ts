@@ -27,8 +27,20 @@ import { getShell, type BundleRecord, type BundleState } from './shell';
 
 const FEED_URL_KEY = 'bharti.updateFeed';
 const TOKEN_KEY = 'bharti.updateToken';
-const DEFAULT_REPO = 'iodex99/bharti-enterprise-app';
 const ROLLBACK_KEY = 'bharti.rolledBackFrom';
+
+/**
+ * Releases are published to a small PUBLIC repository, separate from the (private)
+ * source. A device can then check for updates and download them with no credentials at
+ * all — nothing to store on the tablet, nothing to expire — while the business code
+ * stays private. Overridable at build time (UPDATE_FEED_URL) and on the device
+ * (localStorage `bharti.updateFeed`), which is what the tests use.
+ */
+declare const __UPDATE_FEED__: string;
+const DEFAULT_FEED =
+  typeof __UPDATE_FEED__ === 'string' && __UPDATE_FEED__
+    ? __UPDATE_FEED__
+    : 'https://api.github.com/repos/iodex99/bharti-releases/releases/latest';
 const MANIFEST_ASSET = 'app-manifest.json';
 const HEALTHY_AFTER_MS = 0; // marked healthy as soon as the app has booted and rendered
 const MAX_BOOT_ATTEMPTS = 2;
@@ -76,10 +88,7 @@ function setStatus(next: Partial<UpdateStatus>): void {
 // -- feed --------------------------------------------------------------------
 
 export function updateFeedUrl(): string {
-  return (
-    localStorage.getItem(FEED_URL_KEY) ??
-    `https://api.github.com/repos/${DEFAULT_REPO}/releases/latest`
-  );
+  return localStorage.getItem(FEED_URL_KEY) ?? DEFAULT_FEED;
 }
 
 export function setUpdateFeedUrl(url: string | null): void {
