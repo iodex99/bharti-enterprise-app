@@ -72,7 +72,13 @@ try {
 let apk = null;
 if (apkPath && fs.existsSync(apkPath)) {
   const apkBytes = fs.readFileSync(apkPath);
-  const apkName = `bharti-v${version}.apk`;
+  // A debug-signed APK installs and runs, but Android will refuse to upgrade it in place
+  // from a properly signed release — and switching keys means uninstalling, which erases
+  // the device's data. Name it so nobody can install one by accident.
+  const apkName =
+    process.env.APK_UNSIGNED === '1'
+      ? `bharti-v${version}-UNSIGNED-do-not-install.apk`
+      : `bharti-v${version}.apk`;
   fs.writeFileSync(path.join(outDir, apkName), apkBytes);
   apk = { name: apkName, sha256: sha256(apkBytes), sizeBytes: apkBytes.length };
 }

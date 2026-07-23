@@ -92,27 +92,33 @@ publishes `v1.1.<run_number>` to the releases repo with:
 | `checksums.txt` | sha256sums, for verifying by hand |
 
 **Signing (do this once).** Android only upgrades an app in place when the new APK is
-signed with the *same* key. Without the secrets below CI builds a debug-signed APK, which
-is fine for a trial but **cannot be upgraded by a later release**.
+signed with the *same* key.
 
 ```bash
-keytool -genkey -v -keystore bharti-release.keystore -alias bharti \
-        -keyalg RSA -keysize 2048 -validity 10000
+node scripts/make-keystore.mjs
 ```
 
-Then base64-encode it — on Windows PowerShell:
+This writes, into `bharti-signing/` **beside** the repository (never inside it):
 
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("bharti-release.keystore")) |
-  Set-Content keystore.b64 -NoNewline
-```
+| File | What |
+|---|---|
+| `bharti-release.keystore` | the signing key itself — PKCS12, RSA 2048, 30-year validity |
+| `keystore.b64` | the same file base64-encoded, one line, for the secret |
+| `SECRETS.txt` | the four values to paste, and the generated password |
 
-(macOS/Linux: `base64 -w0 bharti-release.keystore > keystore.b64`.)
+Add them as repository secrets at *Settings → Secrets and variables → Actions*:
+`ANDROID_KEYSTORE_BASE64` (all of `keystore.b64`), `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` (`bharti`), `ANDROID_KEY_PASSWORD` (same as the store password —
+PKCS12 uses one password for both).
 
-Add as repository secrets: `ANDROID_KEYSTORE_BASE64` (contents of `keystore.b64`),
-`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`bharti`), `ANDROID_KEY_PASSWORD`.
-**Keep `bharti-release.keystore` safe and backed up** — losing it means no future release
-can upgrade an installed app.
+**Back that folder up and keep it.** If the key is lost, no future release can update an
+app already installed on a device: the only way forward is uninstall + reinstall, which
+**erases that device's data**. The script refuses to overwrite an existing keystore for
+the same reason.
+
+Until the secrets exist CI still produces an APK, but debug-signed — and it is published
+as `bharti-v<version>-UNSIGNED-do-not-install.apk`, because installing one and then
+switching to properly signed releases would force exactly that data-erasing reinstall.
 
 **When the native shell changes** (a new Capacitor plugin, a new permission, a Capacitor
 upgrade), put the *current* release run number into `android/native-version.txt`. That is

@@ -99,6 +99,7 @@ jobs:
       - name: Package bundle + manifest + checksums
         env:
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
+          APK_UNSIGNED: ${{ steps.keystore.outputs.signed == 'true' && '0' || '1' }}
         run: node scripts/package-app-bundle.mjs "$VERSION" "$APK_PATH"
 
       # Published to a small PUBLIC repository so devices can check for and download
