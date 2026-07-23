@@ -4,7 +4,7 @@ import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
 import { LedgerError, postMovements } from './ledger.service';
-import { assertActive, type ServiceResult } from './purchases.service';
+import { assertActive, rawClothModelId, type ServiceResult } from './purchases.service';
 
 /**
  * Opening balances bring the paper-register stock into the system at go-live
@@ -17,9 +17,11 @@ export function createOpeningBalance(
   userId: number,
   ip: string | null,
 ): ServiceResult<{ id: number; docNo: string }> {
-  // opening balances are an ENTRY point — masters must exist and be active
+  // opening balances are an ENTRY point — masters must exist and be active.
+  // RAW carries no model (decided at cutting) — the sentinel fills the NOT NULL column.
+  const modelId = input.stage === 'RAW' ? rawClothModelId(db) : (input.modelId as number);
   const checks: Array<[string, number | null | undefined, string]> = [
-    ['models', input.modelId, 'Model'],
+    ['models', input.stage === 'RAW' ? null : input.modelId, 'Model'],
     ['colors', input.colorId, 'Color'],
     ['sizes', input.stage === 'RAW' ? null : input.sizeId, 'Size'],
     ['contractors', input.stage === 'WIP' ? input.contractorId : null, 'Contractor'],
@@ -44,7 +46,7 @@ export function createOpeningBalance(
         docNo,
         input.balanceDate,
         input.stage,
-        input.modelId,
+        modelId,
         input.colorId,
         input.stage === 'RAW' ? null : input.sizeId,
         input.stage === 'WIP' ? input.contractorId : null,
@@ -58,7 +60,7 @@ export function createOpeningBalance(
       [
         {
           stage: input.stage,
-          modelId: input.modelId,
+          modelId,
           colorId: input.colorId,
           sizeId: input.stage === 'RAW' ? null : (input.sizeId as number),
           contractorId: input.stage === 'WIP' ? input.contractorId : null,

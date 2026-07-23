@@ -26,6 +26,13 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Discrepancy review page + admin resolve (acknowledgement-only) | ✅ | post-ship |
 | Complete backup (DB+photos zip) + one-click download + send-to-Drive | ✅ | post-ship |
 | In-app restore (atomic swap + auto-rollback) + first-run setup wizard | ✅ | post-ship |
+| Model decided at cutting (purchases are vendor+color+meters) | ✅ | post-ship |
+| Cutting geometry: inches/pc × width count → computed consumption + remaining | ✅ | post-ship |
+| Cutting plan edit + delete (while planned) | ✅ | post-ship |
+| Pending-for-checking pool + directed checker allotment (contractor mapping) | ✅ | post-ship |
+| Receipt photos (returned goods) | ✅ | post-ship |
+| Staff either-or (no fixed checker/packer roles) | ✅ | post-ship |
+| Register ink colors (blue = issued out, red = received in) | ✅ | post-ship |
 | PWA install + polish | ✅ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |
 | Deployment docs (WinSW + Cloudflare Tunnel) | ✅ | Phase 11 |

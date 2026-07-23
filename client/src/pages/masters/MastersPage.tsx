@@ -8,7 +8,6 @@ import {
   colorSchema,
   contractorSchema,
   formatPaise,
-  label as enumLabel,
   modelSchema,
   sizeSchema,
   staffSchema,
@@ -158,31 +157,18 @@ const DEFS: Record<string, MasterDef> = {
     title: 'Checkers & Packers',
     singular: 'staff member',
     schema: staffSchema,
+    // no fixed role — any staff member can be picked as checker OR packer
     columns: [
       { key: 'name', header: 'Name', className: 'font-medium' },
       { key: 'mobile', header: 'Mobile' },
-      {
-        key: 'role',
-        header: 'Role',
-        render: (r) => <Badge tone="blue">{enumLabel(String(r.role))}</Badge>,
-      },
+      { key: 'notes', header: 'Notes', className: 'text-gray-500' },
     ],
     fields: [
       { kind: 'text', name: 'name', label: 'Name', required: true },
       { kind: 'text', name: 'mobile', label: 'Mobile number' },
-      {
-        kind: 'select',
-        name: 'role',
-        label: 'Role',
-        options: [
-          { value: 'checker', label: 'Checker' },
-          { value: 'packer', label: 'Packer' },
-          { value: 'both', label: 'Checker + Packer' },
-        ],
-      },
       { kind: 'textarea', name: 'notes', label: 'Notes' },
     ],
-    empty: { name: '', mobile: '', role: 'checker', notes: '' },
+    empty: { name: '', mobile: '', notes: '' },
   },
 };
 

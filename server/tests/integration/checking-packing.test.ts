@@ -11,6 +11,10 @@ let ctx: TestContext;
 let admin: string;
 let operator: string;
 let owner: string;
+let receiptLineId: number;
+
+// cutting: 120 pcs × 10" ×3 across = 40 strips × 25.4 cm = exactly 1016 cm consumed
+const CUT_CM = 1016;
 
 const stageTotal = (stage: string) =>
   (
@@ -34,12 +38,12 @@ beforeAll(async () => {
       (1, 'Pooja', 'checker', 1), (2, 'Ravi', 'packer', 1), (3, 'Kavita', 'both', 1);
   `);
 
-  // purchase → cut 120 pcs → job → receive all 120 stitched into CHECKING pool
+  // purchase (no model — decided at cutting) → cut 120 pcs → job → receive all 120
+  // stitched (with a photo) into the pending-checking pool
   const purchase = await request(ctx.app).post('/api/purchases').set('Cookie', operator).send({
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
-    modelId: 1,
     colorId: 1,
     qtyCm: 10000,
     ratePaisePerMeter: 4000,
@@ -52,8 +56,8 @@ beforeAll(async () => {
       cutDate: '2026-07-02',
       rawLotType: 'purchase',
       rawLotId: purchase.body.id,
-      metersUsedCm: 6000,
-      lines: [{ sizeId: 1, expectedPcs: 120 }],
+      modelId: 1,
+      lines: [{ sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 }],
     });
   await request(ctx.app)
     .post(`/api/cutting/${plan.body.id}/actuals`)
@@ -74,62 +78,83 @@ beforeAll(async () => {
       id: number;
     }
   ).id;
-  await request(ctx.app)
+  const receipt = await request(ctx.app)
     .post(`/api/jobs/${job.body.id}/receipts`)
     .set('Cookie', operator)
     .send({
       receiptDate: '2026-07-05',
+      imagePath: '/uploads/2026-07/returned-goods.webp',
       lines: [{ jobCardLineId: lineId, qtyPcs: 120, returnType: 'stitched' }],
     });
+  receiptLineId = (
+    ctx.db
+      .prepare('SELECT id FROM job_receipt_lines WHERE job_receipt_id = ?')
+      .get(receipt.body.id) as { id: number }
+  ).id;
 });
 afterAll(() => ctx.cleanup());
 
 describe('checking', () => {
   let checkId: number;
 
-  it('issues stitched goods to a checker (FIFO from the pool)', async () => {
+  it('lists the received batch as pending-for-checking with contractor + photo', async () => {
+    const res = await request(ctx.app).get('/api/checking/pending').set('Cookie', owner);
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    const batch = res.body.items[0];
+    expect(batch.lotType).toBe('receipt_line');
+    expect(batch.lotId).toBe(receiptLineId);
+    expect(batch.qtyPcs).toBe(120);
+    expect(batch.contractorName).toBe('Meena'); // the contractor ↔ batch mapping
+    expect(batch.receiptDocNo).toBe('RCT-0001');
+    expect(batch.imagePath).toBe('/uploads/2026-07/returned-goods.webp');
+  });
+
+  it('issues the SPECIFIC received batch to a checker (any staff can check)', async () => {
+    // staff 2 has legacy role 'packer' — roles no longer restrict who checks
     const res = await request(ctx.app).post('/api/checking').set('Cookie', operator).send({
       issueDate: '2026-07-06',
-      staffId: 1,
-      modelId: 1,
-      colorId: 1,
-      sizeId: 1,
+      staffId: 2,
+      lotType: 'receipt_line',
+      lotId: receiptLineId,
       qtyPcs: 120,
       notes: '',
     });
     expect(res.status).toBe(201);
     expect(res.body.docNo).toBe('CHK-0001');
     checkId = res.body.id as number;
-    // pool empty, checker holds 120
+    // the directed allocation records exactly the chosen batch
     const allocations = ctx.db
       .prepare('SELECT * FROM check_allocations WHERE check_issue_id = ?')
-      .all(checkId);
-    expect(allocations.length).toBeGreaterThan(0);
+      .all(checkId) as Array<{ checking_lot_type: string; checking_lot_id: number; qty_pcs: number }>;
+    expect(allocations).toHaveLength(1);
+    expect(allocations[0]!.checking_lot_id).toBe(receiptLineId);
     expect(stageTotal('CHECKING')).toBe(120);
+    // and the batch is no longer pending
+    const pending = await request(ctx.app).get('/api/checking/pending').set('Cookie', owner);
+    expect(pending.body.items).toHaveLength(0);
   });
 
-  it('rejects packers as checkers and over-issue', async () => {
-    const packerCheck = await request(ctx.app).post('/api/checking').set('Cookie', operator).send({
-      issueDate: '2026-07-06',
-      staffId: 2,
-      modelId: 1,
-      colorId: 1,
-      sizeId: 1,
-      qtyPcs: 10,
-    });
-    expect(packerCheck.status).toBe(400);
-    expect(packerCheck.body.error).toMatch(/not a checker/i);
-
+  it('rejects over-issue from the batch and unknown batches', async () => {
     const overIssue = await request(ctx.app).post('/api/checking').set('Cookie', operator).send({
       issueDate: '2026-07-06',
       staffId: 1,
-      modelId: 1,
-      colorId: 1,
-      sizeId: 1,
+      lotType: 'receipt_line',
+      lotId: receiptLineId,
       qtyPcs: 10,
     });
     expect(overIssue.status).toBe(409);
-    expect(overIssue.body.error).toMatch(/available 0/);
+    expect(overIssue.body.error).toMatch(/has only 0 pcs/i);
+
+    const badLot = await request(ctx.app).post('/api/checking').set('Cookie', operator).send({
+      issueDate: '2026-07-06',
+      staffId: 1,
+      lotType: 'receipt_line',
+      lotId: 99999,
+      qtyPcs: 10,
+    });
+    expect(badLot.status).toBe(400);
+    expect(badLot.body.error).toMatch(/not found/i);
   });
 
   it('incremental results: pass/reject/missing with reason breakdown', async () => {
@@ -190,27 +215,30 @@ describe('checking', () => {
     expect(issue.rejectedPcs).toBe(6);
     expect(issue.missingPcs).toBe(2);
     expect(issue.pendingPcs).toBe(0);
+    // the checker ↔ contractor mapping travels with the issue
+    expect(issue.contractorName).toBe('Meena');
+    expect(issue.receiptDocNo).toBe('RCT-0001');
+    expect(issue.receiptImagePath).toBe('/uploads/2026-07/returned-goods.webp');
+
+    // the missing-pieces discrepancy is attributed to checker AND source contractor
+    const disc = await request(ctx.app).get('/api/discrepancies').set('Cookie', owner);
+    const missingRow = (disc.body.items as Array<{ reason: string; party: string }>).find(
+      (d) => d.reason === 'missing',
+    );
+    expect(missingRow).toBeDefined();
+    expect(missingRow!.party).toContain('Ravi'); // the checker (staff 2)
+    expect(missingRow!.party).toContain('Meena'); // ← the contractor whose batch it was
   });
 });
 
 describe('packing → finished goods → dispatch', () => {
   let packId: number;
 
-  it('issues passed goods to a packer (role both works)', async () => {
-    const checkerAsPacker = await request(ctx.app).post('/api/packing').set('Cookie', operator).send({
-      issueDate: '2026-07-09',
-      staffId: 1, // checker only
-      modelId: 1,
-      colorId: 1,
-      sizeId: 1,
-      qtyPcs: 10,
-    });
-    expect(checkerAsPacker.status).toBe(400);
-    expect(checkerAsPacker.body.error).toMatch(/not a packer/i);
-
+  it('issues passed goods to a packer (any staff can pack — no fixed roles)', async () => {
+    // staff 1 has legacy role 'checker' — but anyone can pack now
     const res = await request(ctx.app).post('/api/packing').set('Cookie', operator).send({
       issueDate: '2026-07-09',
-      staffId: 3, // Kavita, role both — same-person checker+packer scenario
+      staffId: 1,
       modelId: 1,
       colorId: 1,
       sizeId: 1,
@@ -220,6 +248,20 @@ describe('packing → finished goods → dispatch', () => {
     expect(res.status).toBe(201);
     expect(res.body.docNo).toBe('PCK-0001');
     packId = res.body.id as number;
+
+    // deactivated staff are still refused
+    ctx.db.prepare('UPDATE staff SET is_active = 0 WHERE id = 3').run();
+    const inactive = await request(ctx.app).post('/api/packing').set('Cookie', operator).send({
+      issueDate: '2026-07-09',
+      staffId: 3,
+      modelId: 1,
+      colorId: 1,
+      sizeId: 1,
+      qtyPcs: 1,
+    });
+    expect(inactive.status).toBe(400);
+    expect(inactive.body.error).toMatch(/deactivated/i);
+    ctx.db.prepare('UPDATE staff SET is_active = 1 WHERE id = 3').run();
   });
 
   it('incremental pack results: packed to FG, short with reason', async () => {
@@ -294,7 +336,7 @@ describe('packing → finished goods → dispatch', () => {
     const { kpis } = res.body as {
       kpis: Record<string, number>;
     };
-    expect(kpis.rawCm).toBe(4000);
+    expect(kpis.rawCm).toBe(10000 - CUT_CM);
     expect(kpis.cutPcs).toBe(0);
     expect(kpis.wipPcs).toBe(0);
     expect(kpis.fgPcs).toBe(110);
@@ -373,6 +415,6 @@ describe('packing → finished goods → dispatch', () => {
         .get() as { q: number }
     ).q;
     expect(rawIn - rawOut).toBe(stageTotal('RAW'));
-    expect(stageTotal('RAW')).toBe(4000); // 10000 bought − 6000 cut
+    expect(stageTotal('RAW')).toBe(10000 - CUT_CM); // bought − computed cutting consumption
   });
 });

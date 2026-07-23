@@ -3,32 +3,97 @@ import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
-import {
-  availableLots,
-  LedgerError,
-  postMovements,
-  splitFifo,
-  type Movement,
-} from './ledger.service';
+import { LedgerError, postMovements, type Movement } from './ledger.service';
 import type { ServiceResult } from './purchases.service';
 
 /**
- * Module 7: checking. Stitched goods sit in the CHECKING pool (receipt_line/opening lots,
- * staff NULL). Issuing to a checker transfers pool → (CHECKING, lot=check_issue, staff).
+ * Module 7: checking. Stitched goods a contractor claims to have returned sit in the
+ * CHECKING pool (receipt_line/opening lots, staff NULL) — "pending for checking".
+ * Issuing to a checker is DIRECTED: the user picks the specific received batch, so the
+ * contractor ↔ checker mapping is explicit and shortfalls trace to that contractor.
  * Results are incremental sessions:  passed → PACKING pool (lot=check_issue),
  * rejected → REJECTED (lot=check_issue), missing → terminal loss + discrepancy.
  */
 
-function staffCanCheck(db: Db, staffId: number): string | null {
+function staffUsable(db: Db, staffId: number, label: string): string | null {
+  // any active staff member can check or pack — no fixed roles
   const staff = db
-    .prepare('SELECT role, is_active FROM staff WHERE id = ? AND deleted_at IS NULL')
-    .get(staffId) as { role: string; is_active: number } | undefined;
-  if (!staff) return 'Checker not found.';
+    .prepare('SELECT is_active FROM staff WHERE id = ? AND deleted_at IS NULL')
+    .get(staffId) as { is_active: number } | undefined;
+  if (!staff) return `${label} not found.`;
   if (!staff.is_active) return 'This staff member is deactivated.';
-  if (staff.role !== 'checker' && staff.role !== 'both') {
-    return 'This staff member is not a checker.';
-  }
   return null;
+}
+
+type PoolLotInfo = {
+  modelId: number;
+  colorId: number;
+  sizeId: number;
+  available: number;
+  label: string;
+};
+
+/** Dimensions + remaining pool balance of one specific un-checked lot. */
+function poolLotInfo(db: Db, lotType: 'receipt_line' | 'opening', lotId: number): PoolLotInfo | null {
+  const bal = (
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(qty),0) AS bal FROM stock_ledger
+         WHERE stage = 'CHECKING' AND staff_id IS NULL AND lot_type = ? AND lot_id = ?`,
+      )
+      .get(lotType, lotId) as { bal: number }
+  ).bal;
+  if (lotType === 'receipt_line') {
+    const rl = db
+      .prepare(
+        `SELECT r.doc_no AS docNo, jc.model_id, jc.color_id, jl.size_id
+         FROM job_receipt_lines rl
+         JOIN job_receipts r ON r.id = rl.job_receipt_id
+         JOIN job_card_lines jl ON jl.id = rl.job_card_line_id
+         JOIN job_cards jc ON jc.id = r.job_card_id
+         WHERE rl.id = ? AND r.voided_at IS NULL`,
+      )
+      .get(lotId) as { docNo: string; model_id: number; color_id: number; size_id: number } | undefined;
+    if (!rl) return null;
+    return { modelId: rl.model_id, colorId: rl.color_id, sizeId: rl.size_id, available: bal, label: rl.docNo };
+  }
+  const o = db
+    .prepare(
+      `SELECT doc_no AS docNo, model_id, color_id, size_id FROM opening_balances
+       WHERE id = ? AND stage = 'CHECKING' AND voided_at IS NULL`,
+    )
+    .get(lotId) as { docNo: string; model_id: number; color_id: number; size_id: number } | undefined;
+  if (!o) return null;
+  return { modelId: o.model_id, colorId: o.color_id, sizeId: o.size_id, available: bal, label: o.docNo };
+}
+
+/**
+ * The "pending for checking" list: every received-but-unchecked batch with its
+ * contractor, receipt document, photo and remaining quantity.
+ */
+export function listPendingChecking(db: Db): Array<Record<string, unknown>> {
+  return db
+    .prepare(
+      `SELECT l.lot_type AS lotType, l.lot_id AS lotId, SUM(l.qty) AS qtyPcs,
+              m.code AS modelCode, c.name AS colorName, s.code AS sizeCode,
+              r.doc_no AS receiptDocNo, r.receipt_date AS receiptDate, r.image_path AS imagePath,
+              jc.doc_no AS jobDocNo, ct.name AS contractorName,
+              o.doc_no AS openingDocNo
+       FROM stock_ledger l
+       JOIN models m ON m.id = l.model_id
+       JOIN colors c ON c.id = l.color_id
+       JOIN sizes s ON s.id = l.size_id
+       LEFT JOIN job_receipt_lines rl ON l.lot_type = 'receipt_line' AND rl.id = l.lot_id
+       LEFT JOIN job_receipts r ON r.id = rl.job_receipt_id
+       LEFT JOIN job_cards jc ON jc.id = r.job_card_id
+       LEFT JOIN contractors ct ON ct.id = jc.contractor_id
+       LEFT JOIN opening_balances o ON l.lot_type = 'opening' AND o.id = l.lot_id
+       WHERE l.stage = 'CHECKING' AND l.staff_id IS NULL
+       GROUP BY l.lot_type, l.lot_id
+       HAVING SUM(l.qty) > 0
+       ORDER BY COALESCE(r.receipt_date, o.balance_date), l.lot_id`,
+    )
+    .all() as Array<Record<string, unknown>>;
 }
 
 export function createCheckIssue(
@@ -38,8 +103,17 @@ export function createCheckIssue(
   ip: string | null,
   onCreated?: (id: number) => void,
 ): ServiceResult<{ id: number; docNo: string }> {
-  const staffError = staffCanCheck(db, input.staffId);
+  const staffError = staffUsable(db, input.staffId, 'Checker');
   if (staffError) return { ok: false, code: 400, error: staffError };
+  const lot = poolLotInfo(db, input.lotType, input.lotId);
+  if (!lot) return { ok: false, code: 400, error: 'That received batch was not found.' };
+  if (lot.available < input.qtyPcs) {
+    return {
+      ok: false,
+      code: 409,
+      error: `Batch ${lot.label} has only ${lot.available} pcs waiting for checking.`,
+    };
+  }
 
   let id = 0;
   let docNo = '';
@@ -55,61 +129,45 @@ export function createCheckIssue(
           docNo,
           input.issueDate,
           input.staffId,
-          input.modelId,
-          input.colorId,
-          input.sizeId,
+          lot.modelId,
+          lot.colorId,
+          lot.sizeId,
           input.qtyPcs,
           input.notes,
           userId,
         );
       id = Number(info.lastInsertRowid);
 
-      // FIFO from the un-issued CHECKING pool
-      const pool = availableLots(db, {
-        stage: 'CHECKING',
-        modelId: input.modelId,
-        colorId: input.colorId,
-        sizeId: input.sizeId,
-        staffId: null,
-      });
-      const totalAvailable = pool.reduce((s, l) => s + l.qty, 0);
-      if (totalAvailable < input.qtyPcs) {
-        throw new LedgerError(
-          `Not enough unchecked stock: needed ${input.qtyPcs} pcs, available ${totalAvailable} pcs.`,
-        );
-      }
-      const takes = splitFifo(pool, input.qtyPcs);
-      const movements: Movement[] = [];
-      const insertAlloc = db.prepare(
+      // directed take from the chosen batch (recorded for traceability)
+      db.prepare(
         `INSERT INTO check_allocations (check_issue_id, checking_lot_type, checking_lot_id, qty_pcs)
          VALUES (?, ?, ?, ?)`,
-      );
-      for (const take of takes) {
-        movements.push({
+      ).run(id, input.lotType, input.lotId, input.qtyPcs);
+      const movements: Movement[] = [
+        {
           stage: 'CHECKING',
-          modelId: input.modelId,
-          colorId: input.colorId,
-          sizeId: input.sizeId,
-          lotType: take.lotType,
-          lotId: take.lotId,
-          qty: -take.qty,
+          modelId: lot.modelId,
+          colorId: lot.colorId,
+          sizeId: lot.sizeId,
+          lotType: input.lotType,
+          lotId: input.lotId,
+          qty: -input.qtyPcs,
           refType: 'check_issue',
           refId: id,
-        });
-        insertAlloc.run(id, take.lotType, take.lotId, take.qty);
-      }
-      movements.push({
-        stage: 'CHECKING',
-        modelId: input.modelId,
-        colorId: input.colorId,
-        sizeId: input.sizeId,
-        staffId: input.staffId,
-        lotType: 'check_issue',
-        lotId: id,
-        qty: input.qtyPcs,
-        refType: 'check_issue',
-        refId: id,
-      });
+        },
+        {
+          stage: 'CHECKING',
+          modelId: lot.modelId,
+          colorId: lot.colorId,
+          sizeId: lot.sizeId,
+          staffId: input.staffId,
+          lotType: 'check_issue',
+          lotId: id,
+          qty: input.qtyPcs,
+          refType: 'check_issue',
+          refId: id,
+        },
+      ];
       postMovements(db, movements, userId);
       audit(db, { userId, action: 'create', entityType: 'check_issue', entityId: id, new: { docNo, ...input }, ip });
       onCreated?.(id);
@@ -351,6 +409,7 @@ export function voidCheckIssue(
 }
 
 export function listCheckIssues(db: Db): Array<Record<string, unknown>> {
+  // first allocation → source receipt line → contractor: the checker ↔ contractor mapping
   const issues = db
     .prepare(
       `SELECT ci.id, ci.doc_no AS docNo, ci.issue_date AS issueDate, ci.status, ci.notes,
@@ -358,12 +417,20 @@ export function listCheckIssues(db: Db): Array<Record<string, unknown>> {
               ci.staff_id AS staffId, st.name AS staffName,
               ci.model_id AS modelId, m.code AS modelCode,
               ci.color_id AS colorId, c.name AS colorName,
-              ci.size_id AS sizeId, s.code AS sizeCode
+              ci.size_id AS sizeId, s.code AS sizeCode,
+              ct.name AS contractorName, r.doc_no AS receiptDocNo, r.image_path AS receiptImagePath
        FROM check_issues ci
        JOIN staff st ON st.id = ci.staff_id
        JOIN models m ON m.id = ci.model_id
        JOIN colors c ON c.id = ci.color_id
        JOIN sizes s ON s.id = ci.size_id
+       LEFT JOIN check_allocations a ON a.id =
+         (SELECT MIN(a2.id) FROM check_allocations a2
+          WHERE a2.check_issue_id = ci.id AND a2.checking_lot_type = 'receipt_line')
+       LEFT JOIN job_receipt_lines rl ON rl.id = a.checking_lot_id
+       LEFT JOIN job_receipts r ON r.id = rl.job_receipt_id
+       LEFT JOIN job_cards jc ON jc.id = r.job_card_id
+       LEFT JOIN contractors ct ON ct.id = jc.contractor_id
        WHERE ci.voided_at IS NULL
        ORDER BY ci.id DESC`,
     )

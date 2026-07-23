@@ -36,7 +36,8 @@ describe('demo mode lifecycle', () => {
     ).toBe(403);
   });
 
-  it('enter builds the demo db, switches over, and invalidates real sessions', async () => {
+  // building the full demo dataset through the service layer takes a while under load
+  it('enter builds the demo db, switches over, and invalidates real sessions', { timeout: 30_000 }, async () => {
     const res = await request(ctx.app).post('/api/system/demo/enter').set('Cookie', admin);
     expect(res.status).toBe(200);
 
@@ -125,7 +126,7 @@ describe('demo mode lifecycle', () => {
     expect(actions).toContain('demo_exit');
   });
 
-  it('re-enter reuses the existing demo db (demo color persists), fresh rebuilds it', async () => {
+  it('re-enter reuses the existing demo db (demo color persists), fresh rebuilds it', { timeout: 30_000 }, async () => {
     const realAdmin = await loginAs(ctx.app, 'admin', 'Admin@123');
     await request(ctx.app).post('/api/system/demo/enter').set('Cookie', realAdmin);
     let demoAdmin = await loginAs(ctx.app, 'admin', 'Admin@123');

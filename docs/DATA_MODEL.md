@@ -18,17 +18,25 @@
 
 **Core:** users, sessions, audit_log, counters, settings, schema_migrations, idempotency_keys
 
-**Masters:** models, colors, sizes, vendors, contractors, staff
+**Masters:** models, colors, sizes, vendors, contractors, staff (the legacy `role` column
+is ignored — any active staff member can check or pack, ADR-019)
 
 **Settings keys (app-managed, not migrations):** `delayed_job_days`, `cloud_backup_dir`,
 `last_daily_backup_date`, `setup_complete` (first-run wizard dismissed).
 
 **Documents:**
-purchases (RM-) · cutting_batches (CUT-; consumes a typed raw lot:
-`raw_lot_type ∈ purchase|opening` + `raw_lot_id`, model/color denormalized) +
-cutting_lines · job_cards (JOB-) + job_card_lines (multi-size, per-line rate snapshot) ·
-job_receipts (RCT-) + job_receipt_lines (return_type stitched|unstitched_return) ·
-check_issues (CHK-) + check_results (incremental sessions) + check_result_rejections ·
+purchases (RM-; vendor+color+meters — NO real model: the `RAW-CLOTH` sentinel model
+[id 1000000, inactive, never listed] fills the NOT NULL column; the model is decided at
+cutting, ADR-016) · cutting_batches (CUT-; consumes a typed raw lot:
+`raw_lot_type ∈ purchase|opening` + `raw_lot_id`; model chosen at cutting; meters_used_cm
+COMPUTED from line geometry) + cutting_lines (+ `cloth_per_pc_inch_c` hundredths of an
+inch, `width_count` pieces across the cloth width — ADR-017; editable/deletable while
+'planned') · job_cards (JOB-) + job_card_lines (multi-size, per-line rate snapshot) ·
+job_receipts (RCT-; + `image_path` photo of the returned goods) + job_receipt_lines
+(return_type stitched|unstitched_return; each line is a "pending for checking" lot until
+a checker verifies it — ADR-018) ·
+check_issues (CHK-; directed at ONE received batch via check_allocations) +
+check_results (incremental sessions) + check_result_rejections ·
 pack_issues (PCK-) + pack_results (incremental) · discrepancies (generic: powers loss
 reports + alerts; resolved_at/by/resolution_note set by the admin-only resolve workflow —
 an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_balances

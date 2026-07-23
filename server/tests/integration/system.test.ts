@@ -20,7 +20,6 @@ beforeAll(async () => {
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
-    modelId: 1,
     colorId: 1,
     qtyCm: 10000,
     ratePaisePerMeter: 4000,

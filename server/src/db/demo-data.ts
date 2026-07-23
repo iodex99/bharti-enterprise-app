@@ -56,11 +56,15 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     staff: db.prepare('INSERT INTO staff (name, mobile, role, created_by) VALUES (?, ?, ?, 1)'),
   };
 
-  ins.model.run('SCR-VEL', 'Velvet Scrunchie', 'Classic velvet, medium band');
-  ins.model.run('SCR-SAT', 'Satin Scrunchie', 'Glossy satin, thin band');
-  ins.model.run('SCR-COT', 'Cotton Print Scrunchie', 'Printed cotton, everyday wear');
-  ins.model.run('SCR-ORG', 'Organza Bow Scrunchie', 'Sheer organza with bow');
-  const MODEL = { VEL: 1, SAT: 2, COT: 3, ORG: 4 };
+  // ids captured from the inserts — the RAW-CLOTH sentinel (migration 002) occupies an id
+  const mid = (code: string, name: string, desc: string) =>
+    Number(ins.model.run(code, name, desc).lastInsertRowid);
+  const MODEL = {
+    VEL: mid('SCR-VEL', 'Velvet Scrunchie', 'Classic velvet, medium band'),
+    SAT: mid('SCR-SAT', 'Satin Scrunchie', 'Glossy satin, thin band'),
+    COT: mid('SCR-COT', 'Cotton Print Scrunchie', 'Printed cotton, everyday wear'),
+    ORG: mid('SCR-ORG', 'Organza Bow Scrunchie', 'Sheer organza with bow'),
+  };
 
   for (const [name, code] of [
     ['Black', '#111111'],
@@ -108,7 +112,8 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   must(
     createOpeningBalance(
       db,
-      { balanceDate: daysAgo(90), stage: 'RAW', modelId: MODEL.VEL, colorId: COLOR.BLACK, qty: 4500, note: 'register page 3', sizeId: null, contractorId: null },
+      // raw cloth carries no model — the model is decided at cutting
+      { balanceDate: daysAgo(90), stage: 'RAW', modelId: null, colorId: COLOR.BLACK, qty: 4500, note: 'register page 3', sizeId: null, contractorId: null },
       ADMIN,
       null,
     ),
@@ -134,7 +139,8 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   );
 
   // ---- chain helpers ---------------------------------------------------------
-  const purchase = (days: number, vendorId: number, modelId: number, colorId: number, meters: number, ratePaise: number, notes = '') =>
+  // purchases carry NO model — cloth is vendor + color + meters
+  const purchase = (days: number, vendorId: number, colorId: number, meters: number, ratePaise: number, notes = '') =>
     must(
       createPurchase(
         db,
@@ -142,7 +148,6 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
           purchaseDate: daysAgo(days),
           receivedDate: daysAgo(Math.max(days - 2, 0)),
           vendorId,
-          modelId,
           colorId,
           qtyCm: meters * 100,
           ratePaisePerMeter: ratePaise,
@@ -155,17 +160,37 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
       `purchase ${meters}m`,
     ).id;
 
+  // cutting geometry per size: cloth per piece (hundredths of an inch) + pieces across width
+  const GEO: Record<number, { inchC: number; width: number }> = {
+    [SIZE.XS]: { inchC: 800, width: 3 }, // 8" × 3 across
+    [SIZE.S1]: { inchC: 900, width: 3 },
+    [SIZE.S2]: { inchC: 1000, width: 3 },
+    [SIZE.L1]: { inchC: 1200, width: 2 },
+    [SIZE.XL]: { inchC: 1400, width: 2 },
+  };
+
   const cut = (
     days: number,
     purchaseId: number,
-    metersUsed: number,
+    modelId: number,
     lines: Array<{ sizeId: number; expectedPcs: number }>,
     actuals?: Array<{ sizeId: number; actualPcs: number; varianceReason?: string; reasonNote?: string }>,
   ) => {
     const plan = must(
       createCuttingPlan(
         db,
-        { cutDate: daysAgo(days), rawLotType: 'purchase', rawLotId: purchaseId, metersUsedCm: metersUsed * 100, notes: '', lines },
+        {
+          cutDate: daysAgo(days),
+          rawLotType: 'purchase',
+          rawLotId: purchaseId,
+          modelId, // the model is decided here, at cutting
+          notes: '',
+          lines: lines.map((l) => ({
+            ...l,
+            clothPerPcInchC: GEO[l.sizeId]!.inchC,
+            widthCount: GEO[l.sizeId]!.width,
+          })),
+        },
         OPERATOR,
         null,
       ),
@@ -234,17 +259,39 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
       'receipt',
     );
 
+  /** The oldest received-but-unchecked batch of this job+size (directed checking). */
+  const poolLotFor = (jobId: number, sizeId: number): number => {
+    const row = db
+      .prepare(
+        `SELECT l.lot_id AS lotId FROM stock_ledger l
+         JOIN job_receipt_lines rl ON rl.id = l.lot_id
+         JOIN job_receipts r ON r.id = rl.job_receipt_id
+         JOIN job_card_lines jl ON jl.id = rl.job_card_line_id
+         WHERE l.stage = 'CHECKING' AND l.staff_id IS NULL AND l.lot_type = 'receipt_line'
+           AND r.job_card_id = ? AND jl.size_id = ?
+         GROUP BY l.lot_id HAVING SUM(l.qty) > 0 ORDER BY l.lot_id LIMIT 1`,
+      )
+      .get(jobId, sizeId) as { lotId: number } | undefined;
+    if (!row) throw new Error(`no pending-checking batch for job ${jobId} size ${sizeId}`);
+    return row.lotId;
+  };
+
+  // one check issue per received batch — the contractor ↔ checker mapping is explicit
   const check = (
     days: number,
     staffId: number,
-    modelId: number,
-    colorId: number,
+    jobId: number,
     sizeId: number,
     qtyPcs: number,
     results: Array<{ days: number; passed: number; rejected?: Array<{ reason: string; qtyPcs: number }>; missing?: number }>,
   ) => {
     const issue = must(
-      createCheckIssue(db, { issueDate: daysAgo(days), staffId, modelId, colorId, sizeId, qtyPcs, notes: '' }, OPERATOR, null),
+      createCheckIssue(
+        db,
+        { issueDate: daysAgo(days), staffId, lotType: 'receipt_line', lotId: poolLotFor(jobId, sizeId), qtyPcs, notes: '' },
+        OPERATOR,
+        null,
+      ),
       'check issue',
     );
     for (const r of results) {
@@ -298,10 +345,13 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   };
 
   // ---- three months of business ---------------------------------------------
+  // NOTE: cloth consumption is now COMPUTED from geometry (GEO above); each purchase has
+  // ample meters. Checking is per received batch (directed), so quantities are split by
+  // receipt while keeping the same downstream totals as before.
 
   // Month 1 — velvet black: a clean, fully-finished chain
-  const p1 = purchase(85, VENDOR.SHARMA, MODEL.VEL, COLOR.BLACK, 200, 4500, 'first velvet lot');
-  cut(80, p1, 120, [{ sizeId: SIZE.XS, expectedPcs: 120 }, { sizeId: SIZE.S1, expectedPcs: 180 }], [
+  const p1 = purchase(85, VENDOR.SHARMA, COLOR.BLACK, 200, 4500, 'first velvet lot');
+  cut(80, p1, MODEL.VEL, [{ sizeId: SIZE.XS, expectedPcs: 120 }, { sizeId: SIZE.S1, expectedPcs: 180 }], [
     { sizeId: SIZE.XS, actualPcs: 114, varianceReason: 'wastage', reasonNote: 'edge damage' },
     { sizeId: SIZE.S1, actualPcs: 180 },
   ]);
@@ -311,13 +361,18 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   ]);
   receive(72, j1.id, [{ lineId: j1.lineId(SIZE.XS), qtyPcs: 60 }, { lineId: j1.lineId(SIZE.S1), qtyPcs: 96 }]);
   receive(66, j1.id, [{ lineId: j1.lineId(SIZE.XS), qtyPcs: 54 }, { lineId: j1.lineId(SIZE.S1), qtyPcs: 84 }]);
-  check(62, STAFF.POOJA, MODEL.VEL, COLOR.BLACK, SIZE.XS, 114, [
-    { days: 60, passed: 108, rejected: [{ reason: 'stitching_issue', qtyPcs: 4 }], missing: 2 },
+  // XS batches: 60 from the first receipt, 54 from the second (108 pass, 4 reject, 2 missing)
+  check(62, STAFF.POOJA, j1.id, SIZE.XS, 60, [
+    { days: 60, passed: 58, rejected: [{ reason: 'stitching_issue', qtyPcs: 2 }] },
   ]);
-  check(62, STAFF.KAVITA, MODEL.VEL, COLOR.BLACK, SIZE.S1, 180, [
-    { days: 59, passed: 96, rejected: [{ reason: 'elastic_issue', qtyPcs: 6 }] },
-    { days: 57, passed: 78 },
+  check(61, STAFF.POOJA, j1.id, SIZE.XS, 54, [
+    { days: 60, passed: 50, rejected: [{ reason: 'stitching_issue', qtyPcs: 2 }], missing: 2 },
   ]);
+  // S1 batches: 96 then 84 (174 pass, 6 reject)
+  check(62, STAFF.KAVITA, j1.id, SIZE.S1, 96, [
+    { days: 59, passed: 90, rejected: [{ reason: 'elastic_issue', qtyPcs: 6 }] },
+  ]);
+  check(60, STAFF.KAVITA, j1.id, SIZE.S1, 84, [{ days: 57, passed: 84 }]);
   pack(55, STAFF.RAVI, MODEL.VEL, COLOR.BLACK, SIZE.XS, 108, [{ days: 53, packed: 108 }]);
   pack(55, STAFF.KAVITA, MODEL.VEL, COLOR.BLACK, SIZE.S1, 174, [{ days: 52, packed: 168, short: 6, shortReason: 'damage' }]);
   must(
@@ -326,15 +381,18 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   );
 
   // Month 1 — satin maroon: excess receipt story
-  const p2 = purchase(75, VENDOR.GUPTA, MODEL.SAT, COLOR.MAROON, 150, 5200);
-  cut(70, p2, 90, [{ sizeId: SIZE.S2, expectedPcs: 216 }], [
+  const p2 = purchase(75, VENDOR.GUPTA, COLOR.MAROON, 150, 5200);
+  cut(70, p2, MODEL.SAT, [{ sizeId: SIZE.S2, expectedPcs: 216 }], [
     { sizeId: SIZE.S2, actualPcs: 228, varianceReason: 'better_yield', reasonNote: 'tight nesting' },
   ]);
   const j2 = job(68, CT.RAFIQ, MODEL.SAT, COLOR.MAROON, [{ sizeId: SIZE.S2, qtyIssuedPcs: 228, ratePaisePerDozen: 2800 }]);
   receive(60, j2.id, [{ lineId: j2.lineId(SIZE.S2), qtyPcs: 120 }]);
   receive(54, j2.id, [{ lineId: j2.lineId(SIZE.S2), qtyPcs: 114, discrepancyReason: 'other' }]);
-  check(50, STAFF.DEEPA, MODEL.SAT, COLOR.MAROON, SIZE.S2, 234, [
-    { days: 48, passed: 222, rejected: [{ reason: 'color_defect', qtyPcs: 10 }], missing: 2 },
+  check(50, STAFF.DEEPA, j2.id, SIZE.S2, 120, [
+    { days: 48, passed: 116, rejected: [{ reason: 'color_defect', qtyPcs: 4 }] },
+  ]);
+  check(49, STAFF.DEEPA, j2.id, SIZE.S2, 114, [
+    { days: 48, passed: 106, rejected: [{ reason: 'color_defect', qtyPcs: 6 }], missing: 2 },
   ]);
   pack(46, STAFF.RAVI, MODEL.SAT, COLOR.MAROON, SIZE.S2, 222, [{ days: 44, packed: 222 }]);
   must(
@@ -343,8 +401,8 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   );
 
   // Month 2 — cotton navy: unstitched return + shortage close
-  const p3 = purchase(55, VENDOR.KRISHNA, MODEL.COT, COLOR.NAVY, 180, 3800);
-  cut(50, p3, 100, [{ sizeId: SIZE.L1, expectedPcs: 240 }], [
+  const p3 = purchase(55, VENDOR.KRISHNA, COLOR.NAVY, 180, 3800);
+  cut(50, p3, MODEL.COT, [{ sizeId: SIZE.L1, expectedPcs: 240 }], [
     { sizeId: SIZE.L1, actualPcs: 236, varianceReason: 'measurement_error' },
   ]);
   const j3 = job(48, CT.SUNITA, MODEL.COT, COLOR.NAVY, [{ sizeId: SIZE.L1, qtyIssuedPcs: 236, ratePaisePerDozen: 3200 }]);
@@ -354,19 +412,20 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     closeJobWithDiscrepancy(db, j3.id, { reason: 'missing_pieces', note: 'Sunita could not account for 32 pcs' }, ADMIN, null),
     'close j3 short',
   );
-  check(35, STAFF.POOJA, MODEL.COT, COLOR.NAVY, SIZE.L1, 180, [{ days: 33, passed: 176, rejected: [{ reason: 'damage', qtyPcs: 4 }] }]);
+  check(35, STAFF.POOJA, j3.id, SIZE.L1, 180, [{ days: 33, passed: 176, rejected: [{ reason: 'damage', qtyPcs: 4 }] }]);
   pack(30, STAFF.KAVITA, MODEL.COT, COLOR.NAVY, SIZE.L1, 176, [{ days: 28, packed: 176 }]);
 
   // Month 2 — velvet emerald: mid-pipeline (in checking now)
-  const p4 = purchase(40, VENDOR.SHARMA, MODEL.VEL, COLOR.EMERALD, 120, 4600);
-  cut(34, p4, 80, [{ sizeId: SIZE.S1, expectedPcs: 192 }], [{ sizeId: SIZE.S1, actualPcs: 192 }]);
+  const p4 = purchase(40, VENDOR.SHARMA, COLOR.EMERALD, 120, 4600);
+  cut(34, p4, MODEL.VEL, [{ sizeId: SIZE.S1, expectedPcs: 192 }], [{ sizeId: SIZE.S1, actualPcs: 192 }]);
   const j4 = job(32, CT.MEENA, MODEL.VEL, COLOR.EMERALD, [{ sizeId: SIZE.S1, qtyIssuedPcs: 192, ratePaisePerDozen: 3000 }]);
   receive(24, j4.id, [{ lineId: j4.lineId(SIZE.S1), qtyPcs: 192 }]);
-  check(20, STAFF.DEEPA, MODEL.VEL, COLOR.EMERALD, SIZE.S1, 192, [{ days: 18, passed: 120 }]);
+  check(20, STAFF.DEEPA, j4.id, SIZE.S1, 192, [{ days: 18, passed: 120 }]);
 
-  // Month 3 — organza lavender: cut, partially with contractor
-  const p5 = purchase(25, VENDOR.GUPTA, MODEL.ORG, COLOR.LAVENDER, 90, 6100, 'festival order fabric');
-  cut(20, p5, 60, [{ sizeId: SIZE.XL, expectedPcs: 132 }, { sizeId: SIZE.L1, expectedPcs: 48 }], [
+  // Month 3 — organza lavender: cut, partially with contractor; the received 60 pcs sit
+  // in "pending for checking" (nobody has verified the contractor's claim yet)
+  const p5 = purchase(25, VENDOR.GUPTA, COLOR.LAVENDER, 90, 6100, 'festival order fabric');
+  cut(20, p5, MODEL.ORG, [{ sizeId: SIZE.XL, expectedPcs: 132 }, { sizeId: SIZE.L1, expectedPcs: 48 }], [
     { sizeId: SIZE.XL, actualPcs: 132 },
     { sizeId: SIZE.L1, actualPcs: 44, varianceReason: 'production_loss', reasonNote: 'fray on selvedge' },
     { sizeId: SIZE.S2, actualPcs: 10, varianceReason: 'other', reasonNote: 'offcuts salvaged as S2' },
@@ -375,19 +434,19 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   receive(10, j5.id, [{ lineId: j5.lineId(SIZE.XL), qtyPcs: 60 }]);
 
   // a DELAYED job for the alert panel: issued 24 days ago, nothing back yet
-  const p6 = purchase(30, VENDOR.KRISHNA, MODEL.COT, COLOR.MUSTARD, 100, 3900);
-  cut(27, p6, 70, [{ sizeId: SIZE.S2, expectedPcs: 168 }], [{ sizeId: SIZE.S2, actualPcs: 168 }]);
+  const p6 = purchase(30, VENDOR.KRISHNA, COLOR.MUSTARD, 100, 3900);
+  cut(27, p6, MODEL.COT, [{ sizeId: SIZE.S2, expectedPcs: 168 }], [{ sizeId: SIZE.S2, actualPcs: 168 }]);
   job(24, CT.RAFIQ, MODEL.COT, COLOR.MUSTARD, [{ sizeId: SIZE.S2, qtyIssuedPcs: 168, ratePaisePerDozen: 2800 }]);
 
   // fresh activity this week: new purchase + a still-planned cutting batch
-  const p7 = purchase(4, VENDOR.SHARMA, MODEL.SAT, COLOR.PINK, 160, 5300, 'summer collection');
-  cut(1, p7, 90, [{ sizeId: SIZE.XS, expectedPcs: 120 }, { sizeId: SIZE.S1, expectedPcs: 144 }]);
-  purchase(2, VENDOR.GUPTA, MODEL.VEL, COLOR.WHITE, 140, 4700, 'wedding season stock');
+  const p7 = purchase(4, VENDOR.SHARMA, COLOR.PINK, 160, 5300, 'summer collection');
+  cut(1, p7, MODEL.SAT, [{ sizeId: SIZE.XS, expectedPcs: 120 }, { sizeId: SIZE.S1, expectedPcs: 144 }]);
+  purchase(2, VENDOR.GUPTA, COLOR.WHITE, 140, 4700, 'wedding season stock');
 
   // a voided purchase (typo demo — appears in audit + voided list)
-  const pOops = purchase(15, VENDOR.KRISHNA, MODEL.ORG, COLOR.WHITE, 500, 6100, 'typo: was meant to be 50m');
+  const pOops = purchase(15, VENDOR.KRISHNA, COLOR.WHITE, 500, 6100, 'typo: was meant to be 50m');
   must(voidPurchase(db, pOops, 'entered 500m instead of 50m', ADMIN, null), 'void pOops');
-  purchase(15, VENDOR.KRISHNA, MODEL.ORG, COLOR.WHITE, 50, 6100, 're-entered correctly');
+  purchase(15, VENDOR.KRISHNA, COLOR.WHITE, 50, 6100, 're-entered correctly');
 
   // an open pack issue (goods with the packer right now)
   pack(3, STAFF.RAVI, MODEL.VEL, COLOR.EMERALD, SIZE.S1, 60, [{ days: 2, packed: 36 }]);

@@ -29,29 +29,50 @@ new password (at least 8 characters with letters and numbers).
 Purchases → Cutting → Job Work → Checking → Packing → Finished Goods → Dispatch
 ```
 
+> **Ink colors, like the registers:** everywhere in the app, **blue numbers = goods going
+> OUT** (issued to a contractor, checker, packer, or dispatched) and **red numbers =
+> goods coming IN** (cloth purchased, goods received back) — the same convention as the
+> old paper registers.
+
 ### 1. Purchases (cloth in)
-**Production → Purchases → + New purchase.** Pick vendor, model, color; enter meters and
+**Production → Purchases → + New purchase.** Pick vendor and color; enter meters and
 rate; the total is calculated automatically. Attach a photo of the bill if you like.
-The cloth immediately appears in **Inventory → Raw Material**.
+**No model is chosen here** — cloth is just cloth until it is cut. It immediately appears
+in **Inventory → Raw Material** (by color and vendor).
 
 ### 2. Cutting
-**Production → Cutting → + New cutting plan.** Pick the exact cloth batch (the list shows
-what's available in each), enter how many meters you will use and the expected dozens per
-size. When cutting is finished, press **Record actuals** on the batch and enter what was
-really cut. If actual differs from expected — even if MORE came out — you must pick a
-reason. The cut pieces appear in **Inventory → Cut Cloth**.
+**Production → Cutting → + New cutting plan.** Pick the exact cloth batch, pick the
+**model** this cloth is being cut into (this is where the model number is given), and for
+each size enter the expected dozens plus **how the cloth is used**: the length one piece
+takes in **inches**, and **how many pieces fit side-by-side** across the cloth width.
+The app then calculates the cloth needed by itself and shows **how much will be left in
+the batch** — it refuses a plan that needs more cloth than the batch has.
+
+A plan that hasn't been cut yet can be **edited** (everything can change; the batch
+number stays the same) or **deleted** (the cloth goes back to the batch). Once actuals
+are recorded the plan is frozen — only the Admin can void it.
+
+When cutting is finished, press **Record actuals** and enter what was really cut. If
+actual differs from expected — even if MORE came out — you must pick a reason. The cut
+pieces appear in **Inventory → Cut Cloth**.
 
 ### 3. Job Work (contractors)
 **Production → Job Work → + New job card.** Pick the contractor; their rate fills in
 automatically but can be changed per size line. The system refuses to issue more than the
 cut stock available.
 
-When goods come back, open the job → **Receive goods**. Partial deliveries are normal —
-receive 2 dz today, 3 dz tomorrow; the job stays open until everything is settled. Two
-special cases:
+When goods come back, open the job → **Receive goods**. **Take a photo of the returned
+goods** — it travels with the batch and the checker can refer to it later. Partial
+deliveries are normal — receive 2 dz today, 3 dz tomorrow; the job stays open until
+everything is settled. Two special cases:
 - **Unstitched return** — contractor returns cut-but-unstitched pieces; they go back to
   Cut Cloth stock.
 - **More than pending** — the app asks for a reason and records an excess discrepancy.
+
+**What the contractor CLAIMS to have returned is not taken as final** — the received
+batch goes to **"Pending for checking"** and only counts once a checker verifies it. The
+job list shows an **"Awaiting check"** column so you always know how much is claimed but
+not yet verified.
 
 When received + returned equals issued, the job completes **by itself**. If pieces are
 missing and the contractor cannot return them, only the **Admin** can close the job
@@ -59,15 +80,19 @@ missing and the contractor cannot return them, only the **Admin** can close the 
 contractor permanently.
 
 ### 4. Checking
-**Production → Checking → + Issue to checker.** Only staff marked as checkers appear.
+**Production → Checking.** The top of the page lists every batch **pending for checking**
+— which contractor it came from, the receipt number, the photo, and how many pieces are
+waiting. Press **Issue to checker** on a batch to allot it: you always know **which
+contractor's goods each checker is checking**. Any staff member can check.
+
 Record results in sessions (today 3 dz, tomorrow 2 dz): **passed**, **rejected** (with
-reasons — stitching, elastic, color, damage), **missing**. Passed pieces wait for packing;
-rejected pieces sit in the Rejected stock so nothing disappears silently.
+reasons — stitching, elastic, color, damage), **missing**. Missing or rejected pieces are
+recorded against that contractor's batch on the Discrepancies page. Passed pieces wait
+for packing; rejected pieces sit in the Rejected stock so nothing disappears silently.
 
 ### 5. Packing
-**Production → Packing → + Issue to packer.** Works exactly like checking. If your checker
-also packs, give that person the role "Checker + Packer" in Masters and they appear in
-both lists. Packed pieces become **Finished Goods**.
+**Production → Packing → + Issue to packer.** Works exactly like checking — and any
+staff member can pack. Packed pieces become **Finished Goods**.
 
 ### 6. Dispatches (Admin)
 **Production → Dispatches.** Records finished goods leaving for sale so FG stock stays

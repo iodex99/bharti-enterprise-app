@@ -3,6 +3,7 @@ import {
   colorSchema,
   contractorSchema,
   modelSchema,
+  RAW_CLOTH_MODEL_CODE,
   sizeSchema,
   staffSchema,
   vendorSchema,
@@ -149,6 +150,11 @@ export function listMaster(
   const where: string[] = ['deleted_at IS NULL'];
   const params: unknown[] = [];
   if (!opts.includeInactive) where.push('is_active = 1');
+  // the RAW-CLOTH sentinel is bookkeeping, not a real model — never listed, never reactivatable
+  if (cfg.table === 'models') {
+    where.push('code != ?');
+    params.push(RAW_CLOTH_MODEL_CODE);
+  }
   if (opts.q) {
     where.push(`(${cfg.searchColumns.map((c) => `${c} LIKE ?`).join(' OR ')})`);
     for (let i = 0; i < cfg.searchColumns.length; i++) params.push(`%${opts.q}%`);

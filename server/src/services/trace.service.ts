@@ -182,19 +182,19 @@ function openingNode(db: Db, openingId: number, qtyPcs?: number): TraceNode {
 export function tracePurchaseForward(db: Db, purchaseId: number): TraceNode | null {
   const purchase = db
     .prepare(
-      `SELECT p.*, v.name AS vendor, m.code AS model, c.name AS color FROM purchases p
+      `SELECT p.*, v.name AS vendor, c.name AS color FROM purchases p
        JOIN vendors v ON v.id = p.vendor_id
-       JOIN models m ON m.id = p.model_id
        JOIN colors c ON c.id = p.color_id
        WHERE p.id = ?`,
     )
     .get(purchaseId) as Record<string, unknown> | undefined;
   if (!purchase) return null;
 
+  // raw cloth has no model — it gets one at cutting (children carry the models)
   const root: TraceNode = {
     type: 'purchase',
     label: `${purchase.doc_no as string} — Cloth from ${purchase.vendor as string}`,
-    detail: `${purchase.model as string} ${purchase.color as string} · ${(((purchase.qty_cm as number) ?? 0) / 100).toFixed(2)} m`,
+    detail: `${purchase.color as string} cloth · ${(((purchase.qty_cm as number) ?? 0) / 100).toFixed(2)} m`,
     children: [],
   };
 

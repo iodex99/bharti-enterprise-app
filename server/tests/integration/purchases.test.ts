@@ -8,11 +8,11 @@ let admin: string;
 let operator: string;
 let owner: string;
 
+// no model — cloth is bought as vendor + color; the model is decided at cutting
 const PURCHASE = {
   purchaseDate: '2026-07-01',
   receivedDate: '2026-07-03',
   vendorId: 1,
-  modelId: 1,
   colorId: 1,
   qtyCm: 12550, // 125.50 m
   ratePaisePerMeter: 4550, // ₹45.50/m
@@ -72,11 +72,11 @@ describe('purchases', () => {
     expect(inactiveVendor.status).toBe(400);
     expect(inactiveVendor.body.error).toMatch(/deactivated/i);
 
-    const unknownModel = await request(ctx.app)
+    const unknownColor = await request(ctx.app)
       .post('/api/purchases')
       .set('Cookie', operator)
-      .send({ ...PURCHASE, modelId: 999 });
-    expect(unknownModel.status).toBe(400);
+      .send({ ...PURCHASE, colorId: 999 });
+    expect(unknownColor.status).toBe(400);
 
     const zeroQty = await request(ctx.app)
       .post('/api/purchases')
@@ -236,7 +236,7 @@ describe('opening balances', () => {
     const raw = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'RAW', modelId: 1, colorId: 1, qty: 5000, note: 'register carry-over' });
+      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 5000, note: 'register carry-over' });
     expect(raw.status).toBe(201);
     expect(raw.body.docNo).toMatch(/^OPB-/);
 

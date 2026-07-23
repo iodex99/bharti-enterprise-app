@@ -41,3 +41,24 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   moved aside first and restored automatically on any failure; sessions are cleared so
   everyone re-authenticates against the restored data. Restore/complete-backup are refused
   in demo mode (they must act on real data).
+- **ADR-016** The MODEL is decided at CUTTING, not at purchase (cloth is bought as
+  vendor + color + meters). Because purchases/stock_ledger model columns are NOT NULL and
+  migrations are additive-only, an inactive sentinel model `RAW-CLOTH` (pinned id 1000000)
+  fills them; it is excluded from all listings/dropdowns and RAW displays show color+vendor
+  only. Cutting takes `modelId` in its input; RAW ledger rows always use the LOT's stored
+  model so lot balances never split across dimensions.
+- **ADR-017** Cutting consumption is COMPUTED, not typed: each plan line carries cloth per
+  piece in integer HUNDREDTHS OF AN INCH plus a width count (pieces cut side-by-side);
+  `clothRequiredCm` (shared) = ceil(strips × length × 2.54), strips = ceil(pcs/width),
+  rounded UP because cut cloth is gone. Consumption stays plan-based at actuals time.
+- **ADR-018** Checking is DIRECTED, not FIFO: goods a contractor claims to have returned
+  sit in "pending for checking" per receipt line, and a check issue names the specific
+  batch (contractor ↔ checker mapping is explicit). check_allocations keeps recording the
+  (single) take so traceability is unchanged; missing/reject discrepancies are attributed
+  to checker AND source contractor. Receipts can carry a photo for reference at checking.
+- **ADR-019** Staff have NO fixed checker/packer role — any active staff member can be
+  picked for either task. The legacy `role` column stays (additive-only) but is ignored;
+  new staff default to 'both'.
+- **ADR-020** Register ink convention carried into the UI: BLUE numbers = goods issued
+  OUT (job issue, to checker/packer, dispatch), RED numbers = goods received IN
+  (purchases, contractor returns) — matching the paper registers the staff already read.

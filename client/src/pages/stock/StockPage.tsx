@@ -22,8 +22,6 @@ type StockRow = {
 type RawLot = {
   lotType: string;
   lotId: number;
-  modelCode: string;
-  modelName: string;
   colorName: string;
   purchaseDocNo: string | null;
   purchaseDate: string | null;
@@ -100,17 +98,8 @@ function RawStock() {
           value: (r) => r.purchaseDocNo ?? r.openingDocNo ?? '',
           render: (r) => r.purchaseDocNo ?? `${r.openingDocNo} (opening)`,
         },
-        {
-          key: 'item',
-          header: 'Model / Color',
-          value: (r) => `${r.modelCode} ${r.colorName}`,
-          render: (r) => (
-            <span>
-              <span className="font-medium">{r.modelCode}</span>{' '}
-              <span className="text-gray-500">{r.colorName}</span>
-            </span>
-          ),
-        },
+        // raw cloth has no model — it is decided at cutting
+        { key: 'colorName', header: 'Color', className: 'font-medium' },
         { key: 'vendorName', header: 'Vendor', render: (r) => r.vendorName ?? '—' },
         {
           key: 'qtyCm',
@@ -123,7 +112,6 @@ function RawStock() {
       rows={rows}
       loading={isLoading}
       facets={[
-        { key: 'model', label: 'Model', value: (r) => r.modelCode },
         { key: 'color', label: 'Color', value: (r) => r.colorName },
         { key: 'vendor', label: 'Vendor', value: (r) => r.vendorName },
       ]}

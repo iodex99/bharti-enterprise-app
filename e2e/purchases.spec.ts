@@ -21,7 +21,6 @@ test('operator records a purchase and sees it in raw stock', async ({ page }) =>
 
   await page.getByRole('button', { name: '+ New purchase' }).click();
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ label: 'Sharma Textiles' });
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: 1 });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ label: 'Maroon' });
   await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('125.5');
   await page.getByRole('dialog').getByLabel('Rate per meter').fill('45.50');
@@ -45,7 +44,6 @@ test('purchase validation: received date before purchase date is rejected', asyn
   await page.getByRole('dialog').getByLabel('Purchase date').fill('2026-07-05');
   await page.getByRole('dialog').getByLabel('Date received').fill('2026-07-01');
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 1 });
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: 1 });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ index: 1 });
   await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('10');
   await page.getByRole('dialog').getByLabel('Rate per meter').fill('40');

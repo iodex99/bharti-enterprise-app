@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   CHECK_REJECTION_REASONS,
+  CHECKING_POOL_LOT_TYPES,
   CUTTING_VARIANCE_REASONS,
   JOB_DISCREPANCY_REASONS,
   PACK_SHORT_REASONS,
@@ -77,7 +78,8 @@ export const contractorSchema = z.object({
 export const staffSchema = z.object({
   name: trimmed(100),
   mobile,
-  role: z.enum(STAFF_ROLES),
+  // Any staff member can check OR pack — no fixed role. Kept optional for legacy rows.
+  role: z.enum(STAFF_ROLES).default('both'),
   notes: optionalText(500),
 });
 
@@ -99,7 +101,7 @@ export const purchaseSchema = z
     purchaseDate: businessDate,
     receivedDate: businessDate,
     vendorId: id,
-    modelId: id,
+    // NO model here — cloth is bought as color + meters; the model is decided at cutting
     colorId: id,
     /** integer centimeters (UI converts from meters) */
     qtyCm: z.number().int().positive().max(100_000_000),
@@ -136,8 +138,8 @@ export const cuttingPlanSchema = z
     cutDate: businessDate,
     rawLotType: z.enum(['purchase', 'opening']),
     rawLotId: id,
-    /** cloth consumed by this cutting batch, integer cm */
-    metersUsedCm: z.number().int().positive().max(100_000_000),
+    /** the model this cloth is being cut into — decided HERE, not at purchase */
+    modelId: id,
     notes: optionalText(500),
     lines: z
       .array(
@@ -145,9 +147,14 @@ export const cuttingPlanSchema = z
           sizeId: id,
           /** expected output in integer pieces */
           expectedPcs: z.number().int().positive().max(10_000_000),
+          /** cloth length per piece, integer hundredths of an inch (10.25" = 1025) */
+          clothPerPcInchC: z.number().int().positive().max(100_000),
+          /** pieces cut side-by-side across the cloth width */
+          widthCount: z.number().int().positive().max(1000),
         }),
       )
       .min(1, 'Add at least one size'),
+    // cloth consumed is COMPUTED server-side from the lines (clothRequiredCm)
   })
   .refine((p) => new Set(p.lines.map((l) => l.sizeId)).size === p.lines.length, {
     message: 'Each size may appear only once',
@@ -200,6 +207,8 @@ export type JobCardInput = z.infer<typeof jobCardSchema>;
 
 export const jobReceiptSchema = z.object({
   receiptDate: businessDate,
+  /** photo of the returned goods — easy reference at checking time */
+  imagePath: z.string().max(300).nullish(),
   notes: optionalText(500),
   lines: z
     .array(
@@ -235,9 +244,9 @@ export type PaymentInput = z.infer<typeof paymentSchema>;
 export const checkIssueSchema = z.object({
   issueDate: businessDate,
   staffId: id,
-  modelId: id,
-  colorId: id,
-  sizeId: id,
+  /** the SPECIFIC received batch being checked — contractor↔checker mapping is explicit */
+  lotType: z.enum(CHECKING_POOL_LOT_TYPES),
+  lotId: id,
   qtyPcs: z.number().int().positive().max(10_000_000),
   notes: optionalText(300),
 });
@@ -312,13 +321,18 @@ export const openingBalanceSchema = z
   .object({
     balanceDate: businessDate,
     stage: z.enum(STAGES),
-    modelId: id,
+    /** not applicable to RAW — raw cloth has no model until it is cut */
+    modelId: id.nullish(),
     colorId: id,
     sizeId: id.nullish(),
     contractorId: id.nullish(),
     /** cm for RAW, pieces for all other stages */
     qty: z.number().int().positive().max(100_000_000),
     note: optionalText(300),
+  })
+  .refine((b) => (b.stage === 'RAW' ? true : b.modelId != null), {
+    message: 'Model is required for this stage',
+    path: ['modelId'],
   })
   .refine((b) => (b.stage === 'RAW' ? true : b.sizeId != null), {
     message: 'Size is required for this stage',

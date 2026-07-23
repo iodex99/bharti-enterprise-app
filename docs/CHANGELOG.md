@@ -5,6 +5,22 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-23 — Six workflow corrections from the owner's real process (migration 002):
+  **(1)** the model is now decided at CUTTING — purchases are just vendor + color +
+  meters (a hidden RAW-CLOTH bookkeeping model fills the old columns; RAW stock, reports
+  and traceability show color/vendor); **(2)** cutting plans enter cloth per piece in
+  INCHES plus how many pieces fit across the width — the app computes the cloth needed
+  and shows what will be left, refusing over-consumption; **(3)** cutting plans can be
+  EDITED and DELETED while still planned (cloth restored, doc number kept);
+  **(4)** goods a contractor claims to return now sit in **Pending for checking** —
+  checker allotment names the specific received batch, so the contractor ↔ checker
+  mapping is explicit, jobs show an "Awaiting check" column, and missing/rejected pieces
+  are attributed to the contractor's batch; **(5)** receipts can carry a **photo** of the
+  returned goods, visible wherever the batch appears; **(6)** checkers & packers no
+  longer have fixed roles — any staff member can do either job (role dropdown removed) —
+  and quantities follow the registers' ink colors: **blue = issued out, red = received
+  in**. (ADR-016…020.)
+
 - 2026-07-22 — One-file migration to a new computer: a **complete backup** bundles the
   database AND every uploaded photo into one `.zip` (Backups → *Download complete backup*,
   or *Send to Google Drive*). A safe **in-app Restore** replaces all data atomically — it

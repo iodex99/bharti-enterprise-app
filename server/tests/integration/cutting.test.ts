@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { clothRequiredCm } from '@shared';
 import { loginAs, makeTestContext, type TestContext } from '../helpers';
 
+/**
+ * Cutting with computed consumption: each line carries cloth-per-piece (hundredths of an
+ * inch) and how many pieces fit across the width; the server computes the cm consumed.
+ * The MODEL is chosen at cutting (purchases have none). Plans are editable/deletable
+ * while still 'planned'.
+ */
 let ctx: TestContext;
 let admin: string;
 let operator: string;
@@ -14,7 +21,7 @@ beforeAll(async () => {
   operator = await loginAs(ctx.app, 'operator', 'Operator@123');
   owner = await loginAs(ctx.app, 'owner', 'Owner@123');
   ctx.db.exec(`
-    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1);
+    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1), (2, 'M2', 'Model 2', 1);
     INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
     INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1), (2, 'S1', 2, 1), (3, 'XL', 3, 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
@@ -23,7 +30,6 @@ beforeAll(async () => {
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
-    modelId: 1,
     colorId: 1,
     qtyCm: 20000, // 200 m
     ratePaisePerMeter: 4000,
@@ -42,10 +48,25 @@ const rawBalance = () =>
       .get(purchaseId) as { q: number }
   ).q;
 
+// geometry used throughout: XS 10" ×3 across, S1 9" ×3, XL 14" ×2
+const GEO: Record<number, { c: number; w: number }> = {
+  1: { c: 1000, w: 3 },
+  2: { c: 900, w: 3 },
+  3: { c: 1400, w: 2 },
+};
+const line = (sizeId: number, expectedPcs: number) => ({
+  sizeId,
+  expectedPcs,
+  clothPerPcInchC: GEO[sizeId]!.c,
+  widthCount: GEO[sizeId]!.w,
+});
+const cmFor = (sizeId: number, pcs: number) =>
+  clothRequiredCm(pcs, GEO[sizeId]!.c, GEO[sizeId]!.w);
+
 describe('cutting', () => {
   let batchId: number;
 
-  it('plan consumes raw meters and stores expected lines', async () => {
+  it('plan computes cloth from geometry, consumes it and stores expected lines', async () => {
     const res = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
@@ -53,29 +74,33 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        metersUsedCm: 8000, // 80 m
+        modelId: 1, // the model is decided HERE
         notes: '',
-        lines: [
-          { sizeId: 1, expectedPcs: 120 }, // 10 dz
-          { sizeId: 2, expectedPcs: 180 }, // 15 dz
-          { sizeId: 3, expectedPcs: 60 }, // 5 dz
-        ],
+        lines: [line(1, 120), line(2, 180), line(3, 60)],
       });
     expect(res.status).toBe(201);
     expect(res.body.docNo).toBe('CUT-0001');
     batchId = res.body.id as number;
-    expect(rawBalance()).toBe(12000); // 200m - 80m
+
+    // 120 XS: 40 strips × 10" = 400" = exactly 1016 cm; S1: ceil(1371.6)=1372; XL: ceil(30×14×2.54)=1067
+    const expectedCm = cmFor(1, 120) + cmFor(2, 180) + cmFor(3, 60);
+    expect(cmFor(1, 120)).toBe(1016);
+    expect(rawBalance()).toBe(20000 - expectedCm);
 
     const list = await request(ctx.app).get('/api/cutting').set('Cookie', owner);
     expect(list.status).toBe(200);
     const batch = list.body.items.find((b: { id: number }) => b.id === batchId);
     expect(batch.status).toBe('planned');
+    expect(batch.modelCode).toBe('M1');
+    expect(batch.metersUsedCm).toBe(expectedCm);
     expect(batch.expectedTotalPcs).toBe(360);
     expect(batch.actualTotalPcs).toBeNull();
     expect(batch.rawDocNo).toBe('RM-0001');
+    expect(batch.lines[0].clothPerPcInchC).toBe(1000);
+    expect(batch.lines[0].widthCount).toBe(3);
   });
 
-  it('rejects over-consumption, duplicate sizes and unknown lots', async () => {
+  it('rejects over-consumption, duplicate sizes, unknown lots and missing geometry', async () => {
     const tooMuch = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
@@ -83,11 +108,11 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        metersUsedCm: 999999,
-        lines: [{ sizeId: 1, expectedPcs: 12 }],
+        modelId: 1,
+        lines: [line(1, 120000)], // 40000 strips × 10" ≈ 10 km of cloth
       });
     expect(tooMuch.status).toBe(400);
-    expect(tooMuch.body.error).toMatch(/only .* available/i);
+    expect(tooMuch.body.error).toMatch(/has only .* available/i);
 
     const dupSizes = await request(ctx.app)
       .post('/api/cutting')
@@ -96,11 +121,8 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        metersUsedCm: 100,
-        lines: [
-          { sizeId: 1, expectedPcs: 12 },
-          { sizeId: 1, expectedPcs: 24 },
-        ],
+        modelId: 1,
+        lines: [line(1, 12), line(1, 24)],
       });
     expect(dupSizes.status).toBe(400);
 
@@ -111,10 +133,86 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: 9999,
-        metersUsedCm: 100,
-        lines: [{ sizeId: 1, expectedPcs: 12 }],
+        modelId: 1,
+        lines: [line(1, 12)],
       });
     expect(badLot.status).toBe(400);
+
+    // geometry is mandatory on every plan line
+    const noGeometry = await request(ctx.app)
+      .post('/api/cutting')
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-02',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        modelId: 1,
+        lines: [{ sizeId: 1, expectedPcs: 12 }],
+      });
+    expect(noGeometry.status).toBe(400);
+  });
+
+  it('edit re-plans a planned batch: cloth returned, recomputed, doc number kept', async () => {
+    const before = rawBalance();
+    const plan = await request(ctx.app)
+      .post('/api/cutting')
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-02',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        modelId: 1,
+        lines: [line(1, 24)],
+      });
+    const id = plan.body.id as number;
+    const docNo = plan.body.docNo as string;
+    expect(rawBalance()).toBe(before - cmFor(1, 24));
+
+    // change size, quantity AND model
+    const edited = await request(ctx.app)
+      .put(`/api/cutting/${id}`)
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-03',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        modelId: 2,
+        lines: [line(2, 36)],
+      });
+    expect(edited.status).toBe(200);
+    expect(rawBalance()).toBe(before - cmFor(2, 36)); // old cloth back, new consumed
+
+    const list = await request(ctx.app).get('/api/cutting').set('Cookie', operator);
+    const batch = list.body.items.find((b: { id: number }) => b.id === id);
+    expect(batch.docNo).toBe(docNo); // number survives the edit
+    expect(batch.modelCode).toBe('M2');
+    expect(batch.lines).toHaveLength(1);
+    expect(batch.lines[0].sizeId).toBe(2);
+    expect(batch.lines[0].expectedPcs).toBe(36);
+
+    // an edit that would overdraw the lot is refused and changes nothing
+    const tooBig = await request(ctx.app)
+      .put(`/api/cutting/${id}`)
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-03',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        modelId: 2,
+        lines: [line(2, 120000)],
+      });
+    expect(tooBig.status).toBe(409);
+    expect(rawBalance()).toBe(before - cmFor(2, 36));
+
+    // delete restores the cloth (soft: void with a standard reason)
+    const del = await request(ctx.app).delete(`/api/cutting/${id}`).set('Cookie', operator);
+    expect(del.status).toBe(200);
+    expect(rawBalance()).toBe(before);
+    const voided = ctx.db
+      .prepare('SELECT voided_at, void_reason FROM cutting_batches WHERE id = ?')
+      .get(id) as { voided_at: string | null; void_reason: string };
+    expect(voided.voided_at).not.toBeNull();
+    expect(voided.void_reason).toMatch(/deleted before cutting/i);
   });
 
   it('actuals require a reason for every variance', async () => {
@@ -139,7 +237,7 @@ describe('cutting', () => {
     expect(missingLine.body.error).toMatch(/every planned size/i);
   });
 
-  it('records actuals incl. unplanned size; CUT stock and discrepancies follow', async () => {
+  it('records actuals incl. unplanned size; CUT stock and discrepancies follow; edit then blocked', async () => {
     const res = await request(ctx.app)
       .post(`/api/cutting/${batchId}/actuals`)
       .set('Cookie', operator)
@@ -177,6 +275,21 @@ describe('cutting', () => {
       .set('Cookie', operator)
       .send({ lines: [{ sizeId: 1, actualPcs: 1, varianceReason: 'other' }] });
     expect(again.status).toBe(409);
+
+    // once actuals exist the plan is frozen: no edit, no operator delete
+    const editAfter = await request(ctx.app)
+      .put(`/api/cutting/${batchId}`)
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-03',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        modelId: 1,
+        lines: [line(1, 12)],
+      });
+    expect(editAfter.status).toBe(409);
+    const delAfter = await request(ctx.app).delete(`/api/cutting/${batchId}`).set('Cookie', operator);
+    expect(delAfter.status).toBe(409);
   });
 
   it('supports unplanned sizes at actual time', async () => {
@@ -187,8 +300,8 @@ describe('cutting', () => {
         cutDate: '2026-07-03',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        metersUsedCm: 2000,
-        lines: [{ sizeId: 1, expectedPcs: 48 }],
+        modelId: 1,
+        lines: [line(1, 48)],
       });
     const id = plan.body.id as number;
     const res = await request(ctx.app)
@@ -201,14 +314,14 @@ describe('cutting', () => {
         ],
       });
     expect(res.status).toBe(200);
-    const line = ctx.db
+    const dbLine = ctx.db
       .prepare('SELECT expected_pcs, actual_pcs FROM cutting_lines WHERE cutting_batch_id = ? AND size_id = 3')
       .get(id) as { expected_pcs: number; actual_pcs: number };
-    expect(line.expected_pcs).toBe(0);
-    expect(line.actual_pcs).toBe(12);
+    expect(dbLine.expected_pcs).toBe(0);
+    expect(dbLine.actual_pcs).toBe(12);
   });
 
-  it('owner cannot create plans; operator cannot void', async () => {
+  it('owner cannot create plans; operator cannot void a completed batch', async () => {
     const asOwner = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', owner)
@@ -216,8 +329,8 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        metersUsedCm: 100,
-        lines: [{ sizeId: 1, expectedPcs: 12 }],
+        modelId: 1,
+        lines: [line(1, 12)],
       });
     expect(asOwner.status).toBe(403);
 
@@ -237,8 +350,8 @@ describe('cutting', () => {
         cutDate: '2026-07-04',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        metersUsedCm: 1000,
-        lines: [{ sizeId: 2, expectedPcs: 24 }],
+        modelId: 1,
+        lines: [line(2, 24)],
       });
     const id = plan.body.id as number;
     await request(ctx.app)
@@ -273,11 +386,12 @@ describe('cutting', () => {
     expect(blocked.body.error).toMatch(/already issued/i);
   });
 
-  it('cuts from an opening-balance raw lot too', async () => {
+  it('cuts from an opening-balance raw lot too (opening RAW has no model)', async () => {
     const opening = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'RAW', modelId: 1, colorId: 1, qty: 3000, note: '' });
+      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 3000, note: '' });
+    expect(opening.status).toBe(201);
     const plan = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
@@ -285,8 +399,8 @@ describe('cutting', () => {
         cutDate: '2026-07-05',
         rawLotType: 'opening',
         rawLotId: opening.body.id,
-        metersUsedCm: 3000,
-        lines: [{ sizeId: 1, expectedPcs: 72 }],
+        modelId: 1,
+        lines: [line(1, 72)], // 24 strips × 10" = 609.6 → 610 cm
       });
     expect(plan.status).toBe(201);
     const openingBal = (
@@ -296,6 +410,6 @@ describe('cutting', () => {
         )
         .get(opening.body.id) as { q: number }
     ).q;
-    expect(openingBal).toBe(0);
+    expect(openingBal).toBe(3000 - cmFor(1, 72));
   });
 });

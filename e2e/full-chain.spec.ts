@@ -22,26 +22,28 @@ test('purchase → cutting → job work → checking → packing → finished go
   const modelIndex = mobile ? 2 : 3;
   await signIn(page, 'operator', 'Operator@123');
 
-  // 1. purchase 60m
+  // 1. purchase 60m — no model at purchase
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 2 });
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
   await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('60');
   await page.getByRole('dialog').getByLabel('Rate per meter').fill('42');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByRole('cell', { name: /RM-\d+/ }).first()).toBeVisible();
 
-  // 2. cut 5 dz XL
+  // 2. cut 5 dz XL — model chosen here; cloth computed from 14" × 2-across
   await page.goto('/cutting');
   await page.getByRole('button', { name: '+ New cutting plan' }).click();
   const lotSelect = page.getByRole('dialog').getByLabel('Cloth batch (raw material)');
   const lotLabel = await lotSelect.locator('option', { hasText: color }).first().textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await page.getByRole('dialog').getByLabel('Cloth to use (meters)').fill('30');
+  await page.getByRole('dialog').getByLabel('Model (decided at cutting)').selectOption({ index: modelIndex });
   await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'XL' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
+  await page.getByRole('textbox', { name: 'Cloth per piece 1' }).fill('14');
+  await page.getByRole('textbox', { name: 'Across width 1' }).fill('2');
+  await expect(page.getByText(/left after cutting/)).toBeVisible();
   await page.getByRole('button', { name: 'Save cutting plan' }).click();
   const cutRow = page.getByRole('row', { name: /CUT-\d+/ }).first();
   await cutRow.getByRole('button', { name: 'Record actuals' }).click();
@@ -72,14 +74,17 @@ test('purchase → cutting → job work → checking → packing → finished go
   await expect(page.getByRole('dialog', { name: /JOB-\d+/ }).getByText('Completed', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Close window' }).click();
 
-  // 4. checking: 4dz pass, 6pc reject (stitching), 6pc missing
+  // 4. checking: the received batch sits in "Pending for checking" with the contractor's
+  // name — allot THAT batch to a checker (contractor ↔ checker mapping)
   await page.goto('/checking');
-  await page.getByRole('button', { name: '+ Issue to checker' }).click();
-  await page.getByRole('dialog').getByLabel('Checker').selectOption({ index: 1 }); // Pooja (checker)
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
-  await page.getByRole('dialog').getByLabel('Size').selectOption({ label: 'XL' });
-  await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
+  const pendingRow = page
+    .getByRole('row', { name: new RegExp(color) })
+    .filter({ hasText: 'Sunita Job Work' })
+    .first();
+  await expect(pendingRow).toBeVisible();
+  await pendingRow.getByRole('button', { name: 'Issue to checker' }).click();
+  await page.getByRole('dialog').getByLabel('Checker').selectOption({ label: 'Pooja' });
+  // quantity defaults to the whole batch (5 dz) — issue it all
   await page.getByRole('button', { name: 'Issue for checking' }).click();
   const chkRow = page.getByRole('row', { name: /CHK-\d+/ }).first();
   await chkRow.getByRole('button', { name: 'Record result' }).click();
@@ -93,10 +98,10 @@ test('purchase → cutting → job work → checking → packing → finished go
   await resultDialog.getByRole('button', { name: /Record result/ }).click();
   await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
 
-  // 5. packing: all 4dz packed by Kavita (checker+packer role)
+  // 5. packing: all 4dz packed by Kavita (any staff can pack — no fixed roles)
   await page.goto('/packing');
   await page.getByRole('button', { name: '+ Issue to packer' }).click();
-  await page.getByRole('dialog').getByLabel('Packer').selectOption({ index: 2 }); // Kavita (both)
+  await page.getByRole('dialog').getByLabel('Packer').selectOption({ label: 'Kavita' });
   await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
   await page.getByRole('dialog').getByLabel('Size').selectOption({ label: 'XL' });

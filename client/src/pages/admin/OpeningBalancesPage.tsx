@@ -136,7 +136,7 @@ function NewOpeningModal({
       api.post('/api/opening-balances', {
         balanceDate,
         stage,
-        modelId,
+        modelId: stage === 'RAW' ? null : modelId, // raw cloth has no model yet
         colorId,
         sizeId: stage === 'RAW' ? null : sizeId,
         contractorId: stage === 'WIP' ? contractorId : null,
@@ -171,10 +171,12 @@ function NewOpeningModal({
             ))}
           </Select>
         </Field>
-        <Field label="Model">
-          <MasterSelect master="models" value={modelId} onChange={setModelId} />
-        </Field>
-        <Field label="Color">
+        {stage !== 'RAW' && (
+          <Field label="Model">
+            <MasterSelect master="models" value={modelId} onChange={setModelId} />
+          </Field>
+        )}
+        <Field label="Color" hint={stage === 'RAW' ? 'Raw cloth gets its model at cutting' : undefined}>
           <MasterSelect master="colors" value={colorId} onChange={setColorId} />
         </Field>
         {stage !== 'RAW' && (

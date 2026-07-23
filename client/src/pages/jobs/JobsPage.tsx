@@ -12,7 +12,7 @@ import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
 import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
-import { DzPcInput, MoneyInput } from '../../components/inputs';
+import { DzPcInput, ImageInput, MoneyInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { useMasterOptions } from '../../api/masters';
 import { VoidModal } from '../purchases/PurchasesPage';
@@ -46,6 +46,7 @@ export type JobCard = {
   receivedPcs: number;
   returnedPcs: number;
   pendingPcs: number;
+  pendingCheckPcs: number;
   jobCostPaise: number;
 };
 
@@ -118,7 +119,25 @@ export default function JobsPage() {
               <span className="text-gray-500">{r.lines.map((l) => l.sizeCode).join(', ')}</span>
             ),
           },
-          { key: 'issuedPcs', header: 'Issued', render: (r) => formatPieces(r.issuedPcs) },
+          {
+            key: 'issuedPcs',
+            header: 'Issued',
+            // register color code: blue = issued out to the contractor
+            render: (r) => <span className="font-medium text-sky-700">{formatPieces(r.issuedPcs)}</span>,
+            value: (r) => r.issuedPcs,
+          },
+          {
+            key: 'receivedPcs',
+            header: 'Received',
+            // red = goods received back in (as the contractor claims)
+            render: (r) =>
+              r.receivedPcs === 0 ? (
+                <span className="text-gray-300">—</span>
+              ) : (
+                <span className="font-medium text-red-700">{formatPieces(r.receivedPcs)}</span>
+              ),
+            value: (r) => r.receivedPcs,
+          },
           {
             key: 'pendingPcs',
             header: 'Pending',
@@ -128,6 +147,17 @@ export default function JobsPage() {
               ) : (
                 <span className="font-semibold text-amber-700">{formatPieces(r.pendingPcs)}</span>
               ),
+          },
+          {
+            key: 'pendingCheckPcs',
+            header: 'Awaiting check',
+            render: (r) =>
+              r.pendingCheckPcs === 0 ? (
+                <span className="text-gray-300">—</span>
+              ) : (
+                <Badge tone="amber">{formatPieces(r.pendingCheckPcs)} unchecked</Badge>
+              ),
+            value: (r) => r.pendingCheckPcs,
           },
           { key: 'status', header: 'Status', render: (r) => <JobStatusBadge status={r.status} /> },
         ]}
@@ -331,6 +361,7 @@ type ReceiptRow = {
   id: number;
   docNo: string;
   receiptDate: string;
+  imagePath: string | null;
   sizeCode: string;
   qtyPcs: number;
   returnType: string;
@@ -388,8 +419,9 @@ function JobDetailModal({
               {job.lines.map((l) => (
                 <tr key={l.id} className="border-b border-gray-100 last:border-0">
                   <td className="px-3 py-2 font-medium">{l.sizeCode}</td>
-                  <td className="px-3 py-2">{formatPieces(l.qtyIssuedPcs)}</td>
-                  <td className="px-3 py-2">{formatPieces(l.receivedPcs)}</td>
+                  {/* register ink colors: blue = issued out, red = received in */}
+                  <td className="px-3 py-2 font-medium text-sky-700">{formatPieces(l.qtyIssuedPcs)}</td>
+                  <td className="px-3 py-2 font-medium text-red-700">{formatPieces(l.receivedPcs)}</td>
                   <td className="px-3 py-2">{l.returnedPcs ? formatPieces(l.returnedPcs) : '—'}</td>
                   <td className="px-3 py-2">
                     {l.excessPcs > 0 ? (
@@ -415,10 +447,15 @@ function JobDetailModal({
               <li key={`${r.id}-${r.sizeCode}-${r.returnType}-${r.qtyPcs}`} className="flex flex-wrap gap-2 text-gray-600">
                 <span className="font-mono text-xs text-gray-400">{r.docNo}</span>
                 <span>{formatBusinessDate(r.receiptDate)}</span>
-                <span className="font-medium">
+                <span className="font-medium text-red-700">
                   {r.sizeCode} · {formatPieces(r.qtyPcs)}
                 </span>
                 {r.returnType === 'unstitched_return' && <Badge tone="amber">unstitched return</Badge>}
+                {r.imagePath && (
+                  <a href={r.imagePath} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">
+                    📷 photo
+                  </a>
+                )}
               </li>
             ))}
           </ul>
@@ -466,6 +503,7 @@ function JobDetailModal({
 
 function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => void; onDone: () => void }) {
   const [receiptDate, setReceiptDate] = useState(todayIST());
+  const [imagePath, setImagePath] = useState<string | null>(null);
   const [rows, setRows] = useState(
     job.lines
       .filter((l) => l.pendingPcs > 0 || l.excessPcs === 0)
@@ -483,6 +521,7 @@ function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
     mutationFn: () =>
       api.post(`/api/jobs/${job.id}/receipts`, {
         receiptDate,
+        imagePath,
         notes: '',
         lines: rows
           .filter((r) => r.qtyPcs)
@@ -513,6 +552,9 @@ function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
       >
         <Field label="Receipt date">
           <TextInput type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} required />
+        </Field>
+        <Field label="Photo of the returned goods" hint="Handy reference when the batch reaches the checker">
+          <ImageInput path={imagePath} onChange={setImagePath} />
         </Field>
         <div className="space-y-3">
           {rows.map((r, i) => {

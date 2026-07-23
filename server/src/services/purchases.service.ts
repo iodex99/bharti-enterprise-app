@@ -1,4 +1,4 @@
-import type { PurchaseEditInput, PurchaseInput } from '@shared';
+import { RAW_CLOTH_MODEL_CODE, type PurchaseEditInput, type PurchaseInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
@@ -8,6 +8,19 @@ import { LedgerError, postMovements } from './ledger.service';
 /** total = meters × rate; qty_cm/100 gives meters. Server-computed, authoritative. */
 export function purchaseTotalPaise(qtyCm: number, ratePaisePerMeter: number): number {
   return Math.round((qtyCm * ratePaisePerMeter) / 100);
+}
+
+/**
+ * The sentinel model that fills NOT NULL model columns for raw cloth — the real model is
+ * only decided at cutting. Inserted by migration 002; inactive so it never appears in
+ * dropdowns or new-document validation.
+ */
+export function rawClothModelId(db: Db): number {
+  const row = db.prepare('SELECT id FROM models WHERE code = ?').get(RAW_CLOTH_MODEL_CODE) as
+    | { id: number }
+    | undefined;
+  if (!row) throw new Error('RAW-CLOTH sentinel model missing — migrations not applied?');
+  return row.id;
 }
 
 export type ServiceResult<T = { id: number }> =
@@ -32,13 +45,13 @@ export function createPurchase(
 ): ServiceResult<{ id: number; docNo: string }> {
   for (const [table, id, label] of [
     ['vendors', input.vendorId, 'Vendor'],
-    ['models', input.modelId, 'Model'],
     ['colors', input.colorId, 'Color'],
   ] as const) {
     const err = assertActive(db, table, id, label);
     if (err) return { ok: false, code: 400, error: err };
   }
 
+  const rawModel = rawClothModelId(db);
   let id = 0;
   let docNo = '';
   const tx = db.transaction(() => {
@@ -54,7 +67,7 @@ export function createPurchase(
         input.purchaseDate,
         input.receivedDate,
         input.vendorId,
-        input.modelId,
+        rawModel,
         input.colorId,
         input.qtyCm,
         input.ratePaisePerMeter,
@@ -69,7 +82,7 @@ export function createPurchase(
       [
         {
           stage: 'RAW',
-          modelId: input.modelId,
+          modelId: rawModel,
           colorId: input.colorId,
           sizeId: null,
           lotType: 'purchase',
@@ -215,7 +228,6 @@ export function voidPurchase(
 
 export type PurchaseListFilters = {
   vendorId?: number;
-  modelId?: number;
   colorId?: number;
   from?: string;
   to?: string;
@@ -230,10 +242,6 @@ export function listPurchases(db: Db, f: PurchaseListFilters): Array<Record<stri
     where.push('p.vendor_id = ?');
     params.push(f.vendorId);
   }
-  if (f.modelId) {
-    where.push('p.model_id = ?');
-    params.push(f.modelId);
-  }
   if (f.colorId) {
     where.push('p.color_id = ?');
     params.push(f.colorId);
@@ -246,12 +254,12 @@ export function listPurchases(db: Db, f: PurchaseListFilters): Array<Record<stri
     where.push('p.purchase_date <= ?');
     params.push(f.to);
   }
+  // no model here — raw cloth has no model until it is cut (RAW-CLOTH sentinel hidden)
   return db
     .prepare(
       `SELECT p.id, p.doc_no AS docNo, p.purchase_date AS purchaseDate,
               p.received_date AS receivedDate,
               p.vendor_id AS vendorId, v.name AS vendorName,
-              p.model_id AS modelId, m.code AS modelCode, m.name AS modelName,
               p.color_id AS colorId, c.name AS colorName,
               p.qty_cm AS qtyCm, p.rate_paise_per_meter AS ratePaisePerMeter,
               p.total_paise AS totalPaise, p.image_path AS imagePath, p.notes,
@@ -260,7 +268,6 @@ export function listPurchases(db: Db, f: PurchaseListFilters): Array<Record<stri
                WHERE l.stage = 'RAW' AND l.lot_type = 'purchase' AND l.lot_id = p.id) AS remainingCm
        FROM purchases p
        JOIN vendors v ON v.id = p.vendor_id
-       JOIN models m ON m.id = p.model_id
        JOIN colors c ON c.id = p.color_id
        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
        ORDER BY p.id DESC`,

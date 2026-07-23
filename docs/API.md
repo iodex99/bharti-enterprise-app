@@ -43,12 +43,12 @@ POST /api/uploads (A O, multipart `image` → webp path) · GET /uploads/* (all 
 ### Transactions
 | Path | Create | Extra endpoints | Void |
 |---|---|---|---|
-| /api/purchases | A O | PUT /:id (financial fields only) | A, blocked after cutting |
-| /api/opening-balances | A | | A, blocked after consumption |
-| /api/cutting | A O | POST /:id/actuals (variance reasons enforced) | A, blocked after issue |
-| /api/jobs | A O | POST /:id/receipts (partial/excess/unstitched), POST /:id/close (A) | A, unstarted only |
-| /api/checking | A O | POST /:id/results (pass/reject/missing sessions) | A, before results |
-| /api/packing | A O | POST /:id/results (packed/short sessions) | A, before results |
+| /api/purchases | A O — vendor+color+meters, NO model (decided at cutting) | PUT /:id (financial fields only) | A, blocked after cutting |
+| /api/opening-balances | A — RAW takes no model | | A, blocked after consumption |
+| /api/cutting | A O — modelId + per-line {clothPerPcInchC, widthCount}; consumption computed | PUT /:id (re-plan while 'planned'), DELETE /:id (planned only, soft), POST /:id/actuals (variance reasons enforced) | A, blocked after issue |
+| /api/jobs | A O | POST /:id/receipts (partial/excess/unstitched, optional imagePath photo), POST /:id/close (A) | A, unstarted only |
+| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs} names the received batch | GET /pending (batches waiting w/ contractor+photo), POST /:id/results (pass/reject/missing sessions) | A, before results |
+| /api/packing | A O (any active staff — no roles) | POST /:id/results (packed/short sessions) | A, before results |
 | /api/dispatches | A | | A (ledger replay) |
 | /api/contractors/payments | A O | | A |
 

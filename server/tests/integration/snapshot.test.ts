@@ -60,7 +60,7 @@ describe('complete backup + restore', () => {
       INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
     `);
     await request(ctx.app).post('/api/purchases').set('Cookie', admin).send({
-      purchaseDate: '2026-07-01', receivedDate: '2026-07-01', vendorId: 1, modelId: 1, colorId: 1,
+      purchaseDate: '2026-07-01', receivedDate: '2026-07-01', vendorId: 1, colorId: 1,
       qtyCm: 10000, ratePaisePerMeter: 4000, notes: 'in the snapshot',
     });
     const up = await request(ctx.app).post('/api/uploads').set('Cookie', admin).attach('image', await tinyPng(), 'billA.png');
@@ -88,7 +88,7 @@ describe('complete backup + restore', () => {
   it('restore rewinds ALL data and photos to the snapshot, atomically', async () => {
     // diverge from the snapshot: a second purchase + a second photo
     await request(ctx.app).post('/api/purchases').set('Cookie', admin).send({
-      purchaseDate: '2026-07-05', receivedDate: '2026-07-05', vendorId: 1, modelId: 1, colorId: 1,
+      purchaseDate: '2026-07-05', receivedDate: '2026-07-05', vendorId: 1, colorId: 1,
       qtyCm: 5000, ratePaisePerMeter: 4000, notes: 'AFTER the snapshot — must vanish',
     });
     const upB = await request(ctx.app).post('/api/uploads').set('Cookie', admin).attach('image', await tinyPng(), 'billB.png');

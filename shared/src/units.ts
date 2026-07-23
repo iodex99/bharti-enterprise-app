@@ -103,3 +103,48 @@ export function variancePct(expected: number, actual: number): number {
   if (expected === 0) return actual === 0 ? 0 : 100;
   return Math.round(((actual - expected) / expected) * 1000) / 10;
 }
+
+// ---------------------------------------------------------------------------
+// Cutting geometry: cloth length per piece is measured in INCHES on the table
+// (stored as integer HUNDREDTHS of an inch), and the cloth width fits several
+// pieces side by side ("width count"). 1 inch = 2.54 cm exactly.
+// ---------------------------------------------------------------------------
+
+export const INCH_CM_X100 = 254; // cm per inch, times 100
+
+/** Inches (max 2dp, e.g. 10.25) to integer hundredths of an inch. */
+export function inchesToInchC(inches: number): number {
+  const c = inches * 100;
+  assertInteger(c, 'length in hundredths of an inch');
+  return Math.round(c);
+}
+
+export function inchCToInches(inchC: number): number {
+  return inchC / 100;
+}
+
+/** Format hundredths of an inch: 1025 -> `10.25"`. */
+export function formatInchC(inchC: number): string {
+  const inches = inchC / 100;
+  const str = Number.isInteger(inches) ? inches.toString() : inches.toFixed(2).replace(/0$/, '');
+  return `${str}"`;
+}
+
+/**
+ * Cloth consumed by one cutting line, in integer cm (rounded UP — cloth cut is cloth
+ * gone). `widthCount` pieces sit side by side across the cloth width, so the length
+ * needed is ceil(pcs / widthCount) strips of `clothPerPcInchC` each.
+ * e.g. 120 pcs, 10" per piece, 3 across → 40 strips × 10" = 400" = 1016 cm.
+ */
+export function clothRequiredCm(
+  expectedPcs: number,
+  clothPerPcInchC: number,
+  widthCount: number,
+): number {
+  assertInteger(expectedPcs, 'pieces');
+  assertInteger(clothPerPcInchC, 'hundredths of an inch');
+  assertInteger(widthCount, 'width count');
+  if (expectedPcs <= 0 || clothPerPcInchC <= 0 || widthCount <= 0) return 0;
+  const strips = Math.ceil(expectedPcs / widthCount);
+  return Math.ceil((strips * clothPerPcInchC * INCH_CM_X100) / 100 / 100);
+}

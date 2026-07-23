@@ -37,7 +37,6 @@ beforeAll(async () => {
       purchaseDate: '2026-07-01',
       receivedDate: '2026-07-01',
       vendorId: 1,
-      modelId: 1,
       colorId: 1,
       qtyCm: 10000,
       ratePaisePerMeter: 4000,
@@ -48,8 +47,8 @@ beforeAll(async () => {
     cutDate: '2026-07-02',
     rawLotType: 'purchase',
     rawLotId: purchaseId,
-    metersUsedCm: 5000,
-    lines: [{ sizeId: 1, expectedPcs: 120 }],
+    modelId: 1,
+    lines: [{ sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 }],
   });
   await post(`/api/cutting/${plan.body.id}/actuals`, {
     lines: [{ sizeId: 1, actualPcs: 108, varianceReason: 'wastage', reasonNote: '' }],
@@ -66,16 +65,20 @@ beforeAll(async () => {
       id: number;
     }
   ).id;
-  await post(`/api/jobs/${job.body.id}/receipts`, {
+  const receipt = await post(`/api/jobs/${job.body.id}/receipts`, {
     receiptDate: '2026-07-05',
     lines: [{ jobCardLineId: jobLineId, qtyPcs: 108, returnType: 'stitched' }],
   });
+  const receiptLineId = (
+    ctx.db
+      .prepare('SELECT id FROM job_receipt_lines WHERE job_receipt_id = ?')
+      .get(receipt.body.id) as { id: number }
+  ).id;
   const check = await post('/api/checking', {
     issueDate: '2026-07-06',
     staffId: 1,
-    modelId: 1,
-    colorId: 1,
-    sizeId: 1,
+    lotType: 'receipt_line',
+    lotId: receiptLineId,
     qtyPcs: 108,
   });
   await post(`/api/checking/${check.body.id}/results`, {
@@ -116,8 +119,8 @@ beforeAll(async () => {
     cutDate: '2026-07-04',
     rawLotType: 'purchase',
     rawLotId: purchaseId,
-    metersUsedCm: 1000,
-    lines: [{ sizeId: 1, expectedPcs: 12 }],
+    modelId: 1,
+    lines: [{ sizeId: 1, expectedPcs: 12, clothPerPcInchC: 1000, widthCount: 3 }],
   });
   await post(`/api/cutting/${plan2.body.id}/actuals`, {
     lines: [{ sizeId: 1, actualPcs: 12 }],

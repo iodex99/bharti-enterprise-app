@@ -146,6 +146,24 @@ describe('masters validation & referential rules', () => {
     const res = await request(ctx.app).get('/api/masters/unicorns').set('Cookie', admin);
     expect(res.status).toBe(404);
   });
+
+  it('the RAW-CLOTH sentinel model is never listed, even with includeInactive', async () => {
+    const res = await request(ctx.app)
+      .get('/api/masters/models?includeInactive=1')
+      .set('Cookie', admin);
+    expect(res.status).toBe(200);
+    expect(
+      (res.body.items as Array<{ code?: string }>).some((m) => m.code === 'RAW-CLOTH'),
+    ).toBe(false);
+  });
+
+  it('staff can be created without a role (any staff checks or packs)', async () => {
+    const res = await request(ctx.app)
+      .post('/api/masters/staff')
+      .set('Cookie', admin)
+      .send({ name: 'Rolefree Staff', mobile: '' });
+    expect(res.status).toBe(201);
+  });
 });
 
 describe('uploads', () => {

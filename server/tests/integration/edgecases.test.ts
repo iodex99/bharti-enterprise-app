@@ -80,18 +80,16 @@ describe('unknown foreign keys are 400s, not 500s', () => {
     expect(res.body.error).toMatch(/model not found/i);
   });
 
-  it('check issue with unknown master falls to a clean 400 via the FK handler', async () => {
-    // put some CHECKING pool stock in first so the code path reaches the insert
+  it('check issue against an unknown received batch is a clean 400', async () => {
     const res = await request(ctx.app).post('/api/checking').set('Cookie', operator).send({
       issueDate: '2026-07-01',
       staffId: 1,
-      modelId: 999,
-      colorId: 1,
-      sizeId: 1,
+      lotType: 'receipt_line',
+      lotId: 999999,
       qtyPcs: 5,
     });
-    // either the pool check (409, nothing available) or the FK guard (400) — never 500
-    expect([400, 409]).toContain(res.status);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not found/i);
   });
 });
 
@@ -131,7 +129,6 @@ describe('assorted hostile input', () => {
       purchaseDate: '2026-07-01',
       receivedDate: '2026-07-01',
       vendorId: 1,
-      modelId: 1,
       colorId: 1,
       qtyCm: 9_000_000_000,
       ratePaisePerMeter: 100,
@@ -145,7 +142,6 @@ describe('assorted hostile input', () => {
       purchaseDate: '2026-07-01',
       receivedDate: '2026-07-01',
       vendorId: 1,
-      modelId: 1,
       colorId: 1,
       qtyCm: 100.5,
       ratePaisePerMeter: 100,

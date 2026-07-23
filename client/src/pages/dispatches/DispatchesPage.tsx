@@ -70,7 +70,14 @@ export default function DispatchesPage() {
             key: 'qtyPcs',
             header: 'Quantity',
             className: 'font-semibold',
-            render: (r) => (r.voidedAt ? <Badge tone="red">voided</Badge> : formatPieces(r.qtyPcs)),
+            // register color code: blue = goods issued out (for sale)
+            render: (r) =>
+              r.voidedAt ? (
+                <Badge tone="red">voided</Badge>
+              ) : (
+                <span className="text-sky-700">{formatPieces(r.qtyPcs)}</span>
+              ),
+            value: (r) => r.qtyPcs,
           },
           { key: 'notes', header: 'Notes', className: 'text-gray-500' },
         ]}

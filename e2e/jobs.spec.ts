@@ -20,7 +20,6 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 1 });
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: mobile ? 3 : 1 });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ label: mobile ? 'White' : 'Black' });
   await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('100');
   await page.getByRole('dialog').getByLabel('Rate per meter').fill('40');
@@ -35,9 +34,11 @@ test('issue job, partial receipts, auto-complete, contractor analytics update', 
     .first()
     .textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await page.getByRole('dialog').getByLabel('Cloth to use (meters)').fill('50');
+  await page.getByRole('dialog').getByLabel('Model (decided at cutting)').selectOption({ index: mobile ? 3 : 1 });
   await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'S2' });
   await page.getByRole('textbox', { name: 'Dozens' }).fill('10');
+  await page.getByRole('textbox', { name: 'Cloth per piece 1' }).fill('10');
+  await page.getByRole('textbox', { name: 'Across width 1' }).fill('3');
   await page.getByRole('button', { name: 'Save cutting plan' }).click();
   const cutRow = page.getByRole('row', { name: /CUT-\d+/ }).first();
   await cutRow.getByRole('button', { name: 'Record actuals' }).click();

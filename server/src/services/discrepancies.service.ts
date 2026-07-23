@@ -38,7 +38,7 @@ export function listDiscrepancies(db: Db): DiscrepancyRow[] {
               END AS docNo,
               COALESCE(CASE d.ref_type
                 WHEN 'job_card_line' THEN ct.name
-                WHEN 'check_result'  THEN cst.name
+                WHEN 'check_result'  THEN cst.name || COALESCE(' ← ' || ct_src.name, '')
                 WHEN 'pack_result'   THEN pst.name
               END, '') AS party,
               CASE d.ref_type
@@ -63,6 +63,13 @@ export function listDiscrepancies(db: Db): DiscrepancyRow[] {
        LEFT JOIN check_results cr ON d.ref_type = 'check_result' AND cr.id = d.ref_id
        LEFT JOIN check_issues ci ON ci.id = cr.check_issue_id
        LEFT JOIN staff cst ON cst.id = ci.staff_id
+       LEFT JOIN check_allocations ca ON ca.id =
+         (SELECT MIN(ca2.id) FROM check_allocations ca2
+          WHERE ca2.check_issue_id = ci.id AND ca2.checking_lot_type = 'receipt_line')
+       LEFT JOIN job_receipt_lines srl ON srl.id = ca.checking_lot_id
+       LEFT JOIN job_receipts sr ON sr.id = srl.job_receipt_id
+       LEFT JOIN job_cards sjc ON sjc.id = sr.job_card_id
+       LEFT JOIN contractors ct_src ON ct_src.id = sjc.contractor_id
        LEFT JOIN models m_ci ON m_ci.id = ci.model_id
        LEFT JOIN colors c_ci ON c_ci.id = ci.color_id
        LEFT JOIN sizes  s_ci ON s_ci.id = ci.size_id

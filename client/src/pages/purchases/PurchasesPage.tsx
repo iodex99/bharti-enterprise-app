@@ -15,9 +15,6 @@ type PurchaseRow = {
   receivedDate: string;
   vendorId: number;
   vendorName: string;
-  modelId: number;
-  modelCode: string;
-  modelName: string;
   colorId: number;
   colorName: string;
   qtyCm: number;
@@ -70,18 +67,15 @@ export default function PurchasesPage() {
             value: (r) => r.purchaseDate,
           },
           { key: 'vendorName', header: 'Vendor' },
+          // no model here — the model is decided at cutting
+          { key: 'colorName', header: 'Color', className: 'font-medium' },
           {
-            key: 'item',
-            header: 'Model / Color',
-            value: (r) => `${r.modelCode} ${r.colorName}`,
-            render: (r) => (
-              <span>
-                <span className="font-medium">{r.modelCode}</span>{' '}
-                <span className="text-gray-500">{r.colorName}</span>
-              </span>
-            ),
+            key: 'qtyCm',
+            header: 'Quantity',
+            // register color code: red = goods received in
+            render: (r) => <span className="font-medium text-red-700">{formatCm(r.qtyCm)}</span>,
+            value: (r) => r.qtyCm,
           },
-          { key: 'qtyCm', header: 'Quantity', render: (r) => formatCm(r.qtyCm), value: (r) => r.qtyCm },
           {
             key: 'remainingCm',
             header: 'Remaining',
@@ -109,7 +103,6 @@ export default function PurchasesPage() {
         emptyHint={canWrite ? 'Press “+ New purchase” to record the first cloth purchase.' : undefined}
         facets={[
           { key: 'vendor', label: 'Vendor', value: (r) => r.vendorName },
-          { key: 'model', label: 'Model', value: (r) => r.modelCode },
           { key: 'color', label: 'Color', value: (r) => r.colorName },
         ]}
         dateRange={{ label: 'Purchase date', value: (r) => r.purchaseDate }}
@@ -164,7 +157,6 @@ function NewPurchaseModal({
   const [purchaseDate, setPurchaseDate] = useState(todayIST());
   const [receivedDate, setReceivedDate] = useState(todayIST());
   const [vendorId, setVendorId] = useState<number | null>(null);
-  const [modelId, setModelId] = useState<number | null>(null);
   const [colorId, setColorId] = useState<number | null>(null);
   const [qtyCm, setQtyCm] = useState<number | null>(null);
   const [rate, setRate] = useState<number | null>(null);
@@ -183,7 +175,6 @@ function NewPurchaseModal({
           purchaseDate,
           receivedDate,
           vendorId,
-          modelId,
           colorId,
           qtyCm,
           ratePaisePerMeter: rate ?? 0,
@@ -203,8 +194,8 @@ function NewPurchaseModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!vendorId || !modelId || !colorId) {
-            setError('Pick vendor, model and color.');
+          if (!vendorId || !colorId) {
+            setError('Pick vendor and color.');
             return;
           }
           if (!qtyCm) {
@@ -224,10 +215,7 @@ function NewPurchaseModal({
         <Field label="Vendor">
           <MasterSelect master="vendors" value={vendorId} onChange={setVendorId} />
         </Field>
-        <Field label="Model">
-          <MasterSelect master="models" value={modelId} onChange={setModelId} />
-        </Field>
-        <Field label="Color">
+        <Field label="Color" hint="The model is decided later, at cutting">
           <MasterSelect master="colors" value={colorId} onChange={setColorId} />
         </Field>
         <Field label="Quantity (meters)">

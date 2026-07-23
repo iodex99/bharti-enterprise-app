@@ -82,11 +82,10 @@ export const REPORTS: ReportDef[] = [
     key: 'raw-stock',
     title: 'Raw Material Stock',
     group: 'Inventory',
-    description: 'Cloth on hand per batch, with vendor',
-    filters: ['modelId', 'colorId', 'vendorId'],
+    description: 'Cloth on hand per batch, with vendor (raw cloth has no model until cut)',
+    filters: ['colorId', 'vendorId'],
     columns: [
       { key: 'batch', header: 'Batch', type: 'text' },
-      { key: 'model', header: 'Model', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'vendor', header: 'Vendor', type: 'text' },
       { key: 'receivedDate', header: 'Received', type: 'date' },
@@ -95,22 +94,21 @@ export const REPORTS: ReportDef[] = [
     query: (db, f) => {
       const where: string[] = ["l.stage = 'RAW'"];
       const params: unknown[] = [];
-      dimClause(f, where, params, { model: 'l.model_id', color: 'l.color_id', vendor: 'p.vendor_id' });
+      dimClause(f, where, params, { color: 'l.color_id', vendor: 'p.vendor_id' });
       if (f.vendorId) where.push("l.lot_type = 'purchase'");
       return db
         .prepare(
-          `SELECT COALESCE(p.doc_no, o.doc_no) AS batch, m.code AS model, c.name AS color,
+          `SELECT COALESCE(p.doc_no, o.doc_no) AS batch, c.name AS color,
                   v.name AS vendor, COALESCE(p.received_date, o.balance_date) AS receivedDate,
                   SUM(l.qty) AS qtyCm
            FROM stock_ledger l
-           JOIN models m ON m.id = l.model_id
            JOIN colors c ON c.id = l.color_id
            LEFT JOIN purchases p ON l.lot_type = 'purchase' AND p.id = l.lot_id
            LEFT JOIN vendors v ON v.id = p.vendor_id
            LEFT JOIN opening_balances o ON l.lot_type = 'opening' AND o.id = l.lot_id
            ${w(where)}
            GROUP BY l.lot_type, l.lot_id HAVING SUM(l.qty) > 0
-           ORDER BY m.code, c.name`,
+           ORDER BY c.name`,
         )
         .all(...params) as Array<Record<string, unknown>>;
     },

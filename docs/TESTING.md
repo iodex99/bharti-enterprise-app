@@ -31,7 +31,8 @@ Playwright browsers: `npx playwright install chromium` once per machine.
 
 ## Coverage map (final)
 
-**Unit (60+):** integer unit converters incl. float-imprecision cases · doc numbering ·
+**Unit (60+):** integer unit converters incl. float-imprecision cases · inch converters +
+cloth-consumption geometry (strip round-up, width-count, cm ceil) · doc numbering ·
 version compare · business-date validation · FIFO splitter (exact/spanning/insufficient/
 fractional-rejection) · variance math · update-feed parsing + checksum matching.
 
@@ -47,13 +48,19 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
 - purchases: server-side totals, date rules, inactive-master rejection, idempotency
   replay, financial-only edits, void + downstream block
 - opening balances: per-stage validation, WIP-with-contractor, voids
-- cutting: over-consumption, duplicate sizes, variance-reason enforcement, unplanned
-  sizes, opening-lot cutting, void restore + consumption block
+- cutting: geometry-computed consumption (inches × width, exact + round-up cases),
+  over-consumption, duplicate sizes, missing geometry, variance-reason enforcement,
+  unplanned sizes, opening-lot cutting (no model on RAW), edit re-plan (restore →
+  recompute → same doc no; overdraw refused atomically; frozen after actuals),
+  delete-planned (soft void, cloth restored), void restore + consumption block
 - jobs: FIFO across batches with allocations, partial receipts 10dz=2+3+5 with
   auto-complete, excess (reason + genesis + discrepancy), unstitched returns to allocated
   lots, admin-only close with shortage writeoff, void rules, payments + dues math
-- checking/packing: staff-role gates, incremental sessions, breakdown-sum rule,
-  over-session rejection, REJECTED stage, FG output, dispatch + ledger-replay void
+- checking/packing: pending-pool listing (contractor + receipt + photo), DIRECTED issue
+  against a named batch (single allocation; over-issue/unknown-batch rejected), any-staff
+  gates (deactivated still refused), incremental sessions, breakdown-sum rule,
+  over-session rejection, REJECTED stage, discrepancy attribution to checker AND source
+  contractor, FG output, dispatch + ledger-replay void
 - discrepancies: list joins source docs (unresolved first), admin-only resolve
   (acknowledgement — ledger row count proven unchanged), audit row, 409 double-resolve,
   alert links point at /discrepancies

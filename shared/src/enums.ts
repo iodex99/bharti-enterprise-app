@@ -9,6 +9,17 @@ export type Stage = (typeof STAGES)[number];
 export const STAFF_ROLES = ['checker', 'packer', 'both'] as const;
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
+/**
+ * Sentinel model for raw cloth: the real model is only decided at CUTTING, so
+ * purchases and RAW ledger rows carry this inactive bookkeeping model instead.
+ * Never shown in dropdowns (is_active = 0) and hidden on RAW displays.
+ */
+export const RAW_CLOTH_MODEL_CODE = 'RAW-CLOTH';
+
+/** Sources a checker batch can be issued from (the un-checked CHECKING pool lots). */
+export const CHECKING_POOL_LOT_TYPES = ['receipt_line', 'opening'] as const;
+export type CheckingPoolLotType = (typeof CHECKING_POOL_LOT_TYPES)[number];
+
 export const UNIT_TYPES = ['dozens', 'pieces'] as const;
 export type UnitType = (typeof UNIT_TYPES)[number];
 

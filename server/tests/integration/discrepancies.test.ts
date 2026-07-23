@@ -26,7 +26,6 @@ beforeAll(async () => {
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
-    modelId: 1,
     colorId: 1,
     qtyCm: 20000,
     ratePaisePerMeter: 4000,
@@ -39,11 +38,11 @@ beforeAll(async () => {
       cutDate: '2026-07-02',
       rawLotType: 'purchase',
       rawLotId: purchase.body.id,
-      metersUsedCm: 8000,
+      modelId: 1,
       notes: '',
       lines: [
-        { sizeId: 1, expectedPcs: 120 },
-        { sizeId: 2, expectedPcs: 60 },
+        { sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 },
+        { sizeId: 2, expectedPcs: 60, clothPerPcInchC: 1200, widthCount: 2 },
       ],
     });
   // XS: -12 (wastage), S1: +12 (better yield) -> two CUT discrepancies

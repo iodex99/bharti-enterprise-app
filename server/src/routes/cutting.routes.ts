@@ -7,6 +7,8 @@ import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
 import {
   createCuttingPlan,
+  deletePlannedBatch,
+  editCuttingPlan,
   listCuttingBatches,
   recordActuals,
   voidCuttingBatch,
@@ -41,6 +43,18 @@ export function cuttingRoutes(): Router {
       res.status(201).json({ id: result.id, docNo: result.docNo });
     },
   );
+
+  /** Re-plan before cutting (status 'planned' only) — same body as create. */
+  router.put('/:id', requireRole('admin', 'operator'), validateBody(cuttingPlanSchema), (req, res) => {
+    const result = editCuttingPlan(getDb(), Number(req.params.id), req.body, req.user!.id, req.ip ?? null);
+    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+  });
+
+  /** Delete a not-yet-cut plan (soft: void with a standard reason, cloth restored). */
+  router.delete('/:id', requireRole('admin', 'operator'), (req, res) => {
+    const result = deletePlannedBatch(getDb(), Number(req.params.id), req.user!.id, req.ip ?? null);
+    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+  });
 
   router.post(
     '/:id/actuals',

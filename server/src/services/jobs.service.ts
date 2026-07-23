@@ -213,10 +213,10 @@ export function createReceipt(
       docNo = nextDocNo(db, 'receipt');
       const info = db
         .prepare(
-          `INSERT INTO job_receipts (doc_no, job_card_id, receipt_date, notes, created_by)
-           VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO job_receipts (doc_no, job_card_id, receipt_date, image_path, notes, created_by)
+           VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .run(docNo, jobCardId, input.receiptDate, input.notes, userId);
+        .run(docNo, jobCardId, input.receiptDate, input.imagePath ?? null, input.notes, userId);
       id = Number(info.lastInsertRowid);
 
       const insertReceiptLine = db.prepare(
@@ -554,6 +554,14 @@ export function listJobCards(
      JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
      WHERE rl.job_card_line_id = ?`,
   );
+  // pieces this contractor claims returned that no checker has verified yet
+  const pendingCheckStmt = db.prepare(
+    `SELECT COALESCE(SUM(l.qty), 0) AS pcs
+     FROM stock_ledger l
+     JOIN job_receipt_lines rl ON l.lot_type = 'receipt_line' AND rl.id = l.lot_id
+     JOIN job_receipts r ON r.id = rl.job_receipt_id
+     WHERE l.stage = 'CHECKING' AND l.staff_id IS NULL AND r.job_card_id = ?`,
+  );
 
   for (const card of cards) {
     const lines = lineStmt.all(card.id) as Array<Record<string, unknown>>;
@@ -581,6 +589,7 @@ export function listJobCards(
     card.receivedPcs = received;
     card.returnedPcs = returned;
     card.pendingPcs = lines.reduce((s, l) => s + (l.pendingPcs as number), 0);
+    card.pendingCheckPcs = (pendingCheckStmt.get(card.id) as { pcs: number }).pcs;
     card.jobCostPaise = lines.reduce(
       (s, l) =>
         s + Math.round(((l.receivedPcs as number) * (l.ratePaisePerDozen as number)) / 12),
@@ -593,7 +602,7 @@ export function listJobCards(
 export function jobReceiptsFor(db: Db, jobCardId: number): Array<Record<string, unknown>> {
   return db
     .prepare(
-      `SELECT r.id, r.doc_no AS docNo, r.receipt_date AS receiptDate, r.notes,
+      `SELECT r.id, r.doc_no AS docNo, r.receipt_date AS receiptDate, r.image_path AS imagePath, r.notes,
               rl.job_card_line_id AS jobCardLineId, rl.qty_pcs AS qtyPcs, rl.return_type AS returnType,
               s.code AS sizeCode
        FROM job_receipts r

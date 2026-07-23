@@ -21,7 +21,6 @@ export function purchasesRoutes(): Router {
     res.json({
       items: listPurchases(getDb(), {
         vendorId: num(req.query.vendorId),
-        modelId: num(req.query.modelId),
         colorId: num(req.query.colorId),
         from: typeof req.query.from === 'string' ? req.query.from : undefined,
         to: typeof req.query.to === 'string' ? req.query.to : undefined,

@@ -21,12 +21,12 @@ import type { ServiceResult } from './purchases.service';
  */
 
 function staffCanPack(db: Db, staffId: number): string | null {
+  // any active staff member can pack — no fixed checker/packer roles
   const staff = db
-    .prepare('SELECT role, is_active FROM staff WHERE id = ? AND deleted_at IS NULL')
-    .get(staffId) as { role: string; is_active: number } | undefined;
+    .prepare('SELECT is_active FROM staff WHERE id = ? AND deleted_at IS NULL')
+    .get(staffId) as { is_active: number } | undefined;
   if (!staff) return 'Packer not found.';
   if (!staff.is_active) return 'This staff member is deactivated.';
-  if (staff.role !== 'packer' && staff.role !== 'both') return 'This staff member is not a packer.';
   return null;
 }
 

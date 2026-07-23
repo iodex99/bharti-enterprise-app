@@ -44,6 +44,51 @@ export function MetersInput({
 }
 
 /**
+ * Inches entry (max 2 decimals), value held in integer HUNDREDTHS of an inch.
+ * Initializes once — remount (key=) to load a different record.
+ */
+export function InchesInput({
+  inchC,
+  onChange,
+  placeholder,
+  disabled,
+  ariaLabel,
+}: {
+  inchC: number | null;
+  onChange: (inchC: number | null) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  const [text, setText] = useState(() => (inchC == null ? '' : (inchC / 100).toString()));
+  return (
+    <div className="relative">
+      <TextInput
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        value={text}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(e) => {
+          const t = e.target.value;
+          if (!/^\d*(\.\d{0,2})?$/.test(t)) return;
+          setText(t);
+          if (t === '' || t === '.') {
+            onChange(null);
+            return;
+          }
+          const inches = Number.parseFloat(t);
+          onChange(Number.isFinite(inches) ? Math.round(inches * 100) : null);
+        }}
+      />
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-400">
+        in
+      </span>
+    </div>
+  );
+}
+
+/**
  * Dozens + pieces split entry, value held in integer PIECES (1dz = 12pc).
  * Initializes once — remount (key=) to load a different record.
  */

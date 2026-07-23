@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clothRequiredCm,
   cmToMeters,
   dozensToPieces,
   dzPcToPieces,
   formatCm,
+  formatInchC,
   formatPaise,
   formatPieces,
+  inchCToInches,
+  inchesToInchC,
   metersToCm,
   paiseToRupees,
   piecesToDzPc,
@@ -116,5 +120,37 @@ describe('variance', () => {
 
   it('rounds to one decimal', () => {
     expect(variancePct(36, 35)).toBe(-2.8);
+  });
+});
+
+describe('cutting geometry (inches + width count)', () => {
+  it('converts inches to hundredths and back, rejecting sub-hundredth precision', () => {
+    expect(inchesToInchC(10)).toBe(1000);
+    expect(inchesToInchC(10.25)).toBe(1025);
+    expect(inchCToInches(1025)).toBe(10.25);
+    expect(() => inchesToInchC(10.255)).toThrow(/whole number/);
+  });
+
+  it('formats hundredths of an inch', () => {
+    expect(formatInchC(1000)).toBe('10"');
+    expect(formatInchC(1025)).toBe('10.25"');
+    expect(formatInchC(1050)).toBe('10.5"');
+  });
+
+  it('computes cloth consumption: strips of the width, rounded up', () => {
+    // 120 pcs, 10" each, 3 across → 40 strips × 10" = 400" = exactly 1016 cm
+    expect(clothRequiredCm(120, 1000, 3)).toBe(1016);
+    // partial strip still consumes a full strip: 121 pcs → 41 strips
+    expect(clothRequiredCm(121, 1000, 3)).toBe(Math.ceil((41 * 1000 * 254) / 10000));
+    // width 1 = every piece is its own strip
+    expect(clothRequiredCm(10, 1200, 1)).toBe(Math.ceil((10 * 1200 * 254) / 10000));
+    // fractional cm rounds UP (cloth cut is cloth gone): 180 pcs, 9" ×3 → 1371.6 → 1372
+    expect(clothRequiredCm(180, 900, 3)).toBe(1372);
+  });
+
+  it('returns 0 for empty/invalid rather than negative or NaN', () => {
+    expect(clothRequiredCm(0, 1000, 3)).toBe(0);
+    expect(clothRequiredCm(10, 0, 3)).toBe(0);
+    expect(clothRequiredCm(10, 1000, 0)).toBe(0);
   });
 });

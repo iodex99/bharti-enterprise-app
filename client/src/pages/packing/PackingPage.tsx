@@ -81,7 +81,13 @@ export default function PackingPage() {
               </span>
             ),
           },
-          { key: 'qtyPcs', header: 'Issued', render: (r) => formatPieces(r.qtyPcs) },
+          {
+            key: 'qtyPcs',
+            header: 'Issued',
+            // register color code: blue = goods issued out (to the packer)
+            render: (r) => <Badge tone="blue">{formatPieces(r.qtyPcs)}</Badge>,
+            value: (r) => r.qtyPcs,
+          },
           {
             key: 'progress',
             header: 'Packed / Short',
@@ -154,8 +160,7 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
   const [sizeId, setSizeId] = useState<number | null>(null);
   const [qtyPcs, setQty] = useState<number | null>(null);
   const [error, setError] = useState('');
-  const { data: staff } = useMasterOptions('staff');
-  const packers = staff?.filter((s) => s.role === 'packer' || s.role === 'both');
+  const { data: staff } = useMasterOptions('staff'); // any staff member can pack
 
   const save = useMutation({
     mutationFn: () =>
@@ -179,14 +184,14 @@ function IssueModal({ open, onClose, onDone }: { open: boolean; onClose: () => v
         <Field label="Date">
           <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
         </Field>
-        <Field label="Packer" hint="Staff with role Checker + Packer can do both jobs">
+        <Field label="Packer" hint="Any staff member can check or pack">
           <Select value={staffId ?? ''} onChange={(e) => setStaffId(e.target.value ? Number(e.target.value) : null)}>
             <option value="" disabled>
               — select packer —
             </option>
-            {packers?.map((s) => (
+            {staff?.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name as string} {s.role === 'both' ? '(checker+packer)' : ''}
+                {s.name as string}
               </option>
             ))}
           </Select>

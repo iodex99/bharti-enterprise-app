@@ -79,7 +79,7 @@
 
 ## Current state
 
-ALL PHASES COMPLETE (0–11) + post-ship additions. 273 unit/integration + 49 E2E green;
+ALL PHASES COMPLETE (0–11) + post-ship additions. 305 unit/integration + 49 E2E green;
 update drill 13/13. IN-APP DEMO MODE: Admin → System Health buttons switch the live app
 onto a separate demo database (data-demo sibling; sessions/uploads/backups follow the
 active DB via db/dataDirs.ts activeDataDir(); flag file survives restarts). Remote
@@ -90,6 +90,12 @@ MIGRATION/COMPLETE BACKUP live (ADR-014/015): one-zip snapshot (DB+photos+manife
 snapshot.service.ts; safe in-app restore = synchronous connection-swap + auto-rollback +
 session clear; first-run setup wizard (/setup) for a new PC; Backups page has download /
 send-to-Drive / restore. adm-zip@0.6.0 dependency added.
+WORKFLOW CORRECTIONS (migration 002, ADR-016…020): model decided at CUTTING (RAW-CLOTH
+sentinel model id 1000000, hidden everywhere); cutting geometry in inches × width-count →
+computed consumption (shared clothRequiredCm) with live remaining; plan edit/delete while
+planned; DIRECTED checking from per-receipt "pending for checking" lots with explicit
+contractor↔checker mapping + receipt photos; staff roles removed (any staff checks/packs);
+register ink colors in UI (blue=out, red=in).
 
 **Environment quirks discovered (don't relearn these):**
 - Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
@@ -108,6 +114,16 @@ send-to-Drive / restore. adm-zip@0.6.0 dependency added.
    WhatsApp alerts, low-stock thresholds, rework flow…).
 
 ## Session notes
+
+- 2026-07-23 (post-ship): six workflow corrections from the owner (see CHANGELOG). Key
+  implementation notes for the future: the RAW-CLOTH sentinel model is pinned at id
+  1000000 so test fixtures inserting masters with ids 1..N never collide; RAW ledger rows
+  ALWAYS use the lot's stored model (rawLotModelId) — using the batch's model would split
+  lot balances across dimensions; plan edit = adjustment_in restore → availability check
+  INSIDE the tx → delete+reinsert lines → cutting_consume (doc no kept); "delete plan" is
+  a void with a standard reason (no hard deletes); directed checking still writes
+  check_allocations (single row) so traceability is untouched; demo model ids are captured
+  from inserts, never hardcoded.
 
 - 2026-07-22 (post-ship): Complete backup + one-file migration. New snapshot.service.ts
   (build/inspect/restore/cloud) reuses the demo runtime connection-swap but SYNCHRONOUSLY

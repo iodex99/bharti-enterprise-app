@@ -15,6 +15,7 @@ import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
 import {
   createCheckIssue,
   listCheckIssues,
+  listPendingChecking,
   recordCheckResult,
   voidCheckIssue,
 } from '../services/checking.service';
@@ -34,6 +35,11 @@ export function checkingRoutes(): Router {
 
   router.get('/', requireAuth, (_req, res) => {
     res.json({ items: listCheckIssues(getDb()) });
+  });
+
+  /** Received-but-unchecked batches, with contractor + receipt photo (the pool). */
+  router.get('/pending', requireAuth, (_req, res) => {
+    res.json({ items: listPendingChecking(getDb()) });
   });
 
   router.post(

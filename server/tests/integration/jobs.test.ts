@@ -40,12 +40,11 @@ beforeAll(async () => {
     INSERT INTO contractors (id, name, default_rate_paise_per_dozen, created_by)
       VALUES (1, 'Meena', 3000, 1), (2, 'Rafiq', 2800, 1);
   `);
-  // purchase + two cutting batches
+  // purchase + two cutting batches (model chosen at cutting; consumption computed)
   const purchase = await request(ctx.app).post('/api/purchases').set('Cookie', operator).send({
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
-    modelId: 1,
     colorId: 1,
     qtyCm: 50000,
     ratePaisePerMeter: 4000,
@@ -59,10 +58,10 @@ beforeAll(async () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchase.body.id,
-        metersUsedCm: 10000,
+        modelId: 1,
         lines: [
-          { sizeId: 1, expectedPcs: 120 },
-          { sizeId: 2, expectedPcs: 60 },
+          { sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 },
+          { sizeId: 2, expectedPcs: 60, clothPerPcInchC: 1200, widthCount: 2 },
         ],
       });
     await request(ctx.app)
