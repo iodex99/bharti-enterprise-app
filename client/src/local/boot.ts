@@ -62,9 +62,10 @@ export async function bootApp(): Promise<void> {
     readRollbackNotice();
 
     if (info.initialAdmin) {
-      // First run on this device: the generated password must be shown somewhere the
-      // owner will see it, and it must be changed at first sign-in.
-      sessionStorage.setItem('bharti.initialAdmin', JSON.stringify(info.initialAdmin));
+      // First run on this device. This password exists nowhere else, so keep it until it
+      // has been changed — the sign-in screen shows it (see pages/LoginPage.tsx).
+      const { rememberInitialAdmin } = await import('./first-run');
+      rememberInitialAdmin(info.initialAdmin);
     }
 
     void ops.runDailyBackupIfDue();

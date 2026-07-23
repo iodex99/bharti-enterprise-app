@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../lib/auth';
+import { clearInitialAdmin } from '../local/first-run';
 import { Button, ErrorText, Field, TextInput } from '../components/ui';
 
 export default function ChangePasswordPage({ forced = false }: { forced?: boolean }) {
@@ -23,6 +24,8 @@ export default function ChangePasswordPage({ forced = false }: { forced?: boolea
     setError('');
     try {
       await api.post('/api/auth/change-password', { currentPassword, newPassword });
+      // The generated first-run password is now worthless — stop showing it on sign-in.
+      clearInitialAdmin();
       await refresh();
       navigate('/', { replace: true });
     } catch (err) {

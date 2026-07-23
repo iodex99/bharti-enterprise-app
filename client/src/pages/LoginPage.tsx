@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../lib/auth';
 import { useHealth } from '../api/health';
+import { readInitialAdmin } from '../local/first-run';
 import { Button, ErrorText, Field, TextInput } from '../components/ui';
 
 export default function LoginPage() {
@@ -13,6 +14,9 @@ export default function LoginPage() {
   const { refresh } = useAuth();
   const { data: health } = useHealth();
   const navigate = useNavigate();
+  // Only ever set on a device the app set itself up on, and cleared once the password
+  // has been changed.
+  const [firstRun] = useState(readInitialAdmin);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,6 +48,23 @@ export default function LoginPage() {
             🎭 <strong>Demo mode</strong> — sign in with <code>admin</code> /{' '}
             <code>Admin@123</code>
           </p>
+        )}
+        {firstRun && (
+          <div className="mb-4 rounded-xl border border-violet-300 bg-violet-50 px-3 py-3 text-sm text-violet-900">
+            <p className="font-semibold">👋 This device is new — here is your sign-in.</p>
+            <p className="mt-2">
+              Username <code className="rounded bg-white px-1 py-0.5 font-mono">{firstRun.username}</code>
+              <br />
+              Password{' '}
+              <code className="rounded bg-white px-1 py-0.5 font-mono text-base tracking-wider">
+                {firstRun.password}
+              </code>
+            </p>
+            <p className="mt-2 text-xs">
+              Write it down. You will be asked to set your own password straight away, and
+              this message will disappear once you have.
+            </p>
+          </div>
         )}
         {typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('restored') && (
           <p className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-900">

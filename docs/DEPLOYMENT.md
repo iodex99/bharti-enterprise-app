@@ -29,10 +29,11 @@ internet at all; the internet is used only to look for updates.
 1. On the phone/tablet: **Settings → Apps → Special access → Install unknown apps** and
    allow the browser (or Files) to install apps. This is needed because the app is not
    distributed through the Play Store.
-2. Open the latest release on GitHub and download `bharti-v1.0.<N>.apk`.
+2. Open the latest release on GitHub and download `bharti-v1.1.<N>.apk`.
 3. Open the downloaded file and confirm the install.
-4. Open the app. On first run it creates the admin account and shows the generated
-   password once — write it down; it must be changed at first sign-in.
+4. Open the app. On first run it creates the admin account and **shows the username and
+   password on the sign-in screen** — write them down. You are taken straight to
+   "Change password"; the one-time password stops being shown once you have set your own.
 5. The setup screen offers **Start fresh** or **Move from another device**.
 
 **Keep the device's Android System WebView up to date** (Play Store → Android System
@@ -61,12 +62,12 @@ fails to start twice is rolled back to the previous one automatically.
 
 `.github/workflows/android-release.yml` runs on every push to `main`. It gates on
 typecheck + lint + the full unit/integration suite + all three E2E projects, then
-publishes `v1.0.<run_number>` with:
+publishes `v1.1.<run_number>` with:
 
 | Asset | What it is |
 |---|---|
-| `web-bundle-v1.0.N.zip` | what the installed app downloads and swaps in by itself |
-| `bharti-v1.0.N.apk` | full installer — first install, or a native-shell change |
+| `web-bundle-v1.1.N.zip` | what the installed app downloads and swaps in by itself |
+| `bharti-v1.1.N.apk` | full installer — first install, or a native-shell change |
 | `app-manifest.json` | version, sha256s and `minNativeVersion` — how the app decides |
 | `checksums.txt` | sha256sums, for verifying by hand |
 
@@ -77,8 +78,16 @@ is fine for a trial but **cannot be upgraded by a later release**.
 ```bash
 keytool -genkey -v -keystore bharti-release.keystore -alias bharti \
         -keyalg RSA -keysize 2048 -validity 10000
-base64 -w0 bharti-release.keystore > keystore.b64     # macOS: base64 -i ...
 ```
+
+Then base64-encode it — on Windows PowerShell:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("bharti-release.keystore")) |
+  Set-Content keystore.b64 -NoNewline
+```
+
+(macOS/Linux: `base64 -w0 bharti-release.keystore > keystore.b64`.)
 
 Add as repository secrets: `ANDROID_KEYSTORE_BASE64` (contents of `keystore.b64`),
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`bharti`), `ANDROID_KEY_PASSWORD`.

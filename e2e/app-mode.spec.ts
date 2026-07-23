@@ -46,7 +46,7 @@ async function bootAndSignIn(page: Page): Promise<void> {
   await page.goto('/');
   await page.waitForSelector('form', { timeout: 45_000 });
 
-  const raw = await page.evaluate(() => sessionStorage.getItem('bharti.initialAdmin'));
+  const raw = await page.evaluate(() => localStorage.getItem('bharti.initialAdmin'));
   expect(raw, 'the app generates an admin password on first run').toBeTruthy();
   const { username, password } = JSON.parse(raw!) as { username: string; password: string };
 
@@ -82,6 +82,37 @@ async function seedMasters(page: Page): Promise<void> {
 }
 
 test.describe('the app runs the whole system on the device', () => {
+  test('a brand-new device can be signed into, through the screen alone', async ({ page }) => {
+    // The generated password exists nowhere else — no server, no email, no printout. If
+    // the sign-in screen does not show it, the device is unusable, so this walks the
+    // whole first-run path the way the owner does, touching no storage directly.
+    await page.goto('/');
+    await page.waitForSelector('form', { timeout: 45_000 });
+
+    const callout = page.getByText(/This device is new/i);
+    await expect(callout).toBeVisible();
+    const shown = await page.locator('code').allInnerTexts();
+    const [username, password] = [shown[0]!.trim(), shown[1]!.trim()];
+    expect(username).toBe('admin');
+    expect(password).toMatch(/^[a-f0-9]{8}$/);
+
+    await page.getByLabel('Username').fill(username);
+    await page.getByLabel('Password').fill(password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    // Forced straight into setting a real password.
+    await expect(page.getByText(/must set a new password/i)).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel('Current password').fill(password);
+    await page.getByLabel('New password', { exact: true }).fill('Owner@2026');
+    await page.getByLabel('Confirm new password').fill('Owner@2026');
+    await page.getByRole('button', { name: 'Save new password' }).click();
+    await expect(page.getByText(/must set a new password/i)).toBeHidden({ timeout: 20_000 });
+
+    // …and the one-time password stops being offered once it is worthless.
+    await page.goto('/login');
+    await expect(callout).toBeHidden();
+  });
+
   test('first run creates an admin, applies migrations and records real work', async ({ page }) => {
     await bootAndSignIn(page);
 
