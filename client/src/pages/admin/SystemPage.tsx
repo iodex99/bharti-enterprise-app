@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { Badge, Button, ErrorText, Field, Spinner, TextInput } from '../../components/ui';
@@ -139,7 +138,6 @@ type DemoStatus = { active: boolean; demoExists: boolean };
 
 function DemoCard() {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [error, setError] = useState('');
   const { data: demo } = useQuery({
     queryKey: ['system', 'demo'],
@@ -147,10 +145,11 @@ function DemoCard() {
   });
 
   const finishSwitch = () => {
-    // the session lives in the database we just switched away from
-    queryClient.clear();
-    navigate('/login', { replace: true });
-    window.location.reload();
+    // The session, and every cached query, belong to the database we just switched away
+    // from — so this is one full page load, not a router navigation followed by a reload.
+    // (Doing both fired two navigations to /login, which raced each other.) `replace`
+    // keeps an admin page for a dead session out of the back history.
+    window.location.replace('/login');
   };
 
   const enter = useMutation({

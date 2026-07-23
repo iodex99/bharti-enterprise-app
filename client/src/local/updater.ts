@@ -8,7 +8,6 @@ import {
 } from '@shared';
 import { sha256Hex } from './shims/node-crypto';
 import { getShell, type BundleRecord, type BundleState } from './shell';
-import { exportDatabase } from './bridge';
 
 /**
  * In-app updates.
@@ -209,6 +208,8 @@ async function applyBundleUpdate(): Promise<void> {
   // Data is not part of the bundle and is not touched by the swap — this copy exists so
   // there is always a rewind point taken immediately before a version change.
   try {
+    // imported here, not at module scope: bridge.ts pulls in the whole worker plumbing
+    const { exportDatabase } = await import('./bridge');
     const dbBytes = await exportDatabase();
     await shell.writePrivateFile(`pre-update-${manifest.version}.db`, dbBytes);
   } catch (err) {

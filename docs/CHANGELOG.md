@@ -31,6 +31,14 @@ commit messages; this file is the human-curated history.
   with damaged, incomplete and non-starting releases — and unit tests pinning the shims
   against the real Node modules.
 
+  Follow-ups from the first CI run: switching demo mode fired **two** navigations to
+  /login (a router navigation *and* a full reload), which raced each other — now a single
+  page load, which is what "everything cached belongs to the old database" actually calls
+  for. Releases moved to the **1.1.x** line and the PC pipeline became manual-only:
+  running both on every push raced for version tags and, worse, whichever finished last
+  became `releases/latest` — the feed installed apps read — where a PC zip has no
+  Android manifest and looks like a broken release to every device.
+
 - 2026-07-23 — Six workflow corrections from the owner's real process (migration 002):
   **(1)** the model is now decided at CUTTING — purchases are just vendor + color +
   meters (a hidden RAW-CLOTH bookkeeping model fills the old columns; RAW stock, reports

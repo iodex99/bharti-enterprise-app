@@ -5,7 +5,20 @@ import { expect, test, type Page } from '@playwright/test';
  * the live server's database and restores real mode before finishing.
  */
 async function signIn(page: Page, username: string, password: string) {
-  await page.goto('/login');
+  // Switching demo mode ends the session, and the app sends itself to /login. That
+  // redirect can land while this navigation is still in flight, which Playwright reports
+  // as an interrupted navigation. Both end up on the same page, so retry and then wait
+  // for the form rather than for one particular navigation to win the race.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await page.goto('/login');
+      break;
+    } catch (err) {
+      const interrupted = String(err).includes('interrupted by another navigation');
+      if (!interrupted || attempt >= 2) throw err;
+    }
+  }
+  await page.getByLabel('Username').waitFor({ state: 'visible', timeout: 15_000 });
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();

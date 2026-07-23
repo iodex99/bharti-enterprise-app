@@ -1,8 +1,16 @@
-name: Release
+name: Release (PC server — manual)
+
+# The shipped product is the Android app, released by android-release.yml on every push.
+# This workflow builds the optional Windows PC deployment and is MANUAL ONLY: if both ran
+# on every push they would race for version tags, and — worse — whichever finished last
+# would become `releases/latest`, which is the feed installed apps read to decide whether
+# an update exists. A PC zip has no app-manifest.json, so it would look like a broken
+# release to every device.
+#
+# It publishes the 1.0.x line; the app publishes 1.1.x.
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: release

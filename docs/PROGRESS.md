@@ -123,6 +123,9 @@ register ink colors in UI (blue=out, red=in).
   evaluating cannot report anything, and the page just hangs. Load on first message.
 - Android cannot silently install an APK over itself — hence bundle updates, with
   `android/native-version.txt` recording the run number at which the shell last changed.
+- ONE workflow may publish to `releases/latest`: it is the update feed. android-release.yml
+  owns it (1.1.x); release.yml (PC, 1.0.x) is workflow_dispatch only. `github.run_number`
+  is per-workflow and restarts at 1, which is why the app line starts at a new minor.
 - `page.evaluate` races the app's self-restart during the update drill ("execution
   context destroyed") — probe helpers must tolerate navigation.
 
