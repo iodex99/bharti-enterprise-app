@@ -7,7 +7,20 @@ export type Db = Database.Database;
 
 let instance: Db | null = null;
 
+/**
+ * The in-app (Android) runtime has no native better-sqlite3; it installs a SQLite-WASM
+ * connection with the same API here before anything opens a database. On the Node host
+ * this stays null and the better-sqlite3 path below is used.
+ */
+type Opener = (file: string) => Db;
+let opener: Opener | null = null;
+
+export function setDatabaseOpener(fn: Opener | null): void {
+  opener = fn;
+}
+
 export function openDatabase(file: string): Db {
+  if (opener) return opener(file);
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   // Office PC has no UPS — pay the (tiny, at this write volume) cost for power-loss durability.

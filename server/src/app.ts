@@ -1,26 +1,20 @@
 import express from 'express';
 import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { config } from './config';
-import { attachUser, checkOrigin } from './middleware/auth';
-import { systemRoutes } from './routes/system.routes';
-import { authRoutes } from './routes/auth.routes';
-import { usersRoutes } from './routes/users.routes';
-import { auditRoutes } from './routes/audit.routes';
-import { mastersRoutes } from './routes/masters.routes';
-import { uploadsRoutes, uploadsStatic } from './routes/uploads.routes';
-import { purchasesRoutes } from './routes/purchases.routes';
-import { stockRoutes } from './routes/stock.routes';
-import { openingRoutes } from './routes/opening.routes';
-import { cuttingRoutes } from './routes/cutting.routes';
-import { contractorsRoutes, jobsRoutes } from './routes/jobs.routes';
-import { checkingRoutes, dispatchesRoutes, packingRoutes } from './routes/checking.routes';
-import { discrepanciesRoutes } from './routes/discrepancies.routes';
-import { reportsRoutes, traceRoutes } from './routes/reports.routes';
-import { dashboardRoutes } from './routes/dashboard.routes';
+import { mountApiRoutes, mountCoreMiddleware, mountErrorHandler } from './app.core';
+import { systemNodeRoutes } from './routes/system.node.routes';
+import { setImageProcessor } from './platform/image';
+import { nodeImageProcessor } from './platform/image.node';
 
+/**
+ * The Node/Express host: development, the automated test suite, and the optional
+ * PC deployment. The Android app assembles the same routes in-process instead
+ * (see app.core.ts + client/src/local/server.worker.ts).
+ */
 export function createApp() {
+  setImageProcessor(nodeImageProcessor);
+
   const app = express();
 
   app.disable('x-powered-by');
@@ -36,40 +30,14 @@ export function createApp() {
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
+          workerSrc: ["'self'", 'blob:'],
         },
       },
     }),
   );
-  app.use(express.json({ limit: '2mb' }));
-  app.use(cookieParser());
-  app.use(checkOrigin);
-  app.use(attachUser);
 
-  app.use('/api/system', systemRoutes());
-  app.use('/api/auth', authRoutes());
-  app.use('/api/users', usersRoutes());
-  app.use('/api/audit', auditRoutes());
-  app.use('/api/masters', mastersRoutes());
-  app.use('/api/uploads', uploadsRoutes());
-  app.use('/uploads', uploadsStatic());
-  app.use('/api/purchases', purchasesRoutes());
-  app.use('/api/stock', stockRoutes());
-  app.use('/api/opening-balances', openingRoutes());
-  app.use('/api/cutting', cuttingRoutes());
-  app.use('/api/jobs', jobsRoutes());
-  app.use('/api/contractors', contractorsRoutes());
-  app.use('/api/checking', checkingRoutes());
-  app.use('/api/packing', packingRoutes());
-  app.use('/api/dispatches', dispatchesRoutes());
-  app.use('/api/discrepancies', discrepanciesRoutes());
-  app.use('/api/reports', reportsRoutes());
-  app.use('/api/trace', traceRoutes());
-  app.use('/api/dashboard', dashboardRoutes());
-
-  // Unknown API routes are a JSON 404, not the SPA fallback.
-  app.use('/api', (_req, res) => {
-    res.status(404).json({ error: 'Not found' });
-  });
+  mountCoreMiddleware(app);
+  mountApiRoutes(app, { systemOps: systemNodeRoutes() });
 
   if (config.clientDist) {
     app.use(express.static(config.clientDist, { index: false, maxAge: '1h' }));
@@ -78,26 +46,7 @@ export function createApp() {
     });
   }
 
-  // Central error handler — Express 5 forwards async throws here automatically.
-  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    // SQLite constraint violations (unknown foreign key, CHECK breach) are client
-    // errors — a well-formed request can never trigger them.
-    const code = (err as { code?: string }).code;
-    if (typeof code === 'string' && code.startsWith('SQLITE_CONSTRAINT')) {
-      res.status(400).json({
-        error: 'A referenced record does not exist or the values break a data rule.',
-      });
-      return;
-    }
-    // body-parser errors (malformed JSON, oversized payloads) carry their own 4xx status
-    const status = (err as { status?: number }).status;
-    if (typeof status === 'number' && status >= 400 && status < 500) {
-      res.status(status).json({ error: 'Invalid request body.' });
-      return;
-    }
-    console.error('[error]', err);
-    res.status(500).json({ error: 'Internal server error' });
-  });
+  mountErrorHandler(app);
 
   return app;
 }

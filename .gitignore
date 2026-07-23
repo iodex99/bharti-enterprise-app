@@ -4,7 +4,19 @@ node_modules/
 # builds
 dist/
 client/dist/
+client/dist-app/
+dist-release/
 *.tsbuildinfo
+
+# android build output + signing material (the keystore lives in CI secrets only)
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/release.keystore
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties
 
 # runtime data — NEVER in git; survives updates
 data/

@@ -9,6 +9,12 @@ type UpdateStatus = {
   latest: string | null;
   updateAvailable: boolean;
   notes: string;
+  /**
+   * App builds only. 'bundle' updates install on tap; 'apk' means the app file itself
+   * changed, and Android requires the user to confirm that install.
+   */
+  kind?: 'bundle' | 'apk' | null;
+  rolledBackFrom?: string;
 };
 
 const POLL_CHECK_MS = 15 * 60 * 1000; // periodic "is there an update" check
@@ -121,13 +127,47 @@ export function UpdateBanner({ canUpdate = true }: { canUpdate?: boolean }) {
     );
   }
 
+  // A bundle that failed to start was put back automatically. The notice stays until
+  // someone acknowledges it — whoever tapped Update may not be who opens the app next.
+  if (status?.rolledBackFrom) {
+    return (
+      <Banner tone="error">
+        Version {status.rolledBackFrom} would not start, so the previous version was restored
+        automatically. Your data was not affected.
+        <button
+          className="ml-3 underline"
+          onClick={() => {
+            setStatus((s) => (s ? { ...s, rolledBackFrom: undefined } : s));
+            void fetch('/api/system/update-rollback-notice', { method: 'DELETE' });
+          }}
+        >
+          Dismiss
+        </button>
+      </Banner>
+    );
+  }
+
   if (status?.updateAvailable) {
     return (
       <Banner tone="info">
         <span>
           New version <strong>{status.latest}</strong> available (you have v{status.current}).
         </span>
-        {canUpdate && status.supervised && (
+        {canUpdate && status.kind === 'apk' && (
+          <button
+            onClick={() => void fetch('/api/system/update-apk', { method: 'POST' })}
+            className="ml-3 rounded-md bg-violet-600 px-3 py-1 text-sm font-semibold text-white hover:bg-violet-700"
+          >
+            Download app file
+          </button>
+        )}
+        {canUpdate && status.kind === 'apk' && (
+          <span className="ml-2 text-xs opacity-70">
+            (this one replaces the app itself — open the downloaded file to install; your data
+            stays on the device)
+          </span>
+        )}
+        {canUpdate && status.kind !== 'apk' && status.supervised && (
           <button
             onClick={() => void begin()}
             className="ml-3 rounded-md bg-violet-600 px-3 py-1 text-sm font-semibold text-white hover:bg-violet-700"

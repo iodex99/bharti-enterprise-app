@@ -5,7 +5,8 @@
 ```bash
 npm test              # Vitest: unit + integration (server workspace)
 npm run build         # required before e2e (playwright serves server/dist)
-npm run test:e2e      # Playwright, desktop + mobile projects, :8788
+npm run build:app     # the Android bundle (also rebuilt by the e2e webServer)
+npm run test:e2e      # Playwright: desktop + mobile (:8788) AND app (:8789)
 npm run typecheck     # tsc strict across workspaces
 npm run lint          # eslint flat config
 ```
@@ -20,6 +21,12 @@ Playwright browsers: `npx playwright install chromium` once per machine.
    temp SQLite file per suite; asserts BOTH api responses AND ledger/audit rows.
 3. **E2E (e2e/)** — Playwright against the production build (Express serving client/dist),
    desktop + mobile viewports.
+4. **App E2E (e2e/app-mode.spec.ts, project `app`)** — the real Android bundle served as
+   static files by `scripts/app-server.mjs`, running its own in-app server. Chromium is
+   the same engine as the Android System WebView, so this covers SQLite-WASM on OPFS, the
+   Express routes running in a worker, photo encoding via OffscreenCanvas, and the whole
+   update flow against a mock release feed the script generates (including deliberately
+   broken releases). Each test gets a fresh context — i.e. a brand-new device.
 
 ## Conventions
 
@@ -30,6 +37,16 @@ Playwright browsers: `npx playwright install chromium` once per machine.
   builds and runs E2E on ubuntu. Release only publishes from green main.
 
 ## Coverage map (final)
+
+**Browser-runtime unit tests:** the hand-written shims are checked against the real Node
+modules — SHA-256 for every input shape and chunking pattern (a padding bug at 55-byte
+inputs was caught this way), `node:path` against `node:path/posix`, and the Express shim's
+routing semantics: params never crossing `/`, `router.param` guards running before
+handlers, middleware that responds stopping the chain, mounted-router path remainders,
+sync throws and rejected promises reaching the error handler, cookies round-tripping, and
+unknown paths answering 404 rather than hanging. Plus the Android release manifest:
+malformed/unverifiable manifests refused, and bundle-vs-APK selection either side of
+`minNativeVersion`.
 
 **Unit (60+):** integer unit converters incl. float-imprecision cases · inch converters +
 cloth-consumption geometry (strip round-up, width-count, cm ceil) · doc numbering ·
@@ -86,6 +103,17 @@ discrepancy reviewed and resolved by the admin), reports Excel download, traceab
 tree, PWA (SW active + /api freshness through it), System Health + settings, complete
 backup download → Restore preview/confirm-gate UI (desktop only; the atomic swap +
 rollback itself is integration-tested).
+
+**App E2E (9 scenarios, project `app`):** first run generates the admin, applies the
+migrations and records real work through to the ledger; the demo business is built through
+every service against SQLite-WASM and passes its own conservation checks; a photo is
+resized, stored and served back as webp; a complete backup is taken, work continues past
+it, and restoring rewinds exactly to it; a file that is not a backup is refused. Update
+drill: a release is checked, downloaded, checksum-verified, unpacked, activated and
+restarted into — **with the business data asserted unchanged afterwards** — while a
+damaged download and an incomplete bundle are both refused without activating anything,
+and a bundle that fails to start twice is rolled back to its predecessor with a notice
+that survives until it is dismissed.
 
 **Ops drills (scripts/update-drill.mjs, 13 steps):** seeded install boots under the
 supervisor → admin one-click update → session + data survive → poisoned release

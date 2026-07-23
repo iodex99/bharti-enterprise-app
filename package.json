@@ -22,9 +22,13 @@
     "seed": "npm run seed -w server",
     "start": "node server/dist/index.js",
     "seed:demo": "npm run seed:demo -w server",
-    "dev:demo": "concurrently -n server,client -c blue,green \"npm run dev:demo -w server\" \"npm run dev -w client\""
+    "dev:demo": "concurrently -n server,client -c blue,green \"npm run dev:demo -w server\" \"npm run dev -w client\"",
+    "build:app": "npm run build:app -w client",
+    "dev:app": "npm run dev:app -w client"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "concurrently": "^10.0.3",
@@ -34,5 +38,12 @@
     "prettier": "^3.9.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.1"
   }
 }

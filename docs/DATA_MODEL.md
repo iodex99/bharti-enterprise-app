@@ -79,3 +79,21 @@ an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_b
 | PACKING | pieces | check_issue (carries checker lineage) |
 | FG | pieces | pack_issue |
 | REJECTED | pieces | check_issue |
+
+
+## upload_files (migration 003)
+
+Uploaded photos are rows, not files:
+
+| column | notes |
+|---|---|
+| `path` | UNIQUE public identifier, `/uploads/<YYYY-MM>/<16 hex>.webp` — unchanged from the filesystem era, so `models.image_path`, `purchases.image_path` and `job_receipts.image_path` did not have to change |
+| `mime`, `size_bytes` | as stored (webp after resizing) |
+| `bytes` | BLOB — the image itself |
+| `created_at`, `created_by` | audit trail |
+
+Why in the database: the Android runtime has no synchronous filesystem for the server
+code to read or write (ADR-024), and it makes **one file = the whole business**, which is
+what backup, restore and moving to a new device depend on. Serving is a keyed lookup, so
+the path-traversal surface of static file serving is gone. Restoring a backup taken before
+this migration imports its `uploads/` folder into the table.

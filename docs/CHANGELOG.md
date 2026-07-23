@@ -5,6 +5,32 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-23 — **The system is now an Android app.** Everything runs on one device: the
+  screens, the business rules and the database, with no server and no network (the
+  internet is used only to look for updates). The server was not rewritten — the same
+  route and service files are compiled into a Web Worker where `express` and the Node
+  builtins resolve to small shims, so one implementation of the business rules stays
+  covered by one test suite (ADR-021/023). Storage is **SQLite compiled to WebAssembly on
+  OPFS** (ADR-022), and **photos moved into the database** (migration 003) so one file is
+  the whole business — which is what backup, restore and moving to a new device depend on
+  (ADR-024).
+
+  **Updates are one tap.** A push to `main` publishes a release; the installed app checks
+  every 30 minutes, and the Admin taps *Update now*: the new bundle is downloaded,
+  checksum-verified, checked for completeness, swapped in, and the app restarts itself —
+  Android installs nothing and the user confirms nothing. **Business data is never part of
+  an update** (it lives in storage the swap cannot reach) and a safety copy is taken first
+  anyway; a bundle that fails to start twice is rolled back automatically, with a notice
+  that stays until someone acknowledges it (ADR-025/026). When the native shell itself
+  changes, the app says the app file must be installed rather than pretending otherwise.
+
+  Backups export the whole business to Android's share sheet (Google Drive in one tap),
+  restore accepts it back on a new device, and demo mode still works as a second database.
+  New: `android-release.yml` (gated on the full suite) publishing bundle + APK + manifest,
+  the `app` E2E project running the real bundle in Chromium — including the update drill
+  with damaged, incomplete and non-starting releases — and unit tests pinning the shims
+  against the real Node modules.
+
 - 2026-07-23 — Six workflow corrections from the owner's real process (migration 002):
   **(1)** the model is now decided at CUTTING — purchases are just vendor + color +
   meters (a hidden RAW-CLOTH bookkeeping model fills the old columns; RAW stock, reports

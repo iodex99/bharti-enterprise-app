@@ -1,5 +1,124 @@
 # Deployment & Operations
 
+> **The shipped product is the Android app.** Everything the business needs runs on one
+> tablet or phone. The Windows/PC deployment described later in this document is kept for
+> development and as an option, but it is not what the client installs.
+
+# Part 1 — The Android app
+
+## What it is
+
+One APK. Inside it, the app carries the whole system: the screens, the business rules and
+a SQLite database that lives in the device's own private storage. It works with no
+internet at all; the internet is used only to look for updates.
+
+```
+[Android tablet / phone]
+  Bharti Enterprises.apk
+    └── WebView (https://localhost — a fixed origin, never changes)
+          ├── UI thread ....... screens + updates/backups (device operations)
+          └── Worker .......... the server: SQLite (OPFS), migrations, all business rules
+                                  │
+                                  └── app.db  ← business data AND photos, one file
+                                      (owned by the origin, NOT by the app bundle,
+                                       which is why an update cannot touch it)
+```
+
+## Installing it the first time
+
+1. On the phone/tablet: **Settings → Apps → Special access → Install unknown apps** and
+   allow the browser (or Files) to install apps. This is needed because the app is not
+   distributed through the Play Store.
+2. Open the latest release on GitHub and download `bharti-v1.0.<N>.apk`.
+3. Open the downloaded file and confirm the install.
+4. Open the app. On first run it creates the admin account and shows the generated
+   password once — write it down; it must be changed at first sign-in.
+5. The setup screen offers **Start fresh** or **Move from another device**.
+
+**Keep the device's Android System WebView up to date** (Play Store → Android System
+WebView). The app stores data using OPFS, which needs a reasonably current WebView. If it
+is too old the app still runs, on a slower fallback, and says so on screen.
+
+## Updating
+
+Pushing to `main` publishes a release; the installed app checks for one every 30 minutes
+and on every start.
+
+- **Normal update (almost always):** a banner appears; the Admin taps **Update now**. The
+  app downloads the new bundle, checks its checksum, unpacks it, restarts itself, and is
+  running the new version in a few seconds. Nothing is installed by Android; the user
+  confirms nothing.
+- **App-file update (rare):** only when the native shell itself changed. The banner says
+  *Download app file* and Android asks the user to confirm the install, as it does for
+  any APK. Data is untouched by this too.
+
+**Data is never part of an update.** The database lives in the WebView origin's private
+storage; a bundle swap replaces application code only. The app additionally writes a
+safety copy of the database immediately before applying any update, and a bundle that
+fails to start twice is rolled back to the previous one automatically.
+
+### Releasing (for the developer)
+
+`.github/workflows/android-release.yml` runs on every push to `main`. It gates on
+typecheck + lint + the full unit/integration suite + all three E2E projects, then
+publishes `v1.0.<run_number>` with:
+
+| Asset | What it is |
+|---|---|
+| `web-bundle-v1.0.N.zip` | what the installed app downloads and swaps in by itself |
+| `bharti-v1.0.N.apk` | full installer — first install, or a native-shell change |
+| `app-manifest.json` | version, sha256s and `minNativeVersion` — how the app decides |
+| `checksums.txt` | sha256sums, for verifying by hand |
+
+**Signing (do this once).** Android only upgrades an app in place when the new APK is
+signed with the *same* key. Without the secrets below CI builds a debug-signed APK, which
+is fine for a trial but **cannot be upgraded by a later release**.
+
+```bash
+keytool -genkey -v -keystore bharti-release.keystore -alias bharti \
+        -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 bharti-release.keystore > keystore.b64     # macOS: base64 -i ...
+```
+
+Add as repository secrets: `ANDROID_KEYSTORE_BASE64` (contents of `keystore.b64`),
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`bharti`), `ANDROID_KEY_PASSWORD`.
+**Keep `bharti-release.keystore` safe and backed up** — losing it means no future release
+can upgrade an installed app.
+
+**When the native shell changes** (a new Capacitor plugin, a new permission, a Capacitor
+upgrade), put the *current* release run number into `android/native-version.txt`. That is
+how the app knows a web bundle alone is no longer enough and asks for the APK instead.
+
+## Backups and moving to a new device
+
+- A **daily backup** is taken automatically inside the app's private storage, and on every
+  start-up if the day's backup is missing.
+- **Backups → Download complete backup** writes the whole business (database *and* photos
+  — they are in the same file) into the device's Documents folder and opens Android's
+  share sheet, so it can be sent to **Google Drive**, WhatsApp, email or a cable in one
+  tap. Do this weekly, and always before moving devices.
+- **Moving to a new device:** install the app on the new device, open it, choose
+  **Move from another device** on the setup screen, and pick the backup file (from Drive
+  or the Files app). It replaces everything and asks everyone to sign in again.
+
+Restoring refuses any file that is not one of the app's own backups.
+
+## If the app will not start
+
+Business data is stored separately from the app bundle, so it survives every one of these:
+
+1. Force-stop the app and reopen it — a bundle that fails twice rolls back on its own.
+2. If it still fails, reinstall the APK. The data on the device stays where it is.
+3. Restore the most recent complete backup only if the data itself is in doubt.
+
+---
+
+# Part 2 — Optional PC/server deployment
+
+Everything below describes the original Windows-server topology. It is unchanged and still
+supported (`npm run build`, the supervisor, releases from `release.yml`), but the client's
+system is the Android app above.
+
 ## Topology
 
 ```

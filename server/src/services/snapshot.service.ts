@@ -8,6 +8,7 @@ import { closeDb, getDb, openDatabase } from '../db/connection';
 import { knownMigrationNames, migrate } from '../db/migrate';
 import { runReconciliation } from './reconciliation.service';
 import { cloudBackupDir } from './backup.service';
+import { countUploads as countStoredUploads } from './uploads.service';
 import { audit } from './audit.service';
 
 /**
@@ -49,16 +50,31 @@ function countRows(db: import('../db/connection').Db, table: string): number {
   }
 }
 
-function countUploads(dir: string): number {
+/**
+ * Photos live inside the database since migration 003, so app.db alone carries them.
+ * A `uploads/` folder is still zipped/restored when present so complete backups taken
+ * by an older build stay restorable (importLegacyUploads folds them into the table).
+ */
+function importLegacyUploads(db: import('../db/connection').Db, dir: string): number {
   if (!fs.existsSync(dir)) return 0;
-  let n = 0;
-  for (const month of fs.readdirSync(dir)) {
-    const monthDir = path.join(dir, month);
-    if (fs.statSync(monthDir).isDirectory()) {
-      n += fs.readdirSync(monthDir).filter((f) => f.endsWith('.webp')).length;
+  let imported = 0;
+  const insert = db.prepare(
+    'INSERT OR IGNORE INTO upload_files (path, mime, size_bytes, bytes) VALUES (?, ?, ?, ?)',
+  );
+  const run = db.transaction(() => {
+    for (const month of fs.readdirSync(dir)) {
+      const monthDir = path.join(dir, month);
+      if (!fs.statSync(monthDir).isDirectory()) continue;
+      for (const file of fs.readdirSync(monthDir)) {
+        if (!file.endsWith('.webp')) continue;
+        const bytes = fs.readFileSync(path.join(monthDir, file));
+        insert.run(`/uploads/${month}/${file}`, 'image/webp', bytes.byteLength, bytes);
+        imported += 1;
+      }
     }
-  }
-  return n;
+  });
+  run();
+  return imported;
 }
 
 /** Assemble the in-memory zip of the REAL data (DB + photos + manifest). Real data only. */
@@ -79,7 +95,7 @@ function assembleSnapshot(): { zip: AdmZip; manifest: SnapshotManifest } {
       users: countRows(db, 'users'),
       purchases: countRows(db, 'purchases'),
       jobCards: countRows(db, 'job_cards'),
-      uploads: countUploads(realUploadsDir()),
+      uploads: countStoredUploads(db),
     },
   };
 
@@ -229,6 +245,10 @@ export function restoreSnapshot(zipPath: string, userId: number | null, ip: stri
 
     const db = getDb(); // reopen on the restored database
     migrate(db, liveDb); // forward-migrate an older backup, if needed
+    // A backup written before migration 003 carries photos as files — fold them into
+    // the database so nothing is lost when restoring an old backup on a new build.
+    const legacy = importLegacyUploads(db, liveUploads);
+    if (legacy > 0) console.log(`[restore] imported ${legacy} photo(s) from a pre-003 backup`);
     const rec = runReconciliation(db);
     if (!rec.ok) throw new Error('restored data failed its integrity checks');
 

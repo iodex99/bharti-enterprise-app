@@ -62,3 +62,37 @@ One line per locked decision; expand only when the reasoning is non-obvious.
 - **ADR-020** Register ink convention carried into the UI: BLUE numbers = goods issued
   OUT (job issue, to checker/packer, dispatch), RED numbers = goods received IN
   (purchases, contractor returns) — matching the paper registers the staff already read.
+- **ADR-021** The product ships as an **Android app that runs the entire system on one
+  device** — no server, no PC, no network. The server is not rewritten: `express` and the
+  Node builtins resolve to small shims (`client/src/local/shims/`) and the real route and
+  service files are compiled into a Web Worker (`vite build --mode app`). One
+  implementation of the business rules therefore stays covered by one test suite, and the
+  Node/Express host is kept for development, the automated suites and an optional PC
+  deployment.
+- **ADR-022** Storage is **SQLite compiled to WebAssembly on the OPFS "SAH pool" VFS**.
+  It is the only browser store that is both synchronous and durably incremental, which is
+  what the app's "no `await` inside a transaction" rule requires. The alternative OPFS VFS
+  needs COOP/COEP headers; the SAH pool does not. Very old WebViews fall back to an
+  in-memory database mirrored into IndexedDB, and the app says so.
+- **ADR-023** The server runs in a **Web Worker**, not on the UI thread. The worker's
+  single thread reproduces exactly the "one process, one connection" guarantee the ledger
+  engine was written against, and long synchronous SQLite work cannot freeze the screen.
+  The page reaches it by patching `fetch` for `/api` and `/uploads`, so every page, hook
+  and query in the client is unchanged and cannot tell which host it is talking to.
+- **ADR-024** **Photos live in the database** (migration 003, `upload_files`), not on a
+  filesystem: there is no synchronous filesystem in the WebView, and it makes "the whole
+  business is one file" literally true, which is what backup, restore and moving to a new
+  device all depend on. Restore still imports the `uploads/` folder of a pre-003 backup.
+- **ADR-025** Updates replace the **web bundle**, not the APK. Android cannot let an app
+  install an APK over itself without a system prompt, so one-tap updating is delivered the
+  way every app with live updates does it: download → verify sha256 → unpack → point the
+  WebView at the new bundle → restart. Business data lives in the origin's private storage
+  and is not part of a bundle, so an update cannot touch it. A release also publishes an
+  APK plus `minNativeVersion`; when the native shell itself changed, the app says the app
+  file must be installed instead of pretending it can do it silently.
+- **ADR-026** A bundle is **verified before activation and rolled back after**: the
+  checksum must match, `index.html` and every script it references must be present, and
+  the declared version must agree with the release. If a bundle still fails to start
+  twice, the previous one is put back automatically and the user is told — the notice
+  persists until acknowledged, because whoever tapped Update is often not who opens the
+  app next.

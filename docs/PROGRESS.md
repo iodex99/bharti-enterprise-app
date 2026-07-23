@@ -79,7 +79,22 @@
 
 ## Current state
 
-ALL PHASES COMPLETE (0–11) + post-ship additions. 305 unit/integration + 49 E2E green;
+**THE PRODUCT IS AN ANDROID APP** (ADR-021…026). The whole system runs on one device with
+no server and no network: the real routes/services are compiled into a Web Worker
+(`vite build --mode app`) where `express`, `multer`, `cookie-parser`, `better-sqlite3` and
+`node:fs/path/crypto/url` resolve to shims in `client/src/local/shims/`; storage is
+SQLite-WASM on the OPFS SAH-pool VFS; photos live in the database (migration 003). The
+page reaches the worker by patching `fetch` for `/api` and `/uploads`, so no page, hook or
+query changed. Device operations (update/backups/restore/demo) are served on the UI thread
+by `local/native-ops.ts` under the SAME urls as `routes/system.node.routes.ts`.
+Updates: `android-release.yml` publishes `web-bundle-v*.zip` + APK + `app-manifest.json`;
+the app polls, verifies sha256 + bundle completeness, swaps the bundle and restarts —
+data lives in the origin's storage and is untouched; two failed starts auto-roll-back.
+The Node/Express host is unchanged and still used for dev, the test suites and optionally
+a PC deployment.
+
+ALL PHASES COMPLETE (0–11) + post-ship additions. 330 unit/integration + 58 E2E green
+(desktop + mobile + the new `app` project);
 update drill 13/13. IN-APP DEMO MODE: Admin → System Health buttons switch the live app
 onto a separate demo database (data-demo sibling; sessions/uploads/backups follow the
 active DB via db/dataDirs.ts activeDataDir(); flag file survives restarts). Remote
@@ -97,6 +112,20 @@ planned; DIRECTED checking from per-receipt "pending for checking" lots with exp
 contractor↔checker mapping + receipt photos; staff roles removed (any staff checks/packs);
 register ink colors in UI (blue=out, red=in).
 
+**Android quirks discovered (don't relearn these):**
+- Capacitor finds plugins in the package.json NEXT TO capacitor.config.ts — the
+  `@capacitor/*` deps must live in the ROOT package, not in `client/`. Installed in the
+  workspace they silently register ZERO native plugins (`capacitor.plugins.json` = `[]`)
+  and every plugin call fails only on a real device. Verify with `npx cap sync android`.
+- The OPFS **SAH pool** VFS is the one to use: it needs no COOP/COEP headers, unlike the
+  other OPFS VFS. `exportFile()` is async even though everything else is synchronous.
+- The worker must NOT do its imports at module scope: a module that fails while
+  evaluating cannot report anything, and the page just hangs. Load on first message.
+- Android cannot silently install an APK over itself — hence bundle updates, with
+  `android/native-version.txt` recording the run number at which the shell last changed.
+- `page.evaluate` races the app's self-restart during the update drill ("execution
+  context destroyed") — probe helpers must tolerate navigation.
+
 **Environment quirks discovered (don't relearn these):**
 - Repo is **private** — GitHub API needs auth; office installs need a fine-grained PAT
   (Contents: read) in supervisor config.json.
@@ -108,12 +137,26 @@ register ink colors in UI (blue=out, red=in).
 
 ## Next steps
 
-1. Physical go-live at the office: run docs/DEPLOYMENT.md → Go-live checklist (install
-   service, tunnel, masters, opening balances, drills, staff walkthrough).
+1. **Create the Android signing keystore and add the four repository secrets**
+   (docs/DEPLOYMENT.md → Releasing). Until then CI builds a debug-signed APK, which
+   installs fine but CANNOT be upgraded in place by a later release.
+2. Install the APK on the client's device and walk through go-live: masters, opening
+   balances, a backup to Google Drive, and one update drill on the real device.
 2. Roadmap candidates when the owner asks: docs/ROADMAP.md (sales module, QR labels,
    WhatsApp alerts, low-stock thresholds, rework flow…).
 
 ## Session notes
+
+- 2026-07-23 (Android pivot): see ADR-021…026. Implementation notes for the future: the
+  express shim implements exactly the surface the routes use (verified by
+  tests/unit/express-shim.test.ts) — extend it there, with a test, rather than reaching
+  for real Express; the SQLite-WASM driver exposes only the better-sqlite3 subset the
+  services call (prepare/run/get/all, exec, transaction with SAVEPOINT nesting, pragma,
+  inTransaction) and prepares a fresh statement per call because the services re-enter the
+  same SQL from nested transactions; `dataDirs.setDemoMode()` is what keeps `isDemoMode()`
+  (and the DEMO banner) true in the app, and the demo choice is persisted by the bridge
+  because the worker has no storage; hand-rolled SHA-256 needs MINIMAL padding (a 55-byte
+  input exposed the bug — the unit test compares against node:crypto).
 
 - 2026-07-23 (post-ship): six workflow corrections from the owner (see CHANGELOG). Key
   implementation notes for the future: the RAW-CLOTH sentinel model is pinned at id

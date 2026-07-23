@@ -4,3 +4,4 @@ export * from './version';
 export * from './docNo';
 export * from './dates';
 export * from './schemas';
+export * from './update';

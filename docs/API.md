@@ -8,7 +8,14 @@ original id with `replayed: true`).
 ### System
 | Method | Path | Roles | Notes |
 |---|---|---|---|
-| GET | /api/system/health | anon | `{ ok, version, uptimeSeconds }` — supervisor health gate |
+> **Device-specific endpoints.** Updates, backups, restore and demo mode are marked
+> **(device)** below. On the Node host they are Express routes
+> (`routes/system.node.routes.ts`); in the Android app the same URLs are answered on the
+> UI thread by `client/src/local/native-ops.ts`, because they need the app shell, storage
+> and the share sheet. Request and response shapes are identical, so the screens are the
+> same code.
+
+| GET | /api/system/health | anon | `{ ok, version, uptimeSeconds, demoMode }` — supervisor health gate |
 | GET | /api/system/version | anon | |
 | GET | /api/system/update-status | A O W | update state machine + versions |
 | GET | /api/system/update-check | A O W | forces a release-feed poll |
@@ -25,6 +32,8 @@ original id with `replayed: true`).
 | POST | /api/system/restore/commit | A | `{token}` or `{cloudName}` → atomic swap + auto-rollback; clears sessions; 409 in demo |
 | GET | /api/system/setup-state | A O W | `{ needsSetup }` — fresh-install wizard gate |
 | POST | /api/system/setup/complete | A | dismiss the setup wizard |
+| POST | /api/system/update-apk | A | **(device)** hand the release APK to Android's installer |
+| DELETE | /api/system/update-rollback-notice | A | **(device)** acknowledge an automatic rollback |
 
 ### Auth & users
 | Method | Path | Roles |
@@ -39,6 +48,9 @@ delete blocked while referenced).
 
 ### Uploads
 POST /api/uploads (A O, multipart `image` → webp path) · GET /uploads/* (all roles).
+Bytes are stored in `upload_files` (migration 003), not on disk; the path format is
+unchanged. In the Android app the picked file is passed straight to the in-app server, and
+the resize/re-encode runs on OffscreenCanvas instead of sharp.
 
 ### Transactions
 | Path | Create | Extra endpoints | Void |

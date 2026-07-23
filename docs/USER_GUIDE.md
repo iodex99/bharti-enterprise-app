@@ -1,13 +1,20 @@
 # User Guide — Bharti Enterprises System
 
-Written for the people using the app daily. Open the app link in any phone, tablet or
-computer browser. On a phone you can **install it like an app**: open the browser menu →
-"Add to Home Screen" / "Install app".
+Written for the people using the app daily. **The system is an app on one Android tablet
+or phone** — tap its icon to open it. Everything is stored on that device: it works
+without internet, and nothing is sent anywhere. The internet is used only to check for
+app updates.
+
+> **Everything lives on this one device.** That makes the weekly backup important — see
+> *Backups and moving to a new device* near the end of this guide.
 
 ## Signing in
 
 Enter the username and password given by the Admin. The first sign-in asks you to set a
 new password (at least 8 characters with letters and numbers).
+
+The very first time the app is opened on a new device it creates the **admin** account
+itself and shows the password once — write it down, and change it at the first sign-in.
 
 | Role | What you can do |
 |---|---|
@@ -123,7 +130,7 @@ and when, and drop off the dashboard warnings.
 
 Every list has instant **search**, **dropdown filters** (vendor, contractor, model,
 color, size, status, checker/packer…), a **date range**, and **click-to-sort column
-headings** (click once for ascending, again for descending).
+headings** (tap once for ascending, again for descending).
 
 ## Inventory
 
@@ -165,7 +172,8 @@ Every change is recorded in **Administration → Audit Log** — who, when, and 
 - **Enter demo mode** — switches the whole app onto a separate sample database with
   ~3 months of realistic business (every screen, chart, alert and report has data).
   Everyone is signed out; sign in with `admin / Admin@123`. A bright **DEMO MODE**
-  banner stays visible so nobody mistakes sample data for real records.
+  banner stays visible so nobody mistakes sample data for real records. Demo mode stays
+  on until you leave it, even if the app is closed and reopened.
 - **Rebuild fresh & enter** — resets the demo to its original state first.
 - **Exit demo mode** — back to real data, sign in with your usual account.
 - **Remove demo data** — deletes the demo database entirely (real data unaffected).
@@ -177,22 +185,39 @@ Developers can also use `npm run seed:demo` + `npm run dev:demo` from a checkout
 
 - **Users** — create accounts, set roles, deactivate instantly, reset passwords.
 - **Opening Balances** — one-time entry of existing register stock at go-live.
-- **Backups** — automatic daily at 1 PM; if the computer was off or the backup failed,
-  it catches up by itself (hourly and whenever the app starts) until the day's backup
-  exists. Also before every update. For off-site copies,
-  install Google Drive for Desktop, sign in with the owner's Google account, and set the
-  synced folder on the Backups page — every backup is then copied to the owner's Drive
-  automatically.
-- **Complete backup & moving to a new computer** — the daily backups hold the database
-  only. A **complete backup** (Backups → *Download complete backup*) is one file with the
-  database **and every photo** — the file you move to a new PC. To move: install the app on
-  the new computer, sign in, and the **setup screen** offers *"Move from another computer"* —
-  give it the complete backup (a downloaded file, or one you sent to Google Drive) and it
-  restores everything. **Restore** replaces all current data, so it always asks you to type
-  RESTORE first, copies the old data aside, and undoes itself automatically if anything
-  goes wrong. Everyone signs in again afterwards.
 - **System Health** — inventory self-checks (all should always be ✅) and the
   delayed-job threshold.
-- **Updates** — when a banner says a new version is available, press **Update now**. The
-  app restarts itself in under a minute; if anything goes wrong it automatically returns
-  to the previous version. Data is never touched.
+
+## Backups and moving to a new device
+
+Everything — every record **and every photo** — is kept in a single file on this device.
+That makes backing up simple, and important.
+
+- The app takes a **backup by itself every day**, kept on the device. If the device was
+  switched off, it catches up the next time the app is opened.
+- **Once a week**, and always before changing devices, do this:
+  **Administration → Backups → Download complete backup.** The file is saved to the
+  device and Android's share sheet opens — choose **Google Drive** (or WhatsApp, or
+  email) to keep a copy somewhere other than this device. That one file is the whole
+  business.
+- **Moving to a new phone or tablet:** install the app on the new device and open it. The
+  setup screen offers **"Move from another device"** — pick the backup file (from Google
+  Drive or Files) and everything is restored. Restoring replaces all current data, so it
+  asks you to type RESTORE first. Everyone signs in again afterwards.
+
+If a file that is not one of the app's own backups is chosen, it is refused rather than
+attempted.
+
+## Updates
+
+When a new version is ready, a banner appears at the top of the screen.
+
+- Press **Update now**. The app downloads the new version, checks it, and restarts
+  itself — a few seconds, and nothing to confirm.
+- **Your data is never part of an update.** It is stored separately from the app, and a
+  safety copy is taken just before every update anyway.
+- If a new version will not start, the app **puts the previous one back by itself** and
+  tells you so. Nothing is lost; press Dismiss once you have read it.
+- Occasionally the banner says **Download app file** instead. That means the app itself
+  (not just its contents) has to be replaced, so Android will ask you to confirm the
+  install, exactly like the first time it was installed. Your data stays on the device.

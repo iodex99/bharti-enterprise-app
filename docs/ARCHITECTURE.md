@@ -1,5 +1,40 @@
 # Architecture
 
+## Two hosts, one system
+
+The product ships as an **Android app that runs the whole system on a single device** —
+no server, no office PC, no network needed. The business code is not duplicated to do
+this: the very same route and service files run in both places.
+
+```
+                    shared/src            server/src (routes + services + ledger)
+                        |                              |
+        +---------------+------------------------------+---------------+
+        |                                                              |
+  NODE HOST (development, tests, optional PC)          ANDROID APP (what the client uses)
+  express + better-sqlite3 + sharp                     Web Worker + SQLite-WASM/OPFS
+  HTTP on :8787                                        postMessage, no network
+```
+
+On Android, `express`, `multer`, `cookie-parser`, `better-sqlite3` and the Node builtins
+resolve to small shims in `client/src/local/shims/` (wired up by `vite build --mode app`),
+and the server is compiled into a Web Worker. The page reaches it by patching `fetch` for
+`/api` and `/uploads`, so every page, hook and query in the client is untouched.
+
+| | Node host | Android app |
+|---|---|---|
+| Transport | HTTP (Express) | `postMessage` to a worker (`local/bridge.ts`) |
+| Database | better-sqlite3, WAL | SQLite-WASM on OPFS (`local/db/sqlite-wasm.ts`) |
+| Photos | `upload_files` table | same table (ADR-024) |
+| Images | sharp | OffscreenCanvas (`local/image-processor.ts`) |
+| Updates | supervisor + release zip | web-bundle swap (`local/updater.ts`) |
+| Backups | files in `data/backups` | export the database + Android share sheet |
+| Demo mode | second data directory | second database in the same store |
+
+Operations that are about the *device* rather than the data — updates, backups, restore,
+demo mode — are served on the UI thread by `local/native-ops.ts` under the same URLs the
+Express host uses (`routes/system.node.routes.ts`), so the screens are identical.
+
 ## Stack
 
 | Layer | Choice |
@@ -31,11 +66,21 @@ client/src/
   pages/           one folder per module
   components/      DataTable, FormModal, inputs (DzPc, Money, Date), StatusBadge…
   api/             fetch wrapper + TanStack Query hooks
+client/src/local/   THE ANDROID RUNTIME
+  boot.ts          start-up order: rollback gate → in-app server → mark healthy
+  bridge.ts        patches fetch; page ↔ worker request/response + session cookie
+  server.worker.ts the in-app server: opens SQLite, migrates, serves the real routes
+  db/sqlite-wasm.ts better-sqlite3-compatible driver over SQLite-WASM (OPFS)
+  shims/           express, multer, cookie-parser, node:fs/path/crypto/url
+  updater.ts       check → download → verify → swap → health gate → auto-rollback
+  native-ops.ts    /api/system endpoints that need the device (updates, backups…)
+  shell.ts         device operations (Capacitor on Android, equivalent in a browser)
+android/           Capacitor native shell (thin WebView host; native-version.txt)
 supervisor/        zero-dep process manager (CJS, never auto-updated)
-e2e/               Playwright specs
-scripts/           setup / install-service / packaging helpers
-.github/workflows/ ci.yml (every push), release.yml (main → GitHub Release)
-data/              app.db, uploads/, backups/  ← gitignored, survives updates
+e2e/               Playwright specs (desktop + mobile against Node; app against the bundle)
+scripts/           setup / install-service / packaging helpers / app-server + mock feed
+.github/workflows/ ci.yml, release.yml (PC zip), android-release.yml (bundle + APK)
+data/              app.db, backups/  ← gitignored, survives updates (Node host)
 ```
 
 ## Core invariants

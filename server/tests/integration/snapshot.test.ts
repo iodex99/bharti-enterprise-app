@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import AdmZip from 'adm-zip';
+import Database from 'better-sqlite3';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import sharp from 'sharp';
 import request, { type Response as SuperResponse } from 'supertest';
 import { loginAs, makeTestContext, type TestContext } from '../helpers';
@@ -82,7 +86,22 @@ describe('complete backup + restore', () => {
     expect(manifest.counts.purchases).toBe(1);
     expect(manifest.counts.uploads).toBe(1);
     expect(zip.getEntry('app.db')).toBeTruthy();
-    expect(zip.getEntries().some((e) => e.entryName.startsWith('uploads/'))).toBe(true);
+
+    // Photos travel INSIDE app.db (migration 003) — prove it by opening the database
+    // that is in the zip and finding the uploaded bytes there, not in a folder.
+    expect(zip.getEntries().some((e) => e.entryName.startsWith('uploads/'))).toBe(false);
+    const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bharti-snap-'));
+    try {
+      zip.extractEntryTo('app.db', probeDir, false, true);
+      const probe = new Database(path.join(probeDir, 'app.db'), { readonly: true });
+      const row = probe
+        .prepare('SELECT size_bytes AS n FROM upload_files WHERE path = ?')
+        .get(pathA) as { n: number } | undefined;
+      probe.close();
+      expect(row?.n).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(probeDir, { recursive: true, force: true });
+    }
   });
 
   it('restore rewinds ALL data and photos to the snapshot, atomically', async () => {

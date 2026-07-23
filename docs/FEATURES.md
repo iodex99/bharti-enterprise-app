@@ -33,6 +33,14 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Receipt photos (returned goods) | ✅ | post-ship |
 | Staff either-or (no fixed checker/packer roles) | ✅ | post-ship |
 | Register ink colors (blue = issued out, red = received in) | ✅ | post-ship |
+| **Android app: whole system on one device (no server)** | ✅ | app pivot |
+| SQLite-WASM on OPFS + in-app server in a worker | ✅ | app pivot |
+| Photos stored in the database (one file = whole business) | ✅ | app pivot |
+| One-tap in-app update (verify → swap → restart) | ✅ | app pivot |
+| Automatic rollback when an update will not start | ✅ | app pivot |
+| APK path when the native shell changes (minNativeVersion) | ✅ | app pivot |
+| Backup/restore + move-to-a-new-device via Android share sheet | ✅ | app pivot |
+| Demo mode on the device (second database) | ✅ | app pivot |
 | PWA install + polish | ✅ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |
 | Deployment docs (WinSW + Cloudflare Tunnel) | ✅ | Phase 11 |
