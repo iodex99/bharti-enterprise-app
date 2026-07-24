@@ -17,7 +17,7 @@ afterAll(() => ctx.cleanup());
 
 /** One create payload per master, used to loop the shared behaviors. */
 const SAMPLES: Record<string, Record<string, unknown>> = {
-  models: { code: 'SCR-01', name: 'Velvet Scrunchie', description: 'test' },
+  // models are NOT a master any more (ADR-030): codes are typed at cutting
   colors: { name: 'Crimson', colorCode: '#DC143C' },
   sizes: { code: 'M1', description: 'Medium', sortOrder: 3 },
   vendors: { name: 'Test Vendor', gstin: '07AAACS1234A1Z5', mobile: '9812345678' },
@@ -116,23 +116,24 @@ describe('masters validation & referential rules', () => {
   });
 
   it('blocks soft delete when referenced, suggests deactivation', async () => {
-    // build a model + color + vendor + a purchase referencing them
+    // build a color + vendor + a purchase referencing them (model = the RAW-CLOTH sentinel)
     const mk = async (master: string, payload: Record<string, unknown>) =>
       (await request(ctx.app).post(`/api/masters/${master}`).set('Cookie', admin).send(payload))
         .body.id as number;
-    const modelId = await mk('models', { code: 'REF-M', name: 'Ref Model' });
     const colorId = await mk('colors', { name: 'Ref Color' });
     const vendorId = await mk('vendors', { name: 'Ref Vendor' });
+    const sentinelId = (
+      ctx.db.prepare("SELECT id FROM models WHERE code = 'RAW-CLOTH'").get() as { id: number }
+    ).id;
     ctx.db
       .prepare(
         `INSERT INTO purchases (doc_no, purchase_date, received_date, vendor_id, model_id, color_id,
          qty_cm, rate_paise_per_meter, total_paise, created_by)
          VALUES ('RM-9999', '2026-07-01', '2026-07-02', ?, ?, ?, 10000, 5000, 500000, 1)`,
       )
-      .run(vendorId, modelId, colorId);
+      .run(vendorId, sentinelId, colorId);
 
     for (const [master, id] of [
-      ['models', modelId],
       ['colors', colorId],
       ['vendors', vendorId],
     ] as const) {
@@ -147,13 +148,14 @@ describe('masters validation & referential rules', () => {
     expect(res.status).toBe(404);
   });
 
-  it('the RAW-CLOTH sentinel model is never listed, even with includeInactive', async () => {
-    const res = await request(ctx.app)
-      .get('/api/masters/models?includeInactive=1')
-      .set('Cookie', admin);
-    expect(res.status).toBe(200);
+  it('models are no longer a master: the route is gone, codes come from /api/products', async () => {
+    const gone = await request(ctx.app).get('/api/masters/models').set('Cookie', admin);
+    expect(gone.status).toBe(404);
+    // and the RAW-CLOTH sentinel never appears in the products picker either
+    const products = await request(ctx.app).get('/api/products').set('Cookie', admin);
+    expect(products.status).toBe(200);
     expect(
-      (res.body.items as Array<{ code?: string }>).some((m) => m.code === 'RAW-CLOTH'),
+      (products.body.items as Array<{ code: string }>).some((m) => m.code === 'RAW-CLOTH'),
     ).toBe(false);
   });
 

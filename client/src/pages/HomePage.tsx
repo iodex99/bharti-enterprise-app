@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatCm, formatPaise, formatPieces } from '@shared';
+import { formatLen, formatPaise, formatPieces } from '@shared';
 import { api } from '../api/client';
 import { useAuth } from '../lib/auth';
 import { Spinner } from '../components/ui';
@@ -41,7 +41,7 @@ const pcsLabel = (v: React.ReactNode): string => formatPieces(Number(v ?? 0));
 
 type Dashboard = {
   kpis: {
-    rawCm: number;
+    rawLen: number;
     cutPcs: number;
     wipPcs: number;
     checkingPcs: number;
@@ -97,7 +97,7 @@ export default function HomePage() {
 
       {/* inventory pipeline tiles */}
       <section aria-label="Inventory by stage" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Tile label="Raw cloth" value={formatCm(kpis.rawCm)} to="/stock/raw" />
+        <Tile label="Raw cloth" value={formatLen(kpis.rawLen)} to="/stock/raw" />
         <Tile label="Cut pieces" value={formatPieces(kpis.cutPcs)} to="/stock/cut" />
         <Tile label="With contractors" value={formatPieces(kpis.wipPcs)} to="/stock/wip" />
         <Tile label="In checking" value={formatPieces(kpis.checkingPcs)} to="/stock/checking" />

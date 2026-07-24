@@ -70,9 +70,9 @@ describe('demo mode lifecycle', () => {
       .set('Cookie', demoAdmin);
     expect(recon.body.ok).toBe(true);
 
-    // real model does NOT exist in the demo db
-    const models = await request(ctx.app).get('/api/masters/models').set('Cookie', demoAdmin);
-    expect(models.body.items.some((m: { code: string }) => m.code === 'REAL-1')).toBe(false);
+    // real product code does NOT exist in the demo db
+    const products = await request(ctx.app).get('/api/products').set('Cookie', demoAdmin);
+    expect(products.body.items.some((m: { code: string }) => m.code === 'REAL-1')).toBe(false);
   });
 
   it('cannot remove demo data while active; cannot enter twice', async () => {
@@ -107,8 +107,8 @@ describe('demo mode lifecycle', () => {
 
     // real login works; real data intact; demo writes invisible
     const realAdmin = await loginAs(ctx.app, 'admin', 'Admin@123');
-    const models = await request(ctx.app).get('/api/masters/models').set('Cookie', realAdmin);
-    expect(models.body.items.some((m: { code: string }) => m.code === 'REAL-1')).toBe(true);
+    const products = await request(ctx.app).get('/api/products').set('Cookie', realAdmin);
+    expect(products.body.items.some((m: { code: string }) => m.code === 'REAL-1')).toBe(true);
     const colors = await request(ctx.app).get('/api/masters/colors').set('Cookie', realAdmin);
     expect(colors.body.items.some((c: { name: string }) => c.name === 'Demo Only Color')).toBe(false);
     const contractors = await request(ctx.app)
@@ -140,6 +140,32 @@ describe('demo mode lifecycle', () => {
     colors = await request(ctx.app).get('/api/masters/colors').set('Cookie', demoAdmin);
     expect(colors.body.items.some((c: { name: string }) => c.name === 'Demo Only Color')).toBe(false);
     await request(ctx.app).post('/api/system/demo/exit').set('Cookie', demoAdmin);
+  });
+
+  it('re-entering an OLD demo db migrates it first (an app update must not brick demo mode)', { timeout: 30_000 }, async () => {
+    // simulate a demo db built by a previous app version: roll a migration back
+    // (003 is idempotent, so re-applying it is exactly what a real upgrade does)
+    const { default: Database } = await import('better-sqlite3');
+    const demoPath = `${ctx.dir}-demo/app.db`;
+    let demoDb = new Database(demoPath);
+    demoDb.exec("DROP TABLE upload_files; DELETE FROM schema_migrations WHERE name LIKE '003%'");
+    demoDb.close();
+
+    const realAdmin = await loginAs(ctx.app, 'admin', 'Admin@123');
+    const enter = await request(ctx.app).post('/api/system/demo/enter').set('Cookie', realAdmin);
+    expect(enter.status).toBe(200);
+    // the demo app actually works on the healed schema
+    const demoAdmin = await loginAs(ctx.app, 'admin', 'Admin@123');
+    expect((await request(ctx.app).get('/api/dashboard').set('Cookie', demoAdmin)).status).toBe(200);
+    await request(ctx.app).post('/api/system/demo/exit').set('Cookie', demoAdmin);
+
+    // the dropped table came back via the migration
+    demoDb = new Database(demoPath, { readonly: true });
+    const table = demoDb
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='upload_files'")
+      .get();
+    demoDb.close();
+    expect(table).toBeDefined();
   });
 
   it('remove deletes the demo database when inactive', async () => {

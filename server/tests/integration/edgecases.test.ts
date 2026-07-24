@@ -52,32 +52,30 @@ describe('garbage ids never 500', () => {
 });
 
 describe('unknown foreign keys are 400s, not 500s', () => {
-  it('opening balance with unknown model', async () => {
+  it('opening balance with a garbage code is rejected by the schema', async () => {
     const res = await request(ctx.app).post('/api/opening-balances').set('Cookie', admin).send({
       balanceDate: '2026-07-01',
       stage: 'FG',
-      modelId: 999,
+      modelCode: '!!!nope!!!',
       colorId: 1,
       sizeId: 1,
       qty: 10,
     });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/model not found/i);
   });
 
-  it('job card with unknown model/color', async () => {
+  it('job issue with an unknown code id is a clean 400', async () => {
     const res = await request(ctx.app)
       .post('/api/jobs')
       .set('Cookie', operator)
       .send({
         issueDate: '2026-07-01',
         contractorId: 1,
-        modelId: 999,
-        colorId: 1,
-        lines: [{ sizeId: 1, qtyIssuedPcs: 12, unitEntered: 'pieces', ratePaisePerDozen: 100 }],
+        notes: '',
+        lines: [{ modelId: 999, colorId: 1, sizeId: 1, qtyIssuedPcs: 12, unitEntered: 'pieces', ratePaisePerDozen: 100 }],
       });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/model not found/i);
+    expect(res.body.error).toMatch(/code no longer exists/i);
   });
 
   it('check issue against an unknown received batch is a clean 400', async () => {
@@ -94,32 +92,20 @@ describe('unknown foreign keys are 400s, not 500s', () => {
 });
 
 describe('deactivated masters are blocked at entry points', () => {
-  it('opening balance on a deactivated model', async () => {
+  it('opening balance on a retired code quietly reactivates it (codes are system-managed)', async () => {
     const res = await request(ctx.app).post('/api/opening-balances').set('Cookie', admin).send({
       balanceDate: '2026-07-01',
       stage: 'FG',
-      modelId: 2,
+      modelCode: 'M-OFF',
       colorId: 1,
       sizeId: 1,
       qty: 10,
     });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/deactivated/i);
-  });
-
-  it('job card on a deactivated model', async () => {
-    const res = await request(ctx.app)
-      .post('/api/jobs')
-      .set('Cookie', operator)
-      .send({
-        issueDate: '2026-07-01',
-        contractorId: 1,
-        modelId: 2,
-        colorId: 1,
-        lines: [{ sizeId: 1, qtyIssuedPcs: 12, unitEntered: 'pieces', ratePaisePerDozen: 100 }],
-      });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/deactivated/i);
+    expect(res.status).toBe(201);
+    const model = ctx.db
+      .prepare("SELECT is_active FROM models WHERE code = 'M-OFF'")
+      .get() as { is_active: number };
+    expect(model.is_active).toBe(1);
   });
 });
 

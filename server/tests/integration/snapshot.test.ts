@@ -59,13 +59,12 @@ describe('complete backup + restore', () => {
   it('downloads a complete backup with the database + photos + manifest', async () => {
     // seed real data: masters, one purchase, one uploaded photo
     ctx.db.exec(`
-      INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1);
       INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
       INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
     `);
     await request(ctx.app).post('/api/purchases').set('Cookie', admin).send({
       purchaseDate: '2026-07-01', receivedDate: '2026-07-01', vendorId: 1, colorId: 1,
-      qtyCm: 10000, ratePaisePerMeter: 4000, notes: 'in the snapshot',
+      lenInchC: 36000, widthInchC: 4400, ratePaisePerYard: 4000, notes: 'in the snapshot',
     });
     const up = await request(ctx.app).post('/api/uploads').set('Cookie', admin).attach('image', await tinyPng(), 'billA.png');
     pathA = up.body.path as string;
@@ -108,7 +107,7 @@ describe('complete backup + restore', () => {
     // diverge from the snapshot: a second purchase + a second photo
     await request(ctx.app).post('/api/purchases').set('Cookie', admin).send({
       purchaseDate: '2026-07-05', receivedDate: '2026-07-05', vendorId: 1, colorId: 1,
-      qtyCm: 5000, ratePaisePerMeter: 4000, notes: 'AFTER the snapshot — must vanish',
+      lenInchC: 18000, widthInchC: 4400, ratePaisePerYard: 4000, notes: 'AFTER the snapshot — must vanish',
     });
     const upB = await request(ctx.app).post('/api/uploads').set('Cookie', admin).attach('image', await tinyPng(), 'billB.png');
     pathB = upB.body.path as string;

@@ -310,14 +310,19 @@ configuration, but the UPS avoids interrupted work sessions).
 2. ☐ Initial admin password changed; `initial-admin-password.txt` deleted.
 3. ☐ Remote access up (Tailscale serve); app reachable from a phone on mobile data
    (not office Wi-Fi) at the https://…ts.net address.
-4. ☐ Users created (operators + owner) with temporary passwords; each signed in once.
-5. ☐ Masters entered: models, colors, sizes, vendors, contractors, checkers/packers.
-6. ☐ **Opening balances** entered from the registers (Admin → Opening Balances) for all
-   stages that hold stock; Inventory page matches the physical count.
-7. ☐ System Health: every self-check ✅.
-8. ☐ Backup taken (Backups → Backup now) and a copy stored off the PC.
-9. ☐ Update drill on the real install: push a trivial change → banner appears →
-   *Update now* → new version live, data intact.
-10. ☐ Restore drill rehearsed once (stop service, swap DB from backup, start, verify).
-11. ☐ Complete backup downloaded once and kept off-site (this is the migration file).
-12. ☐ Staff walked through docs/USER_GUIDE.md on their own phones.
+4. ☐ **Offices configured** (Admin → Offices) if there is more than one; each office's
+   code chosen (it prefixes that office's document numbers).
+5. ☐ Users created (operators pinned to their office, + owner) with temporary passwords;
+   each signed in once.
+6. ☐ Masters entered: colors, sizes, vendors, contractors, staff. (No models — the code
+   number is typed at cutting.)
+7. ☐ **Opening balances** entered from the registers (Admin → Opening Balances) for all
+   stages that hold stock, per office (RAW takes yards + width; stitched stages a typed
+   code); Inventory page matches the physical count in each office.
+8. ☐ System Health: every self-check ✅.
+9. ☐ Backup taken (Backups → Backup now) and a copy stored off the PC.
+10. ☐ Update drill on the real install: push a trivial change → banner appears →
+    *Update now* → new version live, data intact.
+11. ☐ Restore drill rehearsed once (stop service, swap DB from backup, start, verify).
+12. ☐ Complete backup downloaded once and kept off-site (this is the migration file).
+13. ☐ Staff walked through docs/USER_GUIDE.md on their own phones.

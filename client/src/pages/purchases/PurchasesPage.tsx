@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatBusinessDate, formatCm, formatPaise, todayIST } from '@shared';
+import { formatBusinessDate, formatInchC, formatLen, formatPaise, todayIST } from '@shared';
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
 import { Badge, Button, ErrorText, Field, Modal, TextInput } from '../../components/ui';
-import { ImageInput, MetersInput, MoneyInput } from '../../components/inputs';
+import { ImageInput, InchesInput, MoneyInput, YardsInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 
 type PurchaseRow = {
@@ -17,14 +17,15 @@ type PurchaseRow = {
   vendorName: string;
   colorId: number;
   colorName: string;
-  qtyCm: number;
-  ratePaisePerMeter: number;
+  lenInchC: number;
+  widthInchC: number | null;
+  ratePaisePerYard: number;
   totalPaise: number;
   imagePath: string | null;
   notes: string;
   voidedAt: string | null;
   voidReason: string | null;
-  remainingCm: number;
+  remainingInchC: number;
 };
 
 export default function PurchasesPage() {
@@ -52,7 +53,9 @@ export default function PurchasesPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Raw Material Purchases</h1>
-          <p className="text-sm text-gray-500">Cloth received from vendors (Module 1)</p>
+          <p className="text-sm text-gray-500">
+            Cloth received from vendors — length in yards, width in inches
+          </p>
         </div>
         {canWrite && <Button onClick={() => setCreateOpen(true)}>+ New purchase</Button>}
       </div>
@@ -67,33 +70,39 @@ export default function PurchasesPage() {
             value: (r) => r.purchaseDate,
           },
           { key: 'vendorName', header: 'Vendor' },
-          // no model here — the model is decided at cutting
+          // no code here — the code number is given at cutting
           { key: 'colorName', header: 'Color', className: 'font-medium' },
           {
-            key: 'qtyCm',
-            header: 'Quantity',
+            key: 'lenInchC',
+            header: 'Length',
             // register color code: red = goods received in
-            render: (r) => <span className="font-medium text-red-700">{formatCm(r.qtyCm)}</span>,
-            value: (r) => r.qtyCm,
+            render: (r) => <span className="font-medium text-red-700">{formatLen(r.lenInchC)}</span>,
+            value: (r) => r.lenInchC,
           },
           {
-            key: 'remainingCm',
+            key: 'widthInchC',
+            header: 'Width',
+            render: (r) => (r.widthInchC ? formatInchC(r.widthInchC) : '—'),
+            value: (r) => r.widthInchC ?? 0,
+          },
+          {
+            key: 'remainingInchC',
             header: 'Remaining',
             render: (r) =>
               r.voidedAt ? (
                 <Badge tone="red">voided</Badge>
-              ) : r.remainingCm === 0 ? (
+              ) : r.remainingInchC === 0 ? (
                 <Badge tone="gray">fully used</Badge>
               ) : (
-                <span className={r.remainingCm < r.qtyCm ? 'text-amber-700' : ''}>
-                  {formatCm(r.remainingCm)}
+                <span className={r.remainingInchC < r.lenInchC ? 'text-amber-700' : ''}>
+                  {formatLen(r.remainingInchC)}
                 </span>
               ),
           },
           {
-            key: 'ratePaisePerMeter',
-            header: 'Rate/m',
-            render: (r) => formatPaise(r.ratePaisePerMeter),
+            key: 'ratePaisePerYard',
+            header: 'Rate/yd',
+            render: (r) => formatPaise(r.ratePaisePerYard),
           },
           { key: 'totalPaise', header: 'Total', render: (r) => formatPaise(r.totalPaise), className: 'font-medium' },
         ]}
@@ -158,30 +167,29 @@ function NewPurchaseModal({
   const [receivedDate, setReceivedDate] = useState(todayIST());
   const [vendorId, setVendorId] = useState<number | null>(null);
   const [colorId, setColorId] = useState<number | null>(null);
-  const [qtyCm, setQtyCm] = useState<number | null>(null);
+  const [lenInchC, setLenInchC] = useState<number | null>(null);
+  const [widthInchC, setWidthInchC] = useState<number | null>(null);
   const [rate, setRate] = useState<number | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
   const totalPreview =
-    qtyCm != null && rate != null ? formatPaise(Math.round((qtyCm * rate) / 100)) : '—';
+    lenInchC != null && rate != null ? formatPaise(Math.round((lenInchC * rate) / 3600)) : '—';
 
   const save = useMutation({
     mutationFn: () =>
-      api.post(
-        '/api/purchases',
-        {
-          purchaseDate,
-          receivedDate,
-          vendorId,
-          colorId,
-          qtyCm,
-          ratePaisePerMeter: rate ?? 0,
-          imagePath,
-          notes,
-        },
-      ),
+      api.post('/api/purchases', {
+        purchaseDate,
+        receivedDate,
+        vendorId,
+        colorId,
+        lenInchC,
+        widthInchC,
+        ratePaisePerYard: rate ?? 0,
+        imagePath,
+        notes,
+      }),
     onSuccess: () => {
       onDone();
       onClose();
@@ -198,8 +206,12 @@ function NewPurchaseModal({
             setError('Pick vendor and color.');
             return;
           }
-          if (!qtyCm) {
-            setError('Enter the cloth quantity in meters.');
+          if (!lenInchC) {
+            setError('Enter the cloth length in yards.');
+            return;
+          }
+          if (!widthInchC) {
+            setError('Enter the cloth width in inches.');
             return;
           }
           save.mutate();
@@ -215,13 +227,16 @@ function NewPurchaseModal({
         <Field label="Vendor">
           <MasterSelect master="vendors" value={vendorId} onChange={setVendorId} />
         </Field>
-        <Field label="Color" hint="The model is decided later, at cutting">
+        <Field label="Color" hint="The code number is given later, at cutting">
           <MasterSelect master="colors" value={colorId} onChange={setColorId} />
         </Field>
-        <Field label="Quantity (meters)">
-          <MetersInput cm={qtyCm} onChange={setQtyCm} placeholder="e.g. 125.5" />
+        <Field label="Length (yards)">
+          <YardsInput inchC={lenInchC} onChange={setLenInchC} placeholder="e.g. 125.5" />
         </Field>
-        <Field label="Rate per meter">
+        <Field label="Width (inches)" hint="Used at cutting to work out pieces across the width">
+          <InchesInput inchC={widthInchC} onChange={setWidthInchC} placeholder="e.g. 44" />
+        </Field>
+        <Field label="Rate per yard">
           <MoneyInput paise={rate} onChange={setRate} placeholder="e.g. 45.50" />
         </Field>
         <Field label="Total (auto)">
@@ -250,7 +265,7 @@ function NewPurchaseModal({
   );
 }
 
-/** Shared admin void dialog (reused by other documents in later modules). */
+/** Shared admin void dialog (reused by other documents). */
 export function VoidModal({
   entity,
   target,

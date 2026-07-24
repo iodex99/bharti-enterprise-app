@@ -15,12 +15,12 @@ export function delayedJobThresholdDays(db: Db): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DELAYED_JOB_DAYS;
 }
 
-export function dashboardData(db: Db): Record<string, unknown> {
+export function dashboardData(db: Db, officeId: number): Record<string, unknown> {
   const stage = (s: string) =>
     (
       db
-        .prepare('SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage = ?')
-        .get(s) as { q: number }
+        .prepare('SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage = ? AND office_id = ?')
+        .get(s, officeId) as { q: number }
     ).q;
 
   const thresholdDays = delayedJobThresholdDays(db);
@@ -33,9 +33,9 @@ export function dashboardData(db: Db): Record<string, unknown> {
          COUNT(CASE WHEN status = 'closed_with_discrepancy' THEN 1 END) AS discrepancyJobs,
          COUNT(CASE WHEN status IN ('open','partially_received')
                      AND JULIANDAY('now') - JULIANDAY(issue_date) > ? THEN 1 END) AS delayedJobs
-       FROM job_cards WHERE voided_at IS NULL`,
+       FROM job_cards WHERE voided_at IS NULL AND office_id = ?`,
     )
-    .get(thresholdDays) as Record<string, number>;
+    .get(thresholdDays, officeId) as Record<string, number>;
 
   const pendingReceiptsPcs = (
     db
@@ -44,16 +44,16 @@ export function dashboardData(db: Db): Record<string, unknown> {
          FROM job_card_lines l
          JOIN v_job_line_status v ON v.job_card_line_id = l.id
          JOIN job_cards j ON j.id = l.job_card_id
-         WHERE j.voided_at IS NULL AND j.status IN ('open','partially_received')
+         WHERE j.voided_at IS NULL AND j.office_id = ? AND j.status IN ('open','partially_received')
            AND (l.qty_issued_pcs - v.received_pcs - v.returned_pcs) > 0`,
       )
-      .get() as { q: number }
+      .get(officeId) as { q: number }
   ).q;
 
   const unresolvedDiscrepancies = (
     db
-      .prepare('SELECT COUNT(*) AS n FROM discrepancies WHERE resolved_at IS NULL')
-      .get() as { n: number }
+      .prepare('SELECT COUNT(*) AS n FROM discrepancies WHERE resolved_at IS NULL AND office_id = ?')
+      .get(officeId) as { n: number }
   ).n;
 
   const duesPaise = (
@@ -65,69 +65,76 @@ export function dashboardData(db: Db): Record<string, unknown> {
            JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
            JOIN job_card_lines l ON l.id = rl.job_card_line_id
            JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL
-           WHERE rl.return_type = 'stitched'
+           WHERE rl.return_type = 'stitched' AND j.office_id = $office
          ), 0) -
-         COALESCE((SELECT SUM(amount_paise) FROM contractor_payments WHERE voided_at IS NULL), 0) AS dues`,
+         COALESCE((SELECT SUM(amount_paise) FROM contractor_payments WHERE voided_at IS NULL AND office_id = $office), 0) AS dues`,
       )
-      .get() as { dues: number }
+      .get({ office: officeId }) as { dues: number }
   ).dues;
 
   // monthly production trend (last 6 months present in data)
   const trends = db
     .prepare(
       `WITH months AS (
-         SELECT DISTINCT SUBSTR(cut_date, 1, 7) AS month FROM cutting_batches WHERE voided_at IS NULL
-         UNION SELECT DISTINCT SUBSTR(receipt_date, 1, 7) FROM job_receipts WHERE voided_at IS NULL
-         UNION SELECT DISTINCT SUBSTR(result_date, 1, 7) FROM pack_results
+         SELECT DISTINCT SUBSTR(cut_date, 1, 7) AS month FROM cutting_batches WHERE voided_at IS NULL AND office_id = $office
+         UNION SELECT DISTINCT SUBSTR(r.receipt_date, 1, 7) FROM job_receipts r
+           JOIN job_cards j ON j.id = r.job_card_id WHERE r.voided_at IS NULL AND j.office_id = $office
+         UNION SELECT DISTINCT SUBSTR(pr.result_date, 1, 7) FROM pack_results pr
+           JOIN pack_issues pi ON pi.id = pr.pack_issue_id AND pi.office_id = $office
        )
        SELECT month,
-         COALESCE((SELECT SUM(cl.actual_pcs) FROM cutting_lines cl
+         COALESCE((SELECT SUM(cl.expected_pcs) FROM cutting_lines cl
            JOIN cutting_batches cb ON cb.id = cl.cutting_batch_id
-           WHERE cb.voided_at IS NULL AND SUBSTR(cb.cut_date,1,7) = month), 0) AS cutPcs,
+           WHERE cb.voided_at IS NULL AND cb.office_id = $office AND SUBSTR(cb.cut_date,1,7) = month), 0) AS cutPcs,
          COALESCE((SELECT SUM(rl.qty_pcs) FROM job_receipt_lines rl
            JOIN job_receipts r ON r.id = rl.job_receipt_id
-           WHERE r.voided_at IS NULL AND rl.return_type = 'stitched'
+           JOIN job_cards j ON j.id = r.job_card_id
+           WHERE r.voided_at IS NULL AND j.office_id = $office AND rl.return_type = 'stitched'
              AND SUBSTR(r.receipt_date,1,7) = month), 0) AS receivedPcs,
-         COALESCE((SELECT SUM(qty_packed) FROM pack_results WHERE SUBSTR(result_date,1,7) = month), 0) AS packedPcs
+         COALESCE((SELECT SUM(pr.qty_packed) FROM pack_results pr
+           JOIN pack_issues pi ON pi.id = pr.pack_issue_id
+           WHERE pi.office_id = $office AND SUBSTR(pr.result_date,1,7) = month), 0) AS packedPcs
        FROM months ORDER BY month DESC LIMIT 6`,
     )
-    .all()
+    .all({ office: officeId })
     .reverse() as Array<Record<string, unknown>>;
 
   const contractorBars = db
     .prepare(
       `SELECT ct.name, COALESCE(SUM(CASE WHEN rl.return_type = 'stitched' THEN rl.qty_pcs END), 0) AS receivedPcs
        FROM contractors ct
-       LEFT JOIN job_cards j ON j.contractor_id = ct.id AND j.voided_at IS NULL
+       LEFT JOIN job_cards j ON j.contractor_id = ct.id AND j.voided_at IS NULL AND j.office_id = ?
        LEFT JOIN job_receipts r ON r.job_card_id = j.id AND r.voided_at IS NULL
        LEFT JOIN job_receipt_lines rl ON rl.job_receipt_id = r.id
        WHERE ct.deleted_at IS NULL
        GROUP BY ct.id HAVING receivedPcs > 0
        ORDER BY receivedPcs DESC LIMIT 8`,
     )
-    .all() as Array<Record<string, unknown>>;
+    .all(officeId) as Array<Record<string, unknown>>;
 
   const rejectionReasons = db
     .prepare(
       `SELECT REPLACE(rr.reason, '_', ' ') AS reason, SUM(rr.qty_pcs) AS qtyPcs
        FROM check_result_rejections rr
+       JOIN check_results cr ON cr.id = rr.check_result_id
+       JOIN check_issues ci ON ci.id = cr.check_issue_id AND ci.office_id = ?
        GROUP BY rr.reason ORDER BY qtyPcs DESC`,
     )
-    .all() as Array<Record<string, unknown>>;
+    .all(officeId) as Array<Record<string, unknown>>;
 
   const fgByModel = db
     .prepare(
       `SELECT m.code AS model, SUM(l.qty) AS qtyPcs
        FROM stock_ledger l JOIN models m ON m.id = l.model_id
-       WHERE l.stage = 'FG'
+       WHERE l.stage = 'FG' AND l.office_id = ?
        GROUP BY l.model_id HAVING SUM(l.qty) > 0
        ORDER BY qtyPcs DESC LIMIT 8`,
     )
-    .all() as Array<Record<string, unknown>>;
+    .all(officeId) as Array<Record<string, unknown>>;
 
   return {
     kpis: {
-      rawCm: stage('RAW'),
+      rawLen: stage('RAW'),
       cutPcs: stage('CUT'),
       wipPcs: stage('WIP'),
       checkingPcs: stage('CHECKING'),
@@ -156,7 +163,7 @@ export type Alert = {
   link: string;
 };
 
-export function alerts(db: Db): Alert[] {
+export function alerts(db: Db, officeId: number): Alert[] {
   const out: Alert[] = [];
   const thresholdDays = delayedJobThresholdDays(db);
 
@@ -165,11 +172,11 @@ export function alerts(db: Db): Alert[] {
       `SELECT j.doc_no, ct.name AS contractor,
               CAST(JULIANDAY('now') - JULIANDAY(j.issue_date) AS INTEGER) AS days
        FROM job_cards j JOIN contractors ct ON ct.id = j.contractor_id
-       WHERE j.voided_at IS NULL AND j.status IN ('open','partially_received')
+       WHERE j.voided_at IS NULL AND j.office_id = ? AND j.status IN ('open','partially_received')
          AND JULIANDAY('now') - JULIANDAY(j.issue_date) > ?
        ORDER BY days DESC LIMIT 20`,
     )
-    .all(thresholdDays) as Array<{ doc_no: string; contractor: string; days: number }>;
+    .all(officeId, thresholdDays) as Array<{ doc_no: string; contractor: string; days: number }>;
   for (const job of delayed) {
     out.push({
       severity: job.days > thresholdDays * 2 ? 'serious' : 'warning',
@@ -182,9 +189,9 @@ export function alerts(db: Db): Alert[] {
   const discrepancies = db
     .prepare(
       `SELECT stage, COUNT(*) AS n, SUM(ABS(qty_pcs)) AS pcs FROM discrepancies
-       WHERE resolved_at IS NULL GROUP BY stage`,
+       WHERE resolved_at IS NULL AND office_id = ? GROUP BY stage`,
     )
-    .all() as Array<{ stage: string; n: number; pcs: number }>;
+    .all(officeId) as Array<{ stage: string; n: number; pcs: number }>;
   for (const d of discrepancies) {
     out.push({
       severity: 'warning',
@@ -198,9 +205,9 @@ export function alerts(db: Db): Alert[] {
     db
       .prepare(
         `SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger
-         WHERE stage = 'CHECKING' AND staff_id IS NULL`,
+         WHERE stage = 'CHECKING' AND office_id = ? AND staff_id IS NULL`,
       )
-      .get() as { q: number }
+      .get(officeId) as { q: number }
   ).q;
   if (checkingPool > 0) {
     out.push({
@@ -215,16 +222,16 @@ export function alerts(db: Db): Alert[] {
     db
       .prepare(
         `SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger
-         WHERE stage = 'PACKING' AND staff_id IS NULL`,
+         WHERE stage = 'PACKING' AND office_id = ? AND staff_id IS NULL`,
       )
-      .get() as { q: number }
+      .get(officeId) as { q: number }
   ).q;
   if (packingPool > 0) {
     out.push({
       severity: 'info',
       title: 'Goods waiting for packing',
       detail: `${packingPool} pcs passed checking but are not yet with a packer.`,
-      link: '/packing',
+      link: '/checking',
     });
   }
 

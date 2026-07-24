@@ -11,36 +11,60 @@
   deactivation blocks NEW use, never closing existing work).
 - Documents: never deleted. Admin-only void = `voided_at/void_reason/voided_by` + reversal
   ledger rows in the same transaction; blocked if downstream consumption exists.
-- Quantities: INTEGER pieces (1dz=12) or INTEGER cm. Money: INTEGER paise.
-- Enum columns carry CHECK constraints mirroring `shared/src/enums.ts`.
+- Quantities: INTEGER pieces (1dz=12) or INTEGER hundredths-of-an-inch ("inch_c",
+  1 yd = 3600 — ADR-029; the legacy cm columns are still written but never read).
+  Money: INTEGER paise.
+- Enum columns carry CHECK constraints mirroring `shared/src/enums.ts`. The CHECKs are
+  frozen at table creation (additive-only migrations cannot change them) — new semantics
+  must fit inside them: e.g. 'missing' is NOT allowed in check_result_rejections, so the
+  service splits it into `check_results.qty_missing` (ADR-034), and pack_allocations
+  cannot hold lot_type 'pack_issue', so bundle sources carry the bundle's ORIGINAL
+  allocations forward (ADR-035).
+- **Multi-office (migration 004, ADR-028):** `offices` table (office 1 = 'HO', created by
+  the migration, cannot be deactivated) and a plain-INTEGER `office_id NOT NULL DEFAULT 1`
+  on purchases, cutting_batches, job_cards, check_issues, pack_issues, fg_dispatches,
+  opening_balances, contractor_payments, discrepancies and stock_ledger (SQLite cannot ADD
+  COLUMN with REFERENCES + non-NULL default; the office middleware validates instead).
+  `users.office_id` NULL = all offices (admin/owner), set = pinned operator. Document
+  numbers for office 1 stay plain; other offices embed the office code (`BR-RM-0001`,
+  counters keyed `family@officeId`), keeping the global UNIQUE on doc_no.
 
 ## Tables (planned — updated as built)
 
 **Core:** users, sessions, audit_log, counters, settings, schema_migrations, idempotency_keys
 
-**Masters:** models, colors, sizes, vendors, contractors, staff (the legacy `role` column
-is ignored — any active staff member can check or pack, ADR-019)
+**Masters:** colors, sizes, vendors, contractors, staff (the legacy `role` column is
+ignored — any active staff member can check or pack, ADR-019). `models` is NOT a master
+any more (ADR-030): it is a hidden, system-managed table populated by the codes typed at
+cutting (find-or-create; ids > 1000000 after the RAW-CLOTH sentinel; latest photo wins →
+`models.image_path`); pickers read `GET /api/products`. Offices are configured at
+/admin/offices (see Conventions).
 
 **Settings keys (app-managed, not migrations):** `delayed_job_days`, `cloud_backup_dir`,
 `last_daily_backup_date`, `setup_complete` (first-run wizard dismissed).
 
 **Documents:**
-purchases (RM-; vendor+color+meters — NO real model: the `RAW-CLOTH` sentinel model
-[id 1000000, inactive, never listed] fills the NOT NULL column; the model is decided at
-cutting, ADR-016) · cutting_batches (CUT-; consumes a typed raw lot:
-`raw_lot_type ∈ purchase|opening` + `raw_lot_id`; model chosen at cutting; meters_used_cm
-COMPUTED from line geometry) + cutting_lines (+ `cloth_per_pc_inch_c` hundredths of an
-inch, `width_count` pieces across the cloth width — ADR-017; editable/deletable while
-'planned') · job_cards (JOB-) + job_card_lines (multi-size, per-line rate snapshot) ·
-job_receipts (RCT-; + `image_path` photo of the returned goods) + job_receipt_lines
-(return_type stitched|unstitched_return; each line is a "pending for checking" lot until
-a checker verifies it — ADR-018) ·
+purchases (RM-; vendor+color+`len_inch_c`+`width_inch_c`+`rate_paise_per_yard` — NO real
+model: the `RAW-CLOTH` sentinel model [id 1000000, inactive, never listed] fills the NOT
+NULL column; the code is given at cutting, ADR-016/030) · cutting_batches (CUT-; consumes
+a typed raw lot: `raw_lot_type ∈ purchase|opening` + `raw_lot_id`; `consumed_inch_c`
+computed from line geometry; status always 'completed' — the plan IS the cutting, ADR-031;
+editable/deletable while its CUT lots are fully unconsumed) + cutting_lines
+(+ `model_id` per line from the typed code, `cloth_per_pc_inch_c`, `width_count` pieces
+across the cloth width, `image_path` product photo; actual_pcs = expected_pcs) ·
+job_cards (JOB-; ONE per code+color, ADR-033) + job_card_lines (per-size, per-line rate
+snapshot = the cost set at issue) · job_receipts (RCT-; `image_path` photo of the returned
+goods is REQUIRED, ADR-032) + job_receipt_lines (return_type stitched|unstitched_return;
+each line is a "pending for checking" lot until a checker verifies it — ADR-018) ·
 check_issues (CHK-; directed at ONE received batch via check_allocations) +
-check_results (incremental sessions) + check_result_rejections ·
-pack_issues (PCK-) + pack_results (incremental) · discrepancies (generic: powers loss
+check_results (incremental sessions; `qty_missing` = the 'missing' rejection reason,
+ADR-034) + check_result_rejections ·
+pack_issues (PCK-; `kind ∈ pack|bundle` + `label` — a bundle is checked goods kept aside
+to pack later, ADR-035) + pack_results (incremental) · discrepancies (generic: powers loss
 reports + alerts; resolved_at/by/resolution_note set by the admin-only resolve workflow —
 an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_balances
-(OPB-) · contractor_payments (PAY-)
+(OPB-; `width_inch_c` for RAW rows, `model_id` from a typed code otherwise) ·
+contractor_payments (PAY-)
 
 **Engine:**
 - `stock_ledger` — append-only signed rows. stage ∈ RAW/CUT/WIP/CHECKING/PACKING/FG/REJECTED;
@@ -48,7 +72,8 @@ an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_b
   (CHECKING/PACKING issued-to; NULL = pool); lot_type+lot_id (RAW→purchase|opening,
   CUT→cutting_line|opening, WIP→job_line, CHECKING→receipt_line|opening|check_issue(staff),
   PACKING→check_issue|opening|pack_issue(staff), FG→pack_issue|opening,
-  REJECTED→check_issue); qty signed ≠ 0 (cm for RAW, pieces otherwise); ref_type/ref_id.
+  REJECTED→check_issue); qty signed ≠ 0 (inch_c for RAW, pieces otherwise);
+  ref_type/ref_id; office_id (migration 004).
 - Allocations (lineage, lot-typed because opening lots participate everywhere):
   `job_allocations(job_card_line_id, cut_lot_type, cut_lot_id, qty_pcs)`,
   `check_allocations(check_issue_id, checking_lot_type, checking_lot_id, qty_pcs)`,
@@ -72,7 +97,7 @@ an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_b
 
 | Stage | Unit | Lot identity |
 |---|---|---|
-| RAW | cm | purchase |
+| RAW | inch_c (hundredths of an inch) | purchase |
 | CUT | pieces | cutting_line (model+color+size) |
 | WIP | pieces | job_card_line (adds contractor dim) |
 | CHECKING | pieces | job_receipt_line (pool) / staff when issued |

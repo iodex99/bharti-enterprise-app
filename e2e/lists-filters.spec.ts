@@ -38,10 +38,10 @@ test('lists support facet filters, date range and column sorting', async ({ page
   await expect(page.getByText('No matches for the current filters')).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters' }).click();
 
-  // column sorting: sort by Quantity ascending, first row <= last row
-  await page.getByRole('button', { name: /^Quantity/ }).click();
+  // column sorting: sort by Length ascending, first row <= last row
+  await page.getByRole('button', { name: /^Length/ }).click();
   const first = await rows.first().textContent();
-  await page.getByRole('button', { name: /^Quantity/ }).click(); // desc
+  await page.getByRole('button', { name: /^Length/ }).click(); // desc
   const firstDesc = await rows.first().textContent();
   expect(first).not.toBe(firstDesc);
 

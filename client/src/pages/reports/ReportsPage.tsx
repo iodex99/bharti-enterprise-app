@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { formatBusinessDate, formatCm, formatPaise, formatPieces } from '@shared';
+import { formatBusinessDate, formatLen, formatPaise, formatPieces } from '@shared';
 import { api } from '../../api/client';
 import { Button, EmptyState, Field, Select, Spinner, TextInput } from '../../components/ui';
 import { MasterSelect } from '../../components/MasterSelect';
+import { useProducts } from '../../api/products';
 
 type ReportColumn = { key: string; header: string; type: string };
 type ReportMeta = {
@@ -15,8 +16,7 @@ type ReportMeta = {
   columns: ReportColumn[];
 };
 
-const FILTER_MASTER: Record<string, 'models' | 'colors' | 'sizes' | 'contractors' | 'staff' | 'vendors'> = {
-  modelId: 'models',
+const FILTER_MASTER: Record<string, 'colors' | 'sizes' | 'contractors' | 'staff' | 'vendors'> = {
   colorId: 'colors',
   sizeId: 'sizes',
   contractorId: 'contractors',
@@ -25,7 +25,7 @@ const FILTER_MASTER: Record<string, 'models' | 'colors' | 'sizes' | 'contractors
 };
 
 const FILTER_LABEL: Record<string, string> = {
-  modelId: 'Model',
+  modelId: 'Code',
   colorId: 'Color',
   sizeId: 'Size',
   contractorId: 'Contractor',
@@ -72,8 +72,8 @@ function renderCell(column: ReportColumn, value: unknown): string {
   switch (column.type) {
     case 'pcs':
       return formatPieces(Number(value));
-    case 'cm':
-      return formatCm(Number(value));
+    case 'len':
+      return formatLen(Number(value));
     case 'paise':
       return formatPaise(Number(value));
     case 'pct':
@@ -169,6 +169,14 @@ export default function ReportsPage() {
             />
           </Field>
         )}
+        {report?.filters.includes('modelId') && (
+          <Field label="Code">
+            <ProductFilterSelect
+              value={(filters.modelId as number) ?? null}
+              onChange={(id) => setFilters({ ...filters, modelId: id })}
+            />
+          </Field>
+        )}
         {report?.filters
           .filter((f) => f in FILTER_MASTER)
           .map((f) => (
@@ -238,5 +246,24 @@ export default function ReportsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+
+function ProductFilterSelect({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+  const { data: products } = useProducts();
+  return (
+    <select
+      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+    >
+      <option value="">All</option>
+      {products?.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.code}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -1,4 +1,4 @@
-import type { JobCardInput, JobCloseInput, JobReceiptInput } from '@shared';
+import type { JobCloseInput, JobEditInput, JobIssueInput, JobReceiptInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
@@ -10,18 +10,22 @@ import {
   splitFifo,
   type Movement,
 } from './ledger.service';
-import { assertActive, type ServiceResult } from './purchases.service';
+import type { Office } from './offices.service';
+import { type ServiceResult } from './purchases.service';
 
 /**
- * Module 5/6: contractor job work.
- * Issue: CUT −qty (FIFO across cut lots, allocations recorded) → WIP +qty per job line.
- * Receipt (partial-friendly):
- *   stitched          WIP −qty → CHECKING +qty (lot = receipt_line); excess beyond WIP
- *                     becomes receipt_excess genesis + a discrepancy row (reason required).
- *   unstitched_return WIP −qty → CUT +qty back onto the originally allocated lots (LIFO).
- * Close (admin): remaining WIP written off as job_shortage + discrepancy rows.
- * Status: open → partially_received → completed (auto when every line settles exactly)
- *         or closed_with_discrepancy (admin).
+ * Module 3: contractor job work (v2, ADR-032/033).
+ * One physical handover can cover several codes/colors, but job CARDS are per
+ * code+color: createJobIssue splits the combined input into one card per (model, color)
+ * group inside one transaction. The per-dozen cost is set here, at issue.
+ * A card with no receipts yet can be EDITED (lines re-issued FIFO) or DELETED (void).
+ * Receipts REQUIRE a photo of the returned goods — one receipt = one card = one code.
+ *
+ * Ledger: issue    CUT −qty (FIFO, allocations recorded) → WIP +qty per job line.
+ *         receipt  stitched: WIP − → CHECKING + (lot = receipt_line); excess beyond WIP
+ *                  becomes receipt_excess genesis + a discrepancy row (reason required).
+ *                  unstitched_return: WIP − → CUT + back onto allocated lots (LIFO).
+ *         close    remaining WIP written off as job_shortage + discrepancy rows.
  */
 
 type JobLineRow = {
@@ -68,13 +72,114 @@ function refreshJobStatus(db: Db, jobCardId: number): string {
   return status;
 }
 
-export function createJobCard(
+type IssueLine = {
+  sizeId: number;
+  qtyIssuedPcs: number;
+  unitEntered: string;
+  ratePaisePerDozen: number;
+};
+
+/** FIFO-issue the lines of one card. Runs inside the caller's transaction. */
+function issueCardLines(
   db: Db,
-  input: JobCardInput,
+  office: Office,
+  cardId: number,
+  contractorId: number,
+  modelId: number,
+  colorId: number,
+  lines: IssueLine[],
+  userId: number,
+): void {
+  const insertLine = db.prepare(
+    `INSERT INTO job_card_lines (job_card_id, size_id, qty_issued_pcs, unit_entered, rate_paise_per_dozen)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  const insertAlloc = db.prepare(
+    `INSERT INTO job_allocations (job_card_line_id, cut_lot_type, cut_lot_id, qty_pcs)
+     VALUES (?, ?, ?, ?)`,
+  );
+  for (const line of lines) {
+    const lineInfo = insertLine.run(
+      cardId,
+      line.sizeId,
+      line.qtyIssuedPcs,
+      line.unitEntered,
+      line.ratePaisePerDozen,
+    );
+    const lineId = Number(lineInfo.lastInsertRowid);
+
+    const lots = availableLots(db, {
+      stage: 'CUT',
+      officeId: office.id,
+      modelId,
+      colorId,
+      sizeId: line.sizeId,
+    });
+    const totalAvailable = lots.reduce((s, l) => s + l.qty, 0);
+    if (totalAvailable < line.qtyIssuedPcs) {
+      const label = labelFor(db, modelId, line.sizeId);
+      throw new LedgerError(
+        `Not enough cut stock for ${label}: needed ${line.qtyIssuedPcs} pcs, available ${totalAvailable} pcs.`,
+      );
+    }
+    const takes = splitFifo(lots, line.qtyIssuedPcs);
+    const movements: Movement[] = [];
+    for (const take of takes) {
+      movements.push({
+        stage: 'CUT',
+        officeId: office.id,
+        modelId,
+        colorId,
+        sizeId: line.sizeId,
+        lotType: take.lotType,
+        lotId: take.lotId,
+        qty: -take.qty,
+        refType: 'job_issue',
+        refId: lineId,
+      });
+      insertAlloc.run(lineId, take.lotType, take.lotId, take.qty);
+    }
+    movements.push({
+      stage: 'WIP',
+      officeId: office.id,
+      modelId,
+      colorId,
+      sizeId: line.sizeId,
+      contractorId,
+      lotType: 'job_line',
+      lotId: lineId,
+      qty: line.qtyIssuedPcs,
+      refType: 'job_issue',
+      refId: lineId,
+    });
+    postMovements(db, movements, userId);
+  }
+}
+
+function labelFor(db: Db, modelId: number, sizeId: number): string {
+  const m = db.prepare('SELECT code FROM models WHERE id = ?').get(modelId) as
+    | { code: string }
+    | undefined;
+  const s = db.prepare('SELECT code FROM sizes WHERE id = ?').get(sizeId) as
+    | { code: string }
+    | undefined;
+  return `${m?.code ?? '?'}-${s?.code ?? '?'}`;
+}
+
+export type CreatedCard = { id: number; docNo: string; modelId: number; colorId: number };
+
+/**
+ * The combined issue: goods for several codes/colors handed to one contractor at once.
+ * Creates ONE JOB CARD PER (code, color) group, all-or-nothing.
+ */
+export function createJobIssue(
+  db: Db,
+  office: Office,
+  input: JobIssueInput,
   userId: number,
   ip: string | null,
   onCreated?: (id: number) => void,
-): ServiceResult<{ id: number; docNo: string }> {
+): ServiceResult<{ cards: CreatedCard[] }> {
   const contractor = db
     .prepare('SELECT is_active FROM contractors WHERE id = ? AND deleted_at IS NULL')
     .get(input.contractorId) as { is_active: number } | undefined;
@@ -82,104 +187,198 @@ export function createJobCard(
   if (!contractor.is_active) {
     return { ok: false, code: 400, error: 'Contractor is deactivated — no new job cards.' };
   }
-  // job cards are new documents — model/color must exist and be active
-  for (const [table, refId, label] of [
-    ['models', input.modelId, 'Model'],
-    ['colors', input.colorId, 'Color'],
-  ] as const) {
-    const err = assertActive(db, table, refId, label);
-    if (err) return { ok: false, code: 400, error: err };
+  for (const line of input.lines) {
+    const model = db
+      .prepare('SELECT id FROM models WHERE id = ? AND deleted_at IS NULL')
+      .get(line.modelId);
+    if (!model) return { ok: false, code: 400, error: 'A selected code no longer exists.' };
+    const color = db
+      .prepare('SELECT is_active FROM colors WHERE id = ? AND deleted_at IS NULL')
+      .get(line.colorId) as { is_active: number } | undefined;
+    if (!color) return { ok: false, code: 400, error: 'Color not found.' };
   }
 
-  let id = 0;
-  let docNo = '';
+  // one card per (model, color), in input order
+  const groups = new Map<string, { modelId: number; colorId: number; lines: IssueLine[] }>();
+  for (const line of input.lines) {
+    const key = `${line.modelId}|${line.colorId}`;
+    const group = groups.get(key) ?? { modelId: line.modelId, colorId: line.colorId, lines: [] };
+    group.lines.push(line);
+    groups.set(key, group);
+  }
+
+  const cards: CreatedCard[] = [];
   try {
     const tx = db.transaction(() => {
-      docNo = nextDocNo(db, 'job');
-      const info = db
-        .prepare(
-          `INSERT INTO job_cards (doc_no, issue_date, contractor_id, model_id, color_id, notes, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(docNo, input.issueDate, input.contractorId, input.modelId, input.colorId, input.notes, userId);
-      id = Number(info.lastInsertRowid);
-
-      const insertLine = db.prepare(
-        `INSERT INTO job_card_lines (job_card_id, size_id, qty_issued_pcs, unit_entered, rate_paise_per_dozen)
-         VALUES (?, ?, ?, ?, ?)`,
-      );
-      const insertAlloc = db.prepare(
-        `INSERT INTO job_allocations (job_card_line_id, cut_lot_type, cut_lot_id, qty_pcs)
-         VALUES (?, ?, ?, ?)`,
-      );
-
-      for (const line of input.lines) {
-        const lineInfo = insertLine.run(
-          id,
-          line.sizeId,
-          line.qtyIssuedPcs,
-          line.unitEntered,
-          line.ratePaisePerDozen,
-        );
-        const lineId = Number(lineInfo.lastInsertRowid);
-
-        // FIFO across available CUT lots for this model/color/size
-        const lots = availableLots(db, {
-          stage: 'CUT',
-          modelId: input.modelId,
-          colorId: input.colorId,
-          sizeId: line.sizeId,
-        });
-        const totalAvailable = lots.reduce((s, l) => s + l.qty, 0);
-        if (totalAvailable < line.qtyIssuedPcs) {
-          throw new LedgerError(
-            `Not enough cut stock for size line: needed ${line.qtyIssuedPcs} pcs, available ${totalAvailable} pcs.`,
+      for (const group of groups.values()) {
+        const docNo = nextDocNo(db, 'job', office);
+        const info = db
+          .prepare(
+            `INSERT INTO job_cards (doc_no, office_id, issue_date, contractor_id, model_id, color_id, notes, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            docNo,
+            office.id,
+            input.issueDate,
+            input.contractorId,
+            group.modelId,
+            group.colorId,
+            input.notes,
+            userId,
           );
-        }
-        const takes = splitFifo(lots, line.qtyIssuedPcs);
-        const movements: Movement[] = [];
-        for (const take of takes) {
-          movements.push({
-            stage: 'CUT',
-            modelId: input.modelId,
-            colorId: input.colorId,
-            sizeId: line.sizeId,
-            lotType: take.lotType,
-            lotId: take.lotId,
-            qty: -take.qty,
-            refType: 'job_issue',
-            refId: lineId,
-          });
-          insertAlloc.run(lineId, take.lotType, take.lotId, take.qty);
-        }
-        movements.push({
-          stage: 'WIP',
-          modelId: input.modelId,
-          colorId: input.colorId,
-          sizeId: line.sizeId,
-          contractorId: input.contractorId,
-          lotType: 'job_line',
-          lotId: lineId,
-          qty: line.qtyIssuedPcs,
-          refType: 'job_issue',
-          refId: lineId,
+        const cardId = Number(info.lastInsertRowid);
+        issueCardLines(
+          db,
+          office,
+          cardId,
+          input.contractorId,
+          group.modelId,
+          group.colorId,
+          group.lines,
+          userId,
+        );
+        cards.push({ id: cardId, docNo, modelId: group.modelId, colorId: group.colorId });
+        audit(db, {
+          userId,
+          action: 'create',
+          entityType: 'job_card',
+          entityId: cardId,
+          new: { docNo, officeId: office.id, contractorId: input.contractorId, ...group },
+          ip,
         });
-        postMovements(db, movements, userId);
       }
-
-      audit(db, { userId, action: 'create', entityType: 'job_card', entityId: id, new: { docNo, ...input }, ip });
-      onCreated?.(id);
+      onCreated?.(cards[0]!.id);
     });
     tx();
   } catch (err) {
     if (err instanceof LedgerError) return { ok: false, code: 409, error: err.message };
     throw err;
   }
-  return { ok: true, id, docNo };
+  return { ok: true, cards };
+}
+
+/**
+ * Edit an UNSTARTED card (no receipts): put the issued pieces back on their CUT lots,
+ * replace the lines, re-issue FIFO. Document number is kept.
+ */
+export function editJobCard(
+  db: Db,
+  office: Office,
+  jobCardId: number,
+  input: JobEditInput,
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const card = db
+    .prepare('SELECT * FROM job_cards WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(jobCardId, office.id) as Record<string, unknown> | undefined;
+  if (!card) return { ok: false, code: 404, error: 'Job card not found.' };
+  const receiptCount = (
+    db
+      .prepare('SELECT COUNT(*) AS n FROM job_receipts WHERE job_card_id = ? AND voided_at IS NULL')
+      .get(jobCardId) as { n: number }
+  ).n;
+  if (receiptCount > 0) {
+    return {
+      ok: false,
+      code: 409,
+      error: 'Goods have already been received against this card — it can no longer be edited.',
+    };
+  }
+  if (card.status === 'closed_with_discrepancy') {
+    return { ok: false, code: 409, error: 'This job is closed.' };
+  }
+
+  const oldLines = db
+    .prepare('SELECT * FROM job_card_lines WHERE job_card_id = ?')
+    .all(jobCardId) as JobLineRow[];
+
+  try {
+    const tx = db.transaction(() => {
+      // 1) reverse the current issue (WIP back to the allocated CUT lots)
+      for (const line of oldLines) {
+        const allocations = db
+          .prepare(
+            'SELECT cut_lot_type, cut_lot_id, qty_pcs FROM job_allocations WHERE job_card_line_id = ?',
+          )
+          .all(line.id) as Array<{
+          cut_lot_type: 'cutting_line' | 'opening';
+          cut_lot_id: number;
+          qty_pcs: number;
+        }>;
+        postMovements(
+          db,
+          [
+            {
+              stage: 'WIP',
+              officeId: office.id,
+              modelId: card.model_id as number,
+              colorId: card.color_id as number,
+              sizeId: line.size_id,
+              contractorId: card.contractor_id as number,
+              lotType: 'job_line',
+              lotId: line.id,
+              qty: -line.qty_issued_pcs,
+              refType: 'void_reversal',
+              refId: line.id,
+            },
+            ...allocations.map((alloc) => ({
+              stage: 'CUT' as const,
+              officeId: office.id,
+              modelId: card.model_id as number,
+              colorId: card.color_id as number,
+              sizeId: line.size_id,
+              lotType: alloc.cut_lot_type,
+              lotId: alloc.cut_lot_id,
+              qty: alloc.qty_pcs,
+              refType: 'void_reversal' as const,
+              refId: line.id,
+            })),
+          ],
+          userId,
+        );
+        db.prepare('DELETE FROM job_allocations WHERE job_card_line_id = ?').run(line.id);
+      }
+      db.prepare('DELETE FROM job_card_lines WHERE job_card_id = ?').run(jobCardId);
+
+      // 2) apply the new lines (header code+color unchanged — that IS the card)
+      db.prepare('UPDATE job_cards SET issue_date = ?, notes = ? WHERE id = ?').run(
+        input.issueDate,
+        input.notes,
+        jobCardId,
+      );
+      issueCardLines(
+        db,
+        office,
+        jobCardId,
+        card.contractor_id as number,
+        card.model_id as number,
+        card.color_id as number,
+        input.lines,
+        userId,
+      );
+      audit(db, {
+        userId,
+        action: 'update',
+        entityType: 'job_card',
+        entityId: jobCardId,
+        old: { lines: oldLines },
+        new: input,
+        ip,
+      });
+    });
+    tx();
+  } catch (err) {
+    if (err instanceof LedgerError) return { ok: false, code: 409, error: err.message };
+    throw err;
+  }
+  return { ok: true, id: jobCardId };
 }
 
 export function createReceipt(
   db: Db,
+  office: Office,
   jobCardId: number,
   input: JobReceiptInput,
   userId: number,
@@ -187,8 +386,8 @@ export function createReceipt(
   onCreated?: (id: number) => void,
 ): ServiceResult<{ id: number; docNo: string; status: string }> {
   const card = db
-    .prepare('SELECT * FROM job_cards WHERE id = ? AND voided_at IS NULL')
-    .get(jobCardId) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM job_cards WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(jobCardId, office.id) as Record<string, unknown> | undefined;
   if (!card) return { ok: false, code: 404, error: 'Job card not found.' };
   if (card.status === 'closed_with_discrepancy') {
     return { ok: false, code: 409, error: 'This job was closed with a discrepancy — no more receipts.' };
@@ -210,13 +409,13 @@ export function createReceipt(
   let status = String(card.status);
   try {
     const tx = db.transaction(() => {
-      docNo = nextDocNo(db, 'receipt');
+      docNo = nextDocNo(db, 'receipt', office);
       const info = db
         .prepare(
           `INSERT INTO job_receipts (doc_no, job_card_id, receipt_date, image_path, notes, created_by)
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .run(docNo, jobCardId, input.receiptDate, input.imagePath ?? null, input.notes, userId);
+        .run(docNo, jobCardId, input.receiptDate, input.imagePath, input.notes, userId);
       id = Number(info.lastInsertRowid);
 
       const insertReceiptLine = db.prepare(
@@ -251,6 +450,7 @@ export function createReceipt(
             movements.push(
               {
                 stage: 'WIP',
+                officeId: office.id,
                 modelId: card.model_id as number,
                 colorId: card.color_id as number,
                 sizeId: jobLine.size_id,
@@ -263,6 +463,7 @@ export function createReceipt(
               },
               {
                 stage: 'CHECKING',
+                officeId: office.id,
                 modelId: card.model_id as number,
                 colorId: card.color_id as number,
                 sizeId: jobLine.size_id,
@@ -277,6 +478,7 @@ export function createReceipt(
           if (excess > 0) {
             movements.push({
               stage: 'CHECKING',
+              officeId: office.id,
               modelId: card.model_id as number,
               colorId: card.color_id as number,
               sizeId: jobLine.size_id,
@@ -287,9 +489,9 @@ export function createReceipt(
               refId: receiptLineId,
             });
             db.prepare(
-              `INSERT INTO discrepancies (stage, ref_type, ref_id, qty_pcs, reason, note, created_by)
-               VALUES ('WIP', 'job_card_line', ?, ?, ?, ?, ?)`,
-            ).run(jobLine.id, excess, rl.discrepancyReason, rl.discrepancyNote ?? '', userId);
+              `INSERT INTO discrepancies (stage, office_id, ref_type, ref_id, qty_pcs, reason, note, created_by)
+               VALUES ('WIP', ?, 'job_card_line', ?, ?, ?, ?, ?)`,
+            ).run(office.id, jobLine.id, excess, rl.discrepancyReason, rl.discrepancyNote ?? '', userId);
           }
           postMovements(db, movements, userId);
         } else {
@@ -308,6 +510,7 @@ export function createReceipt(
           const movements: Movement[] = [
             {
               stage: 'WIP',
+              officeId: office.id,
               modelId: card.model_id as number,
               colorId: card.color_id as number,
               sizeId: jobLine.size_id,
@@ -325,6 +528,7 @@ export function createReceipt(
             const back = Math.min(alloc.qty_pcs, remaining);
             movements.push({
               stage: 'CUT',
+              officeId: office.id,
               modelId: card.model_id as number,
               colorId: card.color_id as number,
               sizeId: jobLine.size_id,
@@ -358,14 +562,15 @@ export function createReceipt(
 
 export function closeJobWithDiscrepancy(
   db: Db,
+  office: Office,
   jobCardId: number,
   input: JobCloseInput,
   userId: number,
   ip: string | null,
 ): ServiceResult<{ id: number; shortagePcs: number }> {
   const card = db
-    .prepare('SELECT * FROM job_cards WHERE id = ? AND voided_at IS NULL')
-    .get(jobCardId) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM job_cards WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(jobCardId, office.id) as Record<string, unknown> | undefined;
   if (!card) return { ok: false, code: 404, error: 'Job card not found.' };
   if (card.status === 'completed' || card.status === 'closed_with_discrepancy') {
     return { ok: false, code: 409, error: 'Job is already settled.' };
@@ -393,6 +598,7 @@ export function closeJobWithDiscrepancy(
           [
             {
               stage: 'WIP',
+              officeId: office.id,
               modelId: card.model_id as number,
               colorId: card.color_id as number,
               sizeId: line.size_id,
@@ -407,9 +613,9 @@ export function closeJobWithDiscrepancy(
           userId,
         );
         db.prepare(
-          `INSERT INTO discrepancies (stage, ref_type, ref_id, qty_pcs, reason, note, created_by)
-           VALUES ('WIP', 'job_card_line', ?, ?, ?, ?, ?)`,
-        ).run(line.id, -wipBalance, input.reason, input.note, userId);
+          `INSERT INTO discrepancies (stage, office_id, ref_type, ref_id, qty_pcs, reason, note, created_by)
+           VALUES ('WIP', ?, 'job_card_line', ?, ?, ?, ?, ?)`,
+        ).run(office.id, line.id, -wipBalance, input.reason, input.note, userId);
       }
     }
     db.prepare(
@@ -431,14 +637,15 @@ export function closeJobWithDiscrepancy(
 
 export function voidJobCard(
   db: Db,
+  office: Office,
   jobCardId: number,
   reason: string,
   userId: number,
   ip: string | null,
 ): ServiceResult {
   const card = db
-    .prepare('SELECT * FROM job_cards WHERE id = ?')
-    .get(jobCardId) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM job_cards WHERE id = ? AND office_id = ?')
+    .get(jobCardId, office.id) as Record<string, unknown> | undefined;
   if (!card) return { ok: false, code: 404, error: 'Job card not found.' };
   if (card.voided_at) return { ok: false, code: 409, error: 'Already voided.' };
 
@@ -451,7 +658,7 @@ export function voidJobCard(
     return {
       ok: false,
       code: 409,
-      error: 'Cannot void: receipts exist for this job card. Void is only for unstarted jobs.',
+      error: 'Cannot delete: goods were already received against this card.',
     };
   }
 
@@ -469,6 +676,7 @@ export function voidJobCard(
       const movements: Movement[] = [
         {
           stage: 'WIP',
+          officeId: office.id,
           modelId: card.model_id as number,
           colorId: card.color_id as number,
           sizeId: line.size_id,
@@ -481,6 +689,7 @@ export function voidJobCard(
         },
         ...allocations.map((alloc) => ({
           stage: 'CUT' as const,
+          officeId: office.id,
           modelId: card.model_id as number,
           colorId: card.color_id as number,
           sizeId: line.size_id,
@@ -511,10 +720,11 @@ export function voidJobCard(
 
 export function listJobCards(
   db: Db,
+  officeId: number,
   f: { status?: string; contractorId?: number; includeVoided?: boolean } = {},
 ): Array<Record<string, unknown>> {
-  const where: string[] = [];
-  const params: unknown[] = [];
+  const where: string[] = ['j.office_id = ?'];
+  const params: unknown[] = [officeId];
   if (!f.includeVoided) where.push('j.voided_at IS NULL');
   if (f.status) {
     where.push('j.status = ?');
@@ -529,13 +739,13 @@ export function listJobCards(
       `SELECT j.id, j.doc_no AS docNo, j.issue_date AS issueDate, j.status, j.notes,
               j.closed_at AS closedAt, j.close_note AS closeNote, j.voided_at AS voidedAt,
               j.contractor_id AS contractorId, ct.name AS contractorName,
-              j.model_id AS modelId, m.code AS modelCode,
+              j.model_id AS modelId, m.code AS modelCode, m.image_path AS modelImagePath,
               j.color_id AS colorId, c.name AS colorName
        FROM job_cards j
        JOIN contractors ct ON ct.id = j.contractor_id
        JOIN models m ON m.id = j.model_id
        JOIN colors c ON c.id = j.color_id
-       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       WHERE ${where.join(' AND ')}
        ORDER BY j.id DESC`,
     )
     .all(...params) as Array<Record<string, unknown>>;
@@ -584,6 +794,7 @@ export function listJobCards(
       received += t.stitched;
       returned += t.unstitched;
     }
+    card.sizeCodeLabel = `${card.modelCode as string} · ${card.colorName as string}`;
     card.lines = lines;
     card.issuedPcs = issued;
     card.receivedPcs = received;
@@ -595,22 +806,25 @@ export function listJobCards(
         s + Math.round(((l.receivedPcs as number) * (l.ratePaisePerDozen as number)) / 12),
       0,
     );
+    // no receipts yet → the card can still be edited or deleted
+    card.editable = !card.voidedAt && received === 0 && returned === 0 && card.status !== 'closed_with_discrepancy';
   }
   return cards;
 }
 
-export function jobReceiptsFor(db: Db, jobCardId: number): Array<Record<string, unknown>> {
+export function jobReceiptsFor(db: Db, officeId: number, jobCardId: number): Array<Record<string, unknown>> {
   return db
     .prepare(
       `SELECT r.id, r.doc_no AS docNo, r.receipt_date AS receiptDate, r.image_path AS imagePath, r.notes,
               rl.job_card_line_id AS jobCardLineId, rl.qty_pcs AS qtyPcs, rl.return_type AS returnType,
               s.code AS sizeCode
        FROM job_receipts r
+       JOIN job_cards j ON j.id = r.job_card_id AND j.office_id = ?
        JOIN job_receipt_lines rl ON rl.job_receipt_id = r.id
        JOIN job_card_lines l ON l.id = rl.job_card_line_id
        JOIN sizes s ON s.id = l.size_id
        WHERE r.job_card_id = ? AND r.voided_at IS NULL
        ORDER BY r.id DESC`,
     )
-    .all(jobCardId) as Array<Record<string, unknown>>;
+    .all(officeId, jobCardId) as Array<Record<string, unknown>>;
 }

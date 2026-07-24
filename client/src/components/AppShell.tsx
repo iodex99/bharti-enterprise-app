@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { api } from '../api/client';
+import { activeOfficeId, api, switchOffice } from '../api/client';
 import { useAuth } from '../lib/auth';
 import { useHealth } from '../api/health';
 import { UpdateBanner } from './UpdateBanner';
@@ -29,16 +29,15 @@ const NAV: NavSection[] = [
       { to: '/cutting', label: 'Cutting', icon: '✂️' },
       { to: '/jobs', label: 'Job Work', icon: '🧵' },
       { to: '/contractors', label: 'Contractors', icon: '🤝' },
-      { to: '/checking', label: 'Checking', icon: '🔍' },
-      { to: '/packing', label: 'Packing', icon: '📦' },
+      { to: '/checking', label: 'Checking & Packing', icon: '🔍' },
       { to: '/dispatches', label: 'Dispatches', icon: '🚚' },
+      { to: '/dues', label: 'Pending Dues', icon: '💰' },
       { to: '/discrepancies', label: 'Discrepancies', icon: '⚖️' },
     ],
   },
   {
     title: 'Masters',
     items: [
-      { to: '/masters/models', label: 'Models', icon: '🎀' },
       { to: '/masters/colors', label: 'Colors', icon: '🎨' },
       { to: '/masters/sizes', label: 'Sizes', icon: '📏' },
       { to: '/masters/vendors', label: 'Vendors', icon: '🏬' },
@@ -49,6 +48,7 @@ const NAV: NavSection[] = [
   {
     title: 'Administration',
     items: [
+      { to: '/admin/offices', label: 'Offices', icon: '🏢', roles: ['admin'] },
       { to: '/admin/opening-balances', label: 'Opening Balances', icon: '🧮', roles: ['admin'] },
       { to: '/admin/users', label: 'Users', icon: '👥', roles: ['admin'] },
       { to: '/admin/audit', label: 'Audit Log', icon: '📜', roles: ['admin'] },
@@ -59,6 +59,39 @@ const NAV: NavSection[] = [
 ];
 
 const ROLE_TONE = { admin: 'violet', operator: 'blue', owner: 'green' } as const;
+
+type OfficeRow = { id: number; code: string; name: string };
+
+/**
+ * The office this session works in (ADR-028). Admin/owner switch offices here; the
+ * whole app reloads so every number on screen belongs to one office. Operators are
+ * pinned server-side and do not see a picker.
+ */
+function OfficeSwitcher({ role }: { role: 'admin' | 'operator' | 'owner' }) {
+  const { data } = useQuery({
+    queryKey: ['offices'],
+    queryFn: () => api.get<{ items: OfficeRow[] }>('/api/offices'),
+    staleTime: 60_000,
+  });
+  if (role === 'operator') return null;
+  const offices = data?.items ?? [];
+  if (offices.length <= 1) return null;
+  const current = activeOfficeId();
+  return (
+    <select
+      aria-label="Office"
+      value={current}
+      onChange={(e) => switchOffice(Number(e.target.value))}
+      className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm font-medium text-gray-700"
+    >
+      {offices.map((o) => (
+        <option key={o.id} value={o.id}>
+          🏢 {o.name}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 export default function AppShell() {
   const { user, logout } = useAuth();
@@ -162,6 +195,7 @@ export default function AppShell() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <OfficeSwitcher role={user.role} />
           <Badge tone={ROLE_TONE[user.role]}>{user.role}</Badge>
           <div className="group relative">
             <button

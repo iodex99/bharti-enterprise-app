@@ -2,30 +2,31 @@ import { Router } from 'express';
 import { STAGES, type Stage } from '@shared';
 import { getDb } from '../db/connection';
 import { requireAuth } from '../middleware/auth';
+import { officeOf } from '../middleware/office';
 import { stockByDimensions } from '../services/ledger.service';
 
 export function stockRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
 
-  /** Summary counts per stage for the inventory landing page / dashboard. */
-  router.get('/summary', (_req, res) => {
+  /** Summary counts per stage for the inventory landing page / dashboard (office-scoped). */
+  router.get('/summary', (req, res) => {
     const rows = getDb()
       .prepare(
         `SELECT stage, SUM(qty) AS qty, COUNT(DISTINCT model_id || '-' || color_id || '-' || COALESCE(size_id, 0)) AS combos
-         FROM stock_ledger GROUP BY stage`,
+         FROM stock_ledger WHERE office_id = ? GROUP BY stage`,
       )
-      .all() as Array<{ stage: Stage; qty: number; combos: number }>;
+      .all(officeOf(req).id) as Array<{ stage: Stage; qty: number; combos: number }>;
     const byStage = Object.fromEntries(rows.map((r) => [r.stage, { qty: r.qty, combos: r.combos }]));
     res.json({ stages: STAGES.map((s) => ({ stage: s, qty: byStage[s]?.qty ?? 0, combos: byStage[s]?.combos ?? 0 })) });
   });
 
-  /** RAW stock with per-purchase lot detail — raw cloth carries NO model (view by color/vendor). */
+  /** RAW stock with per-purchase lot detail — cloth carries NO code (view by color/vendor). */
   router.get('/raw', (req, res) => {
     const num = (v: unknown) => (v && !Number.isNaN(Number(v)) ? Number(v) : undefined);
     const vendorId = num(req.query.vendorId);
-    const where: string[] = ["l.stage = 'RAW'"];
-    const params: unknown[] = [];
+    const where: string[] = ["l.stage = 'RAW'", 'l.office_id = ?'];
+    const params: unknown[] = [officeOf(req).id];
     if (num(req.query.colorId)) {
       where.push('l.color_id = ?');
       params.push(num(req.query.colorId));
@@ -41,9 +42,10 @@ export function stockRoutes(): Router {
         `SELECT l.lot_type AS lotType, l.lot_id AS lotId,
                 l.color_id AS colorId, c.name AS colorName,
                 p.doc_no AS purchaseDocNo, p.purchase_date AS purchaseDate,
+                p.width_inch_c AS purchaseWidthInchC,
                 v.id AS vendorId, v.name AS vendorName,
-                o.doc_no AS openingDocNo,
-                SUM(l.qty) AS qtyCm
+                o.doc_no AS openingDocNo, o.width_inch_c AS openingWidthInchC,
+                SUM(l.qty) AS qtyInchC
          FROM stock_ledger l
          JOIN colors c ON c.id = l.color_id
          LEFT JOIN purchases p ON l.lot_type = 'purchase' AND p.id = l.lot_id
@@ -55,6 +57,9 @@ export function stockRoutes(): Router {
          ORDER BY c.name, l.lot_id`,
       )
       .all(...params) as Array<Record<string, unknown>>;
+    for (const lot of lots) {
+      lot.widthInchC = (lot.purchaseWidthInchC ?? lot.openingWidthInchC) as number | null;
+    }
     res.json({ lots });
   });
 
@@ -67,7 +72,7 @@ export function stockRoutes(): Router {
     }
     const num = (v: unknown) => (v && !Number.isNaN(Number(v)) ? Number(v) : undefined);
     res.json({
-      items: stockByDimensions(getDb(), stage, {
+      items: stockByDimensions(getDb(), stage, officeOf(req).id, {
         modelId: num(req.query.modelId),
         colorId: num(req.query.colorId),
         sizeId: num(req.query.sizeId),

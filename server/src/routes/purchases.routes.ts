@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { purchaseEditSchema, purchaseSchema, voidSchema } from '@shared';
 import { getDb } from '../db/connection';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { officeOf } from '../middleware/office';
 import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
@@ -19,7 +20,7 @@ export function purchasesRoutes(): Router {
   router.get('/', requireAuth, (req, res) => {
     const num = (v: unknown) => (v && !Number.isNaN(Number(v)) ? Number(v) : undefined);
     res.json({
-      items: listPurchases(getDb(), {
+      items: listPurchases(getDb(), officeOf(req).id, {
         vendorId: num(req.query.vendorId),
         colorId: num(req.query.colorId),
         from: typeof req.query.from === 'string' ? req.query.from : undefined,
@@ -35,7 +36,7 @@ export function purchasesRoutes(): Router {
     idempotencyGuard('purchase'),
     validateBody(purchaseSchema),
     (req, res) => {
-      const result = createPurchase(getDb(), req.body, req.user!.id, req.ip ?? null, (id) =>
+      const result = createPurchase(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
         recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
@@ -47,13 +48,14 @@ export function purchasesRoutes(): Router {
   );
 
   router.put('/:id', requireRole('admin', 'operator'), validateBody(purchaseEditSchema), (req, res) => {
-    const result = editPurchase(getDb(), Number(req.params.id), req.body, req.user!.id, req.ip ?? null);
+    const result = editPurchase(getDb(), officeOf(req), Number(req.params.id), req.body, req.user!.id, req.ip ?? null);
     res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
   });
 
   router.post('/:id/void', requireRole('admin'), validateBody(voidSchema), (req, res) => {
     const result = voidPurchase(
       getDb(),
+      officeOf(req),
       Number(req.params.id),
       (req.body as { reason: string }).reason,
       req.user!.id,

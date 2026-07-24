@@ -7,6 +7,7 @@ import { DataTable } from '../../components/DataTable';
 import { Badge, Button, ErrorText, Field, Modal, TextInput } from '../../components/ui';
 import { DzPcInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
+import { useProducts } from '../../api/products';
 import { VoidModal } from '../purchases/PurchasesPage';
 
 type Dispatch = {
@@ -85,7 +86,7 @@ export default function DispatchesPage() {
         loading={isLoading}
         emptyTitle="No dispatches yet"
         facets={[
-          { key: 'model', label: 'Model', value: (r) => r.modelCode },
+          { key: 'model', label: 'Code', value: (r) => r.modelCode },
           { key: 'color', label: 'Color', value: (r) => r.colorName },
         ]}
         dateRange={{ label: 'Dispatch date', value: (r) => r.dispatchDate }}
@@ -142,8 +143,8 @@ function NewDispatchModal({ open, onClose, onDone }: { open: boolean; onClose: (
         <Field label="Dispatch date">
           <TextInput type="date" value={dispatchDate} onChange={(e) => setDate(e.target.value)} required />
         </Field>
-        <Field label="Model">
-          <MasterSelect master="models" value={modelId} onChange={setModelId} />
+        <Field label="Code">
+          <ProductSelect value={modelId} onChange={setModelId} />
         </Field>
         <Field label="Color">
           <MasterSelect master="colors" value={colorId} onChange={setColorId} />
@@ -163,5 +164,26 @@ function NewDispatchModal({ open, onClose, onDone }: { open: boolean; onClose: (
         </Button>
       </form>
     </Modal>
+  );
+}
+
+
+function ProductSelect({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+  const { data: products } = useProducts();
+  return (
+    <select
+      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+    >
+      <option value="" disabled>
+        — select code —
+      </option>
+      {products?.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.code}
+        </option>
+      ))}
+    </select>
   );
 }

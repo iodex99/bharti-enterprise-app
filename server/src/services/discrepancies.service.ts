@@ -24,7 +24,7 @@ export type DiscrepancyRow = {
   resolutionNote: string;
 };
 
-export function listDiscrepancies(db: Db): DiscrepancyRow[] {
+export function listDiscrepancies(db: Db, officeId: number): DiscrepancyRow[] {
   const rows = db
     .prepare(
       `SELECT d.id, d.created_at AS createdAt, d.stage, d.qty_pcs AS qtyPcs, d.reason, d.note,
@@ -79,9 +79,10 @@ export function listDiscrepancies(db: Db): DiscrepancyRow[] {
        LEFT JOIN models m_pi ON m_pi.id = pi.model_id
        LEFT JOIN colors c_pi ON c_pi.id = pi.color_id
        LEFT JOIN sizes  s_pi ON s_pi.id = pi.size_id
+       WHERE d.office_id = ?
        ORDER BY (d.resolved_at IS NOT NULL), d.created_at DESC, d.id DESC`,
     )
-    .all() as DiscrepancyRow[];
+    .all(officeId) as DiscrepancyRow[];
   return rows;
 }
 

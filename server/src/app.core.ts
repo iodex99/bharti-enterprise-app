@@ -1,6 +1,8 @@
 import express, { type Router } from 'express';
 import cookieParser from 'cookie-parser';
 import { attachUser, checkOrigin } from './middleware/auth';
+import { resolveOffice } from './middleware/office';
+import { officesRoutes, productsRoutes } from './routes/offices.routes';
 import { systemRoutes } from './routes/system.routes';
 import { authRoutes } from './routes/auth.routes';
 import { usersRoutes } from './routes/users.routes';
@@ -42,10 +44,14 @@ export function mountCoreMiddleware(app: express.Express): void {
   app.use(cookieParser());
   app.use(checkOrigin);
   app.use(attachUser);
+  // ADR-028: every signed-in request operates in exactly one office
+  app.use(resolveOffice);
 }
 
 export function mountApiRoutes(app: express.Express, options: CoreAppOptions = {}): void {
   app.use('/api/system', systemRoutes(options.systemOps));
+  app.use('/api/offices', officesRoutes());
+  app.use('/api/products', productsRoutes());
   app.use('/api/auth', authRoutes());
   app.use('/api/users', usersRoutes());
   app.use('/api/audit', auditRoutes());

@@ -35,23 +35,19 @@ if (userCount > 0) {
 const seedAll = db.transaction(() => {
   // ---- users ----
   const insertUser = db.prepare(
-    `INSERT INTO users (username, password_hash, display_name, role, must_change_password)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO users (username, password_hash, display_name, role, office_id, must_change_password)
+     VALUES (?, ?, ?, ?, ?, ?)`,
   );
-  insertUser.run('admin', hashPassword('Admin@123'), 'Admin', 'admin', 0);
-  insertUser.run('operator', hashPassword('Operator@123'), 'Om Prakash', 'operator', 0);
-  insertUser.run('owner', hashPassword('Owner@123'), 'Bharti Owner', 'owner', 0);
+  // operators are pinned to office 1 (ADR-028); admin/owner see all offices
+  insertUser.run('admin', hashPassword('Admin@123'), 'Admin', 'admin', null, 0);
+  insertUser.run('operator', hashPassword('Operator@123'), 'Om Prakash', 'operator', 1, 0);
+  insertUser.run('owner', hashPassword('Owner@123'), 'Bharti Owner', 'owner', null, 0);
   // one force-password-change user per Playwright project (desktop/mobile share the DB)
-  insertUser.run('fresh-desktop', hashPassword('Fresh@123'), 'New Staff D', 'operator', 1);
-  insertUser.run('fresh-mobile', hashPassword('Fresh@123'), 'New Staff M', 'operator', 1);
+  insertUser.run('fresh-desktop', hashPassword('Fresh@123'), 'New Staff D', 'operator', 1, 1);
+  insertUser.run('fresh-mobile', hashPassword('Fresh@123'), 'New Staff M', 'operator', 1, 1);
 
   // ---- masters ----
-  const insertModel = db.prepare(
-    'INSERT INTO models (code, name, description, created_by) VALUES (?, ?, ?, 1)',
-  );
-  insertModel.run('SCR-VEL', 'Velvet Scrunchie', 'Classic velvet, medium band');
-  insertModel.run('SCR-SAT', 'Satin Scrunchie', 'Glossy satin, thin band');
-  insertModel.run('SCR-COT', 'Cotton Scrunchie', 'Printed cotton, everyday wear');
+  // v2 (ADR-030): product codes are typed at cutting, not seeded as a master.
 
   const insertColor = db.prepare('INSERT INTO colors (name, color_code, created_by) VALUES (?, ?, 1)');
   for (const [name, code] of [
@@ -107,6 +103,6 @@ const seedAll = db.transaction(() => {
 });
 
 seedAll();
-console.log('[seed] done: 4 users, 3 models, 6 colors, 5 sizes, 2 vendors, 3 contractors, 3 staff');
+console.log('[seed] done: 5 users, 6 colors, 5 sizes, 2 vendors, 3 contractors, 3 staff');
 console.log('[seed] sign in with admin / Admin@123');
 closeDb();

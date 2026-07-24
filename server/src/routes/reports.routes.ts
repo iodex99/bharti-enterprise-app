@@ -2,15 +2,17 @@ import { Router } from 'express';
 import { formatBusinessDate } from '@shared';
 import { getDb } from '../db/connection';
 import { requireAuth } from '../middleware/auth';
+import { officeOf } from '../middleware/office';
 import { idParamGuard } from '../middleware/params';
 import { getReport, REPORTS, type ReportFilters } from '../services/reports.service';
 import { sendXlsx } from '../utils/excel';
 import { listFgLots, traceFgLot, tracePurchaseForward } from '../services/trace.service';
 
-function parseFilters(query: Record<string, unknown>): ReportFilters {
+function parseFilters(officeId: number, query: Record<string, unknown>): ReportFilters {
   const num = (v: unknown) => (v && !Number.isNaN(Number(v)) ? Number(v) : undefined);
   const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
   return {
+    officeId,
     from: str(query.from),
     to: str(query.to),
     modelId: num(query.modelId),
@@ -42,7 +44,7 @@ export function reportsRoutes(): Router {
   // Complete Business Report — must be registered BEFORE the /:key route.
   router.get('/full', async (req, res) => {
     const { buildFullReportHtml, buildFullWorkbook } = await import('../utils/fullreport');
-    const filters = parseFilters(req.query as Record<string, unknown>);
+    const filters = parseFilters(officeOf(req).id, req.query as Record<string, unknown>);
     const stamp = new Date().toISOString().slice(0, 10);
     if (req.query.format === 'xlsx') {
       const { streamWorkbook } = await import('../utils/excel');
@@ -61,7 +63,7 @@ export function reportsRoutes(): Router {
       res.status(404).json({ error: 'Unknown report.' });
       return;
     }
-    const filters = parseFilters(req.query as Record<string, unknown>);
+    const filters = parseFilters(officeOf(req).id, req.query as Record<string, unknown>);
     const rows = report.query(getDb(), filters);
 
     if (req.query.format === 'xlsx') {

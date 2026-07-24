@@ -1,28 +1,39 @@
-import { clothRequiredCm, variancePct, type CuttingActualsInput, type CuttingPlanInput } from '@shared';
+import { clothRequiredInchC, formatLen, type CuttingPlanInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
-import { LedgerError, postMovements } from './ledger.service';
-import { assertActive, type ServiceResult } from './purchases.service';
+import { LedgerError, postMovements, type Movement } from './ledger.service';
+import type { Office } from './offices.service';
+import { modelIdForCode } from './products.service';
+import { type ServiceResult } from './purchases.service';
 
 /**
- * Module 2/3: cutting consumes a specific RAW lot (explicit batch selection — the cutter
- * physically picks a roll) and, on completion, creates CUT stock per size line.
- * The MODEL is chosen HERE (cloth has none until it is cut), and consumption is
- * COMPUTED from per-size geometry: length per piece (inches) × strips needed given how
- * many pieces fit across the cloth width (shared clothRequiredCm).
- * Ledger flow: plan  = RAW −computed_cm (cutting_consume, terminal)
- *              actual = CUT +actual_pcs per line (cutting_output, genesis)
+ * Module 2: cutting (v2, ADR-030/031).
+ * The plan IS the cutting — there is no separate "record actuals" step. Creating a
+ * batch consumes the chosen RAW lot (computed from per-size geometry) AND creates the
+ * CUT stock in the same transaction. Each size line carries the CODE typed on it — the
+ * product identity "CODE-SIZE" is born here (with its photo) and used everywhere after.
+ *
+ * A batch can be EDITED or DELETED for as long as none of its cut pieces have moved
+ * downstream; both restore the cloth atomically and edits keep the document number.
+ *
+ * Ledger: RAW −consumed (cutting_consume) ; CUT +qtyPcs per line (cutting_output).
  */
 
 type RawLotInfo = {
   colorId: number;
   available: number;
+  widthInchC: number | null;
   label: string;
 };
 
-function rawLotInfo(db: Db, lotType: 'purchase' | 'opening', lotId: number): RawLotInfo | null {
+function rawLotInfo(
+  db: Db,
+  office: Office,
+  lotType: 'purchase' | 'opening',
+  lotId: number,
+): RawLotInfo | null {
   const bal = db
     .prepare(
       `SELECT COALESCE(SUM(qty),0) AS bal FROM stock_ledger
@@ -31,32 +42,42 @@ function rawLotInfo(db: Db, lotType: 'purchase' | 'opening', lotId: number): Raw
     .get(lotType, lotId) as { bal: number };
   if (lotType === 'purchase') {
     const p = db
-      .prepare('SELECT color_id, doc_no FROM purchases WHERE id = ? AND voided_at IS NULL')
-      .get(lotId) as { color_id: number; doc_no: string } | undefined;
+      .prepare(
+        `SELECT color_id, doc_no, width_inch_c FROM purchases
+         WHERE id = ? AND office_id = ? AND voided_at IS NULL`,
+      )
+      .get(lotId, office.id) as
+      | { color_id: number; doc_no: string; width_inch_c: number | null }
+      | undefined;
     if (!p) return null;
-    return { colorId: p.color_id, available: bal.bal, label: p.doc_no };
+    return { colorId: p.color_id, available: bal.bal, widthInchC: p.width_inch_c, label: p.doc_no };
   }
   const o = db
     .prepare(
-      `SELECT color_id, doc_no FROM opening_balances
-       WHERE id = ? AND stage = 'RAW' AND voided_at IS NULL`,
+      `SELECT color_id, doc_no, width_inch_c FROM opening_balances
+       WHERE id = ? AND office_id = ? AND stage = 'RAW' AND voided_at IS NULL`,
     )
-    .get(lotId) as { color_id: number; doc_no: string } | undefined;
+    .get(lotId, office.id) as
+    | { color_id: number; doc_no: string; width_inch_c: number | null }
+    | undefined;
   if (!o) return null;
-  return { colorId: o.color_id, available: bal.bal, label: o.doc_no };
+  return { colorId: o.color_id, available: bal.bal, widthInchC: o.width_inch_c, label: o.doc_no };
 }
 
-/** Total cloth a plan consumes, integer cm — server-computed, authoritative. */
-export function planConsumptionCm(lines: CuttingPlanInput['lines']): number {
+/** Total cloth a plan consumes, integer hundredths of an inch — server-computed. */
+export function planConsumptionInchC(lines: CuttingPlanInput['lines']): number {
   return lines.reduce(
-    (sum, l) => sum + clothRequiredCm(l.expectedPcs, l.clothPerPcInchC, l.widthCount),
+    (sum, l) => sum + clothRequiredInchC(l.qtyPcs, l.clothPerPcInchC, l.widthCount),
     0,
   );
 }
 
-function validatePlanInputs(db: Db, input: CuttingPlanInput): string | null {
-  const modelErr = assertActive(db, 'models', input.modelId, 'Model');
-  if (modelErr) return modelErr;
+/** Legacy NOT NULL column — approximate cm, never read. */
+function legacyCm(inchC: number): number {
+  return Math.max(1, Math.round((inchC * 254) / 10000));
+}
+
+function validatePlanSizes(db: Db, input: CuttingPlanInput): string | null {
   for (const line of input.lines) {
     const size = db
       .prepare('SELECT is_active FROM sizes WHERE id = ? AND deleted_at IS NULL')
@@ -67,25 +88,76 @@ function validatePlanInputs(db: Db, input: CuttingPlanInput): string | null {
   return null;
 }
 
+/** RAW ledger rows must reuse the model the lot was booked under (the RAW-CLOTH sentinel). */
+function rawLotModelId(db: Db, lotType: 'purchase' | 'opening', lotId: number): number {
+  const table = lotType === 'purchase' ? 'purchases' : 'opening_balances';
+  return (db.prepare(`SELECT model_id FROM ${table} WHERE id = ?`).get(lotId) as { model_id: number })
+    .model_id;
+}
+
+/** Insert the lines + their ledger movements for a batch. Runs inside the caller's tx. */
+function applyPlanLines(
+  db: Db,
+  office: Office,
+  batchId: number,
+  colorId: number,
+  input: CuttingPlanInput,
+  userId: number,
+): void {
+  const insertLine = db.prepare(
+    `INSERT INTO cutting_lines (cutting_batch_id, size_id, model_id, expected_pcs, actual_pcs,
+       cloth_per_pc_inch_c, width_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const movements: Movement[] = [];
+  for (const line of input.lines) {
+    const modelId = modelIdForCode(db, line.code, userId, line.imagePath);
+    const info = insertLine.run(
+      batchId,
+      line.sizeId,
+      modelId,
+      line.qtyPcs,
+      line.qtyPcs, // the plan is final — what is planned is what is cut
+      line.clothPerPcInchC,
+      line.widthCount,
+    );
+    const lineId = Number(info.lastInsertRowid);
+    movements.push({
+      stage: 'CUT',
+      officeId: office.id,
+      modelId,
+      colorId,
+      sizeId: line.sizeId,
+      lotType: 'cutting_line',
+      lotId: lineId,
+      qty: line.qtyPcs,
+      refType: 'cutting_output',
+      refId: batchId,
+    });
+  }
+  postMovements(db, movements, userId);
+}
+
 export function createCuttingPlan(
   db: Db,
+  office: Office,
   input: CuttingPlanInput,
   userId: number,
   ip: string | null,
   onCreated?: (id: number) => void,
 ): ServiceResult<{ id: number; docNo: string }> {
-  const lot = rawLotInfo(db, input.rawLotType, input.rawLotId);
-  if (!lot) return { ok: false, code: 400, error: 'Raw material batch not found.' };
-  const inputErr = validatePlanInputs(db, input);
-  if (inputErr) return { ok: false, code: 400, error: inputErr };
+  const lot = rawLotInfo(db, office, input.rawLotType, input.rawLotId);
+  if (!lot) return { ok: false, code: 400, error: 'Cloth batch not found in this office.' };
+  const sizeErr = validatePlanSizes(db, input);
+  if (sizeErr) return { ok: false, code: 400, error: sizeErr };
 
-  const consumeCm = planConsumptionCm(input.lines);
-  if (consumeCm <= 0) return { ok: false, code: 400, error: 'The plan consumes no cloth.' };
-  if (lot.available < consumeCm) {
+  const consumed = planConsumptionInchC(input.lines);
+  if (consumed <= 0) return { ok: false, code: 400, error: 'The plan consumes no cloth.' };
+  if (lot.available < consumed) {
     return {
       ok: false,
       code: 400,
-      error: `This plan needs ${(consumeCm / 100).toFixed(2)} m but batch ${lot.label} has only ${(lot.available / 100).toFixed(2)} m available.`,
+      error: `This cutting needs ${formatLen(consumed)} but batch ${lot.label} has only ${formatLen(lot.available)} left.`,
     };
   }
 
@@ -93,50 +165,58 @@ export function createCuttingPlan(
   let docNo = '';
   try {
     const tx = db.transaction(() => {
-      docNo = nextDocNo(db, 'cutting');
+      docNo = nextDocNo(db, 'cutting', office);
+      // header model_id (legacy NOT NULL) carries the first line's model
+      const firstModelId = modelIdForCode(db, input.lines[0]!.code, userId, input.lines[0]!.imagePath);
       const info = db
         .prepare(
-          `INSERT INTO cutting_batches (doc_no, cut_date, raw_lot_type, raw_lot_id, model_id,
-            color_id, meters_used_cm, status, notes, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, ?)`,
+          `INSERT INTO cutting_batches (doc_no, office_id, cut_date, raw_lot_type, raw_lot_id,
+            model_id, color_id, meters_used_cm, consumed_inch_c, status, completed_at, notes, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)`,
         )
         .run(
           docNo,
+          office.id,
           input.cutDate,
           input.rawLotType,
           input.rawLotId,
-          input.modelId,
+          firstModelId,
           lot.colorId,
-          consumeCm,
+          legacyCm(consumed),
+          consumed,
+          nowIso(),
           input.notes,
           userId,
         );
       id = Number(info.lastInsertRowid);
-      const insertLine = db.prepare(
-        `INSERT INTO cutting_lines (cutting_batch_id, size_id, expected_pcs, cloth_per_pc_inch_c, width_count)
-         VALUES (?, ?, ?, ?, ?)`,
-      );
-      for (const line of input.lines) {
-        insertLine.run(id, line.sizeId, line.expectedPcs, line.clothPerPcInchC, line.widthCount);
-      }
+
       postMovements(
         db,
         [
           {
             stage: 'RAW',
+            officeId: office.id,
             modelId: rawLotModelId(db, input.rawLotType, input.rawLotId),
             colorId: lot.colorId,
             sizeId: null,
             lotType: input.rawLotType,
             lotId: input.rawLotId,
-            qty: -consumeCm,
+            qty: -consumed,
             refType: 'cutting_consume',
             refId: id,
           },
         ],
         userId,
       );
-      audit(db, { userId, action: 'create', entityType: 'cutting_batch', entityId: id, new: { docNo, consumeCm, ...input }, ip });
+      applyPlanLines(db, office, id, lot.colorId, input, userId);
+      audit(db, {
+        userId,
+        action: 'create',
+        entityType: 'cutting_batch',
+        entityId: id,
+        new: { docNo, officeId: office.id, consumedInchC: consumed, ...input },
+        ip,
+      });
       onCreated?.(id);
     });
     tx();
@@ -147,116 +227,156 @@ export function createCuttingPlan(
   return { ok: true, id, docNo };
 }
 
-/** RAW ledger rows must reuse the model the lot was booked under (sentinel or legacy). */
-function rawLotModelId(db: Db, lotType: 'purchase' | 'opening', lotId: number): number {
-  const table = lotType === 'purchase' ? 'purchases' : 'opening_balances';
-  return (db.prepare(`SELECT model_id FROM ${table} WHERE id = ?`).get(lotId) as { model_id: number })
-    .model_id;
+/**
+ * Downstream guard shared by edit/delete/void: every CUT lot this batch produced must
+ * still be fully unconsumed (nothing issued to a contractor from it).
+ */
+function downstreamBlock(db: Db, batchId: number, docNo: string): string | null {
+  const lines = db
+    .prepare('SELECT id, actual_pcs FROM cutting_lines WHERE cutting_batch_id = ?')
+    .all(batchId) as Array<{ id: number; actual_pcs: number | null }>;
+  for (const line of lines) {
+    if (!line.actual_pcs) continue;
+    const { bal } = db
+      .prepare(
+        `SELECT COALESCE(SUM(qty),0) AS bal FROM stock_ledger
+         WHERE stage='CUT' AND lot_type='cutting_line' AND lot_id = ?`,
+      )
+      .get(line.id) as { bal: number };
+    if (bal !== line.actual_pcs) {
+      return `Cannot change ${docNo}: cut pieces were already issued to a contractor. Void the downstream document first.`;
+    }
+  }
+  return null;
+}
+
+/** Reverse a batch's ledger effect (restore RAW, remove CUT). Runs inside the caller's tx. */
+function reverseBatch(db: Db, office: Office, batch: Record<string, unknown>, userId: number): void {
+  const lines = db
+    .prepare('SELECT id, size_id, model_id, actual_pcs FROM cutting_lines WHERE cutting_batch_id = ?')
+    .all(batch.id as number) as Array<{
+    id: number;
+    size_id: number;
+    model_id: number;
+    actual_pcs: number | null;
+  }>;
+  const movements: Movement[] = [];
+  for (const line of lines) {
+    if (!line.actual_pcs) continue;
+    movements.push({
+      stage: 'CUT',
+      officeId: office.id,
+      modelId: line.model_id,
+      colorId: batch.color_id as number,
+      sizeId: line.size_id,
+      lotType: 'cutting_line',
+      lotId: line.id,
+      qty: -line.actual_pcs,
+      refType: 'adjustment_out',
+      refId: batch.id as number,
+    });
+  }
+  movements.push({
+    stage: 'RAW',
+    officeId: office.id,
+    modelId: rawLotModelId(db, batch.raw_lot_type as 'purchase' | 'opening', batch.raw_lot_id as number),
+    colorId: batch.color_id as number,
+    sizeId: null,
+    lotType: batch.raw_lot_type as 'purchase' | 'opening',
+    lotId: batch.raw_lot_id as number,
+    qty: (batch.consumed_inch_c as number | null) ?? (batch.meters_used_cm as number),
+    refType: 'adjustment_in',
+    refId: batch.id as number,
+  });
+  postMovements(db, movements, userId);
 }
 
 /**
- * Re-plan a batch that has NOT been cut yet (status 'planned'): restore the old cloth,
- * validate + apply the new plan in one transaction. Doc number is kept.
+ * Edit a batch — any batch whose pieces have not moved downstream. Restores the old
+ * cloth + pieces, applies the new plan, keeps the document number. Atomic.
  */
 export function editCuttingPlan(
   db: Db,
+  office: Office,
   batchId: number,
   input: CuttingPlanInput,
   userId: number,
   ip: string | null,
 ): ServiceResult {
   const batch = db
-    .prepare('SELECT * FROM cutting_batches WHERE id = ? AND voided_at IS NULL')
-    .get(batchId) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM cutting_batches WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(batchId, office.id) as Record<string, unknown> | undefined;
   if (!batch) return { ok: false, code: 404, error: 'Cutting batch not found.' };
-  if (batch.status !== 'planned') {
-    return { ok: false, code: 409, error: 'Actuals are recorded — this plan can no longer be edited.' };
-  }
-  const inputErr = validatePlanInputs(db, input);
-  if (inputErr) return { ok: false, code: 400, error: inputErr };
-  const newLot = rawLotInfo(db, input.rawLotType, input.rawLotId);
-  if (!newLot) return { ok: false, code: 400, error: 'Raw material batch not found.' };
-  const consumeCm = planConsumptionCm(input.lines);
-  if (consumeCm <= 0) return { ok: false, code: 400, error: 'The plan consumes no cloth.' };
+  const blocked = downstreamBlock(db, batchId, batch.doc_no as string);
+  if (blocked) return { ok: false, code: 409, error: blocked };
+  const sizeErr = validatePlanSizes(db, input);
+  if (sizeErr) return { ok: false, code: 400, error: sizeErr };
+  const newLot = rawLotInfo(db, office, input.rawLotType, input.rawLotId);
+  if (!newLot) return { ok: false, code: 400, error: 'Cloth batch not found in this office.' };
+  const consumed = planConsumptionInchC(input.lines);
+  if (consumed <= 0) return { ok: false, code: 400, error: 'The plan consumes no cloth.' };
 
   const oldLines = db
-    .prepare('SELECT size_id, expected_pcs, cloth_per_pc_inch_c, width_count FROM cutting_lines WHERE cutting_batch_id = ?')
+    .prepare(
+      'SELECT size_id, model_id, expected_pcs, cloth_per_pc_inch_c, width_count FROM cutting_lines WHERE cutting_batch_id = ?',
+    )
     .all(batchId);
 
   try {
     const tx = db.transaction(() => {
-      // 1) give the old cloth back (same pattern as void)
-      postMovements(
-        db,
-        [
-          {
-            stage: 'RAW',
-            modelId: rawLotModelId(db, batch.raw_lot_type as 'purchase' | 'opening', batch.raw_lot_id as number),
-            colorId: batch.color_id as number,
-            sizeId: null,
-            lotType: batch.raw_lot_type as 'purchase' | 'opening',
-            lotId: batch.raw_lot_id as number,
-            qty: batch.meters_used_cm as number,
-            refType: 'adjustment_in',
-            refId: batchId,
-          },
-        ],
-        userId,
-      );
-      // 2) availability check AFTER the restore (covers same-lot edits)
-      const lotNow = rawLotInfo(db, input.rawLotType, input.rawLotId)!;
-      if (lotNow.available < consumeCm) {
+      // 1) undo the current batch (cloth back, cut pieces removed)
+      reverseBatch(db, office, batch, userId);
+      // 2) availability AFTER the restore (covers same-lot edits)
+      const lotNow = rawLotInfo(db, office, input.rawLotType, input.rawLotId)!;
+      if (lotNow.available < consumed) {
         throw new LedgerError(
-          `This plan needs ${(consumeCm / 100).toFixed(2)} m but batch ${lotNow.label} has only ${(lotNow.available / 100).toFixed(2)} m available.`,
+          `This cutting needs ${formatLen(consumed)} but batch ${lotNow.label} has only ${formatLen(lotNow.available)} left.`,
         );
       }
-      // 3) replace the lines and the batch header (doc_no unchanged)
+      // 3) replace lines + header (doc_no unchanged)
       db.prepare('DELETE FROM cutting_lines WHERE cutting_batch_id = ?').run(batchId);
-      const insertLine = db.prepare(
-        `INSERT INTO cutting_lines (cutting_batch_id, size_id, expected_pcs, cloth_per_pc_inch_c, width_count)
-         VALUES (?, ?, ?, ?, ?)`,
-      );
-      for (const line of input.lines) {
-        insertLine.run(batchId, line.sizeId, line.expectedPcs, line.clothPerPcInchC, line.widthCount);
-      }
+      const firstModelId = modelIdForCode(db, input.lines[0]!.code, userId, input.lines[0]!.imagePath);
       db.prepare(
         `UPDATE cutting_batches SET cut_date = ?, raw_lot_type = ?, raw_lot_id = ?, model_id = ?,
-          color_id = ?, meters_used_cm = ?, notes = ? WHERE id = ?`,
+          color_id = ?, meters_used_cm = ?, consumed_inch_c = ?, notes = ? WHERE id = ?`,
       ).run(
         input.cutDate,
         input.rawLotType,
         input.rawLotId,
-        input.modelId,
+        firstModelId,
         lotNow.colorId,
-        consumeCm,
+        legacyCm(consumed),
+        consumed,
         input.notes,
         batchId,
       );
-      // 4) consume the new cloth
+      // 4) consume the new cloth + create the new pieces
       postMovements(
         db,
         [
           {
             stage: 'RAW',
+            officeId: office.id,
             modelId: rawLotModelId(db, input.rawLotType, input.rawLotId),
             colorId: lotNow.colorId,
             sizeId: null,
             lotType: input.rawLotType,
             lotId: input.rawLotId,
-            qty: -consumeCm,
+            qty: -consumed,
             refType: 'cutting_consume',
             refId: batchId,
           },
         ],
         userId,
       );
+      applyPlanLines(db, office, batchId, lotNow.colorId, input, userId);
       audit(db, {
         userId,
         action: 'update',
         entityType: 'cutting_batch',
         entityId: batchId,
-        old: { lines: oldLines, metersUsedCm: batch.meters_used_cm, modelId: batch.model_id, rawLotType: batch.raw_lot_type, rawLotId: batch.raw_lot_id },
-        new: { consumeCm, ...input },
+        old: { lines: oldLines, consumedInchC: batch.consumed_inch_c, rawLotType: batch.raw_lot_type, rawLotId: batch.raw_lot_id },
+        new: { consumedInchC: consumed, ...input },
         ip,
       });
     });
@@ -268,191 +388,35 @@ export function editCuttingPlan(
   return { ok: true, id: batchId };
 }
 
-/** "Delete" for a not-yet-cut plan: a void with a standard reason (no hard deletes). */
-export function deletePlannedBatch(
+/** Delete = void with a standard reason. Same downstream guard as edit. */
+export function deleteCuttingBatch(
   db: Db,
+  office: Office,
   batchId: number,
   userId: number,
   ip: string | null,
 ): ServiceResult {
-  const batch = db
-    .prepare('SELECT status, voided_at FROM cutting_batches WHERE id = ?')
-    .get(batchId) as { status: string; voided_at: string | null } | undefined;
-  if (!batch) return { ok: false, code: 404, error: 'Cutting batch not found.' };
-  if (batch.voided_at) return { ok: false, code: 409, error: 'Already deleted.' };
-  if (batch.status !== 'planned') {
-    return { ok: false, code: 409, error: 'Actuals are recorded — only the Admin can void this batch.' };
-  }
-  return voidCuttingBatch(db, batchId, 'plan deleted before cutting', userId, ip);
-}
-
-export function recordActuals(
-  db: Db,
-  batchId: number,
-  input: CuttingActualsInput,
-  userId: number,
-  ip: string | null,
-): ServiceResult {
-  const batch = db
-    .prepare('SELECT * FROM cutting_batches WHERE id = ? AND voided_at IS NULL')
-    .get(batchId) as Record<string, unknown> | undefined;
-  if (!batch) return { ok: false, code: 404, error: 'Cutting batch not found.' };
-  if (batch.status === 'completed') {
-    return { ok: false, code: 409, error: 'Actuals are already recorded for this batch.' };
-  }
-
-  const planned = db
-    .prepare('SELECT id, size_id, expected_pcs FROM cutting_lines WHERE cutting_batch_id = ?')
-    .all(batchId) as Array<{ id: number; size_id: number; expected_pcs: number }>;
-  const plannedBySize = new Map(planned.map((l) => [l.size_id, l]));
-  const inputBySize = new Map(input.lines.map((l) => [l.sizeId, l]));
-
-  // every planned size needs an actual (0 allowed); extra sizes are unplanned yield
-  for (const line of planned) {
-    if (!inputBySize.has(line.size_id)) {
-      return { ok: false, code: 400, error: 'Enter an actual quantity for every planned size (0 is allowed).' };
-    }
-  }
-  // variance requires a reason
-  for (const line of input.lines) {
-    const expected = plannedBySize.get(line.sizeId)?.expected_pcs ?? 0;
-    if (line.actualPcs !== expected && !line.varianceReason) {
-      return {
-        ok: false,
-        code: 400,
-        error: 'Every size with a difference between expected and actual needs a reason.',
-      };
-    }
-  }
-
-  const tx = db.transaction(() => {
-    const movements = [];
-    for (const line of input.lines) {
-      const plannedLine = plannedBySize.get(line.sizeId);
-      let lineId: number;
-      if (plannedLine) {
-        db.prepare(
-          `UPDATE cutting_lines SET actual_pcs = ?, variance_reason = ?, reason_note = ? WHERE id = ?`,
-        ).run(line.actualPcs, line.varianceReason ?? null, line.reasonNote, plannedLine.id);
-        lineId = plannedLine.id;
-      } else {
-        const info = db
-          .prepare(
-            `INSERT INTO cutting_lines (cutting_batch_id, size_id, expected_pcs, actual_pcs, variance_reason, reason_note)
-             VALUES (?, ?, 0, ?, ?, ?)`,
-          )
-          .run(batchId, line.sizeId, line.actualPcs, line.varianceReason ?? null, line.reasonNote);
-        lineId = Number(info.lastInsertRowid);
-      }
-      const expected = plannedLine?.expected_pcs ?? 0;
-      if (line.actualPcs !== expected) {
-        db.prepare(
-          `INSERT INTO discrepancies (stage, ref_type, ref_id, qty_pcs, reason, note, created_by)
-           VALUES ('CUT', 'cutting_line', ?, ?, ?, ?, ?)`,
-        ).run(lineId, line.actualPcs - expected, line.varianceReason, line.reasonNote, userId);
-      }
-      if (line.actualPcs > 0) {
-        movements.push({
-          stage: 'CUT' as const,
-          modelId: batch.model_id as number,
-          colorId: batch.color_id as number,
-          sizeId: line.sizeId,
-          lotType: 'cutting_line' as const,
-          lotId: lineId,
-          qty: line.actualPcs,
-          refType: 'cutting_output' as const,
-          refId: batchId,
-        });
-      }
-    }
-    if (movements.length > 0) postMovements(db, movements, userId);
-    db.prepare(`UPDATE cutting_batches SET status = 'completed', completed_at = ? WHERE id = ?`).run(
-      nowIso(),
-      batchId,
-    );
-    audit(db, {
-      userId,
-      action: 'record_actuals',
-      entityType: 'cutting_batch',
-      entityId: batchId,
-      new: input,
-      ip,
-    });
-  });
-  tx();
-  return { ok: true, id: batchId };
+  return voidCuttingBatch(db, office, batchId, 'cutting entry deleted', userId, ip);
 }
 
 export function voidCuttingBatch(
   db: Db,
+  office: Office,
   batchId: number,
   reason: string,
   userId: number,
   ip: string | null,
 ): ServiceResult {
   const batch = db
-    .prepare('SELECT * FROM cutting_batches WHERE id = ?')
-    .get(batchId) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM cutting_batches WHERE id = ? AND office_id = ?')
+    .get(batchId, office.id) as Record<string, unknown> | undefined;
   if (!batch) return { ok: false, code: 404, error: 'Cutting batch not found.' };
-  if (batch.voided_at) return { ok: false, code: 409, error: 'Already voided.' };
-
-  const lines = db
-    .prepare('SELECT id, actual_pcs FROM cutting_lines WHERE cutting_batch_id = ?')
-    .all(batchId) as Array<{ id: number; actual_pcs: number | null }>;
-
-  // CUT lots produced by this batch must be fully unconsumed
-  for (const line of lines) {
-    if (!line.actual_pcs) continue;
-    const { bal } = db
-      .prepare(
-        `SELECT COALESCE(SUM(qty),0) AS bal FROM stock_ledger
-         WHERE stage='CUT' AND lot_type='cutting_line' AND lot_id = ?`,
-      )
-      .get(line.id) as { bal: number };
-    if (bal !== line.actual_pcs) {
-      return {
-        ok: false,
-        code: 409,
-        error: `Cannot void ${batch.doc_no as string}: cut pieces were already issued to a contractor. Void the downstream document first.`,
-      };
-    }
-  }
+  if (batch.voided_at) return { ok: false, code: 409, error: 'Already deleted.' };
+  const blocked = downstreamBlock(db, batchId, batch.doc_no as string);
+  if (blocked) return { ok: false, code: 409, error: blocked };
 
   const tx = db.transaction(() => {
-    const movements = [];
-    // remove CUT outputs (if completed)
-    for (const line of lines) {
-      if (!line.actual_pcs) continue;
-      movements.push({
-        stage: 'CUT' as const,
-        modelId: batch.model_id as number,
-        colorId: batch.color_id as number,
-        sizeId: (
-          db.prepare('SELECT size_id FROM cutting_lines WHERE id = ?').get(line.id) as {
-            size_id: number;
-          }
-        ).size_id,
-        lotType: 'cutting_line' as const,
-        lotId: line.id,
-        qty: -line.actual_pcs,
-        refType: 'adjustment_out' as const,
-        refId: batchId,
-      });
-    }
-    // restore the RAW meters — under the model the LOT is booked as (sentinel/legacy),
-    // which may differ from the batch's model now that the model is chosen at cutting
-    movements.push({
-      stage: 'RAW' as const,
-      modelId: rawLotModelId(db, batch.raw_lot_type as 'purchase' | 'opening', batch.raw_lot_id as number),
-      colorId: batch.color_id as number,
-      sizeId: null,
-      lotType: batch.raw_lot_type as 'purchase' | 'opening',
-      lotId: batch.raw_lot_id as number,
-      qty: batch.meters_used_cm as number,
-      refType: 'adjustment_in' as const,
-      refId: batchId,
-    });
-    postMovements(db, movements, userId);
+    reverseBatch(db, office, batch, userId);
     db.prepare(
       'UPDATE cutting_batches SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
     ).run(nowIso(), reason, userId, batchId);
@@ -464,49 +428,53 @@ export function voidCuttingBatch(
 
 export function listCuttingBatches(
   db: Db,
-  opts: { status?: string; includeVoided?: boolean } = {},
+  officeId: number,
+  opts: { includeVoided?: boolean } = {},
 ): Array<Record<string, unknown>> {
-  const where: string[] = [];
-  const params: unknown[] = [];
+  const where: string[] = ['cb.office_id = ?'];
+  const params: unknown[] = [officeId];
   if (!opts.includeVoided) where.push('cb.voided_at IS NULL');
-  if (opts.status) {
-    where.push('cb.status = ?');
-    params.push(opts.status);
-  }
   const batches = db
     .prepare(
       `SELECT cb.id, cb.doc_no AS docNo, cb.cut_date AS cutDate, cb.status,
               cb.raw_lot_type AS rawLotType, cb.raw_lot_id AS rawLotId,
-              cb.meters_used_cm AS metersUsedCm, cb.notes, cb.voided_at AS voidedAt,
-              cb.model_id AS modelId, m.code AS modelCode, m.name AS modelName,
+              COALESCE(cb.consumed_inch_c, cb.meters_used_cm) AS consumedInchC,
+              cb.notes, cb.voided_at AS voidedAt,
               cb.color_id AS colorId, c.name AS colorName,
               COALESCE(p.doc_no, o.doc_no) AS rawDocNo
        FROM cutting_batches cb
-       JOIN models m ON m.id = cb.model_id
        JOIN colors c ON c.id = cb.color_id
        LEFT JOIN purchases p ON cb.raw_lot_type = 'purchase' AND p.id = cb.raw_lot_id
        LEFT JOIN opening_balances o ON cb.raw_lot_type = 'opening' AND o.id = cb.raw_lot_id
-       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       WHERE ${where.join(' AND ')}
        ORDER BY cb.id DESC`,
     )
     .all(...params) as Array<Record<string, unknown>>;
 
   const lineStmt = db.prepare(
-    `SELECT cl.id, cl.size_id AS sizeId, s.code AS sizeCode, cl.expected_pcs AS expectedPcs,
-            cl.actual_pcs AS actualPcs, cl.variance_reason AS varianceReason, cl.reason_note AS reasonNote,
-            cl.cloth_per_pc_inch_c AS clothPerPcInchC, cl.width_count AS widthCount
-     FROM cutting_lines cl JOIN sizes s ON s.id = cl.size_id
+    `SELECT cl.id, cl.size_id AS sizeId, s.code AS sizeCode,
+            cl.model_id AS modelId, m.code AS code, m.image_path AS imagePath,
+            cl.expected_pcs AS qtyPcs,
+            cl.cloth_per_pc_inch_c AS clothPerPcInchC, cl.width_count AS widthCount,
+            (SELECT COALESCE(SUM(l.qty),0) FROM stock_ledger l
+             WHERE l.stage='CUT' AND l.lot_type='cutting_line' AND l.lot_id = cl.id) AS remainingPcs
+     FROM cutting_lines cl
+     JOIN sizes s ON s.id = cl.size_id
+     LEFT JOIN models m ON m.id = cl.model_id
      WHERE cl.cutting_batch_id = ? ORDER BY s.sort_order, s.code`,
   );
   for (const b of batches) {
     const lines = lineStmt.all(b.id) as Array<Record<string, unknown>>;
+    for (const l of lines) {
+      // the identity the business reads out loud: "315-L"
+      l.sizeCodeLabel = `${(l.code as string | null) ?? '?'}-${l.sizeCode as string}`;
+    }
     b.lines = lines;
-    const expected = lines.reduce((s, l) => s + (l.expectedPcs as number), 0);
-    const hasActuals = b.status === 'completed';
-    const actual = lines.reduce((s, l) => s + ((l.actualPcs as number | null) ?? 0), 0);
-    b.expectedTotalPcs = expected;
-    b.actualTotalPcs = hasActuals ? actual : null;
-    b.variancePct = hasActuals ? variancePct(expected, actual) : null;
+    b.totalPcs = lines.reduce((s, l) => s + (l.qtyPcs as number), 0);
+    // pieces from this batch already gone downstream? (drives the Edit/Delete buttons)
+    b.editable =
+      !b.voidedAt &&
+      lines.every((l) => (l.remainingPcs as number) === (l.qtyPcs as number));
   }
   return batches;
 }

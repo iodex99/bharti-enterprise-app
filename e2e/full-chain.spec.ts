@@ -12,77 +12,91 @@ async function signIn(page: Page, username: string, password: string) {
   });
 }
 
+/** A 1×1 PNG for the required returned-goods photo. */
+const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 /**
- * THE spec's headline scenario, end to end in the browser:
- * purchase cloth → cut → issue to contractor → receive stitched → check (with rejects)
- * → pack → finished goods visible in inventory. Runs once per browser project with
- * distinct model/color fixtures (desktop: Satin+Baby Pink, mobile: Cotton+Emerald… both
- * seeded colors) so the two runs never collide.
+ * THE spec's headline scenario, end to end in the browser (v2):
+ * purchase cloth (yards+width) → cut with a typed code → issue to contractor →
+ * receive stitched WITH PHOTO → check (rejects incl. "missing" as a reason) →
+ * pack straight from the checking row (checker packs by default) + keep a bundle
+ * aside → pack the bundle later → finished goods → discrepancy review.
+ * Distinct color+code per project so the two runs never collide.
  */
-test('purchase → cutting → job work → checking → packing → finished goods', async ({ page }) => {
+test('purchase → cutting → job work → checking → packing (+bundle) → finished goods', async ({ page }) => {
   const mobile = test.info().project.name === 'mobile';
   // colors no other spec buys, so the raw-lot picker always finds OUR fresh lot first
   const color = mobile ? 'Baby Pink' : 'Maroon';
-  const modelIndex = mobile ? 2 : 3;
+  const code = mobile ? 'FC-M' : 'FC-D';
   await signIn(page, 'operator', 'Operator@123');
 
-  // 1. purchase 60m — no model at purchase
+  // 1. purchase 60 yd of 44"-wide cloth — no code at purchase
   await page.goto('/purchases');
   await page.getByRole('button', { name: '+ New purchase' }).click();
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 2 });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
-  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('60');
-  await page.getByRole('dialog').getByLabel('Rate per meter').fill('42');
+  await page.getByRole('dialog').getByLabel('Length (yards)').fill('60');
+  await page.getByRole('dialog').getByLabel('Width (inches)').fill('44');
+  await page.getByRole('dialog').getByLabel('Rate per yard').fill('42');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByRole('cell', { name: /RM-\d+/ }).first()).toBeVisible();
 
-  // 2. cut 5 dz XL — model chosen here; cloth computed from 14" × 2-across
+  // 2. cut 5 dz XL — code typed here; cloth = ceil(60/2) strips × 14"
   await page.goto('/cutting');
-  await page.getByRole('button', { name: '+ New cutting plan' }).click();
-  const lotSelect = page.getByRole('dialog').getByLabel('Cloth batch (raw material)');
+  await page.getByRole('button', { name: '+ New cutting' }).click();
+  const cutDialog = page.getByRole('dialog', { name: 'New cutting' });
+  const lotSelect = cutDialog.getByLabel('Cloth batch');
   const lotLabel = await lotSelect.locator('option', { hasText: color }).first().textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await page.getByRole('dialog').getByLabel('Model (decided at cutting)').selectOption({ index: modelIndex });
-  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'XL' });
-  await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
-  await page.getByRole('textbox', { name: 'Cloth per piece 1' }).fill('14');
-  await page.getByRole('textbox', { name: 'Across width 1' }).fill('2');
-  await expect(page.getByText(/left after cutting/)).toBeVisible();
-  await page.getByRole('button', { name: 'Save cutting plan' }).click();
-  const cutRow = page.getByRole('row', { name: /CUT-\d+/ }).first();
-  await cutRow.getByRole('button', { name: 'Record actuals' }).click();
-  await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
-  await page.getByRole('button', { name: 'Complete cutting' }).click();
-  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
+  await cutDialog.getByLabel('Size').selectOption({ label: 'XL' });
+  await cutDialog.getByLabel('Code 1').fill(code);
+  await cutDialog.getByRole('textbox', { name: 'Dozens' }).fill('5');
+  await cutDialog.getByLabel('Cloth per piece 1').fill('14');
+  await cutDialog.getByLabel('Pieces across width 1').fill('2');
+  await expect(cutDialog.getByText(/Left after cutting/)).toBeVisible();
+  await page.getByRole('button', { name: 'Record cutting' }).click();
+  await expect(page.getByRole('cell', { name: /CUT-\d+/ }).first()).toBeVisible();
 
-  // 3. job to contractor, receive all stitched
+  // 3. job to contractor, receive all stitched (photo required)
   await page.goto('/jobs');
-  // the DataTable renders "N of M" once loaded — count() alone doesn't wait
   await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
   const jobRowsBefore = await page.getByRole('row', { name: /JOB-\d+/ }).count();
-  await page.getByRole('button', { name: '+ New job card' }).click();
-  await page.getByRole('dialog').getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
-  await page.getByRole('dialog').getByLabel('Size 1').selectOption({ label: 'XL' });
-  await page.getByRole('textbox', { name: 'Dozens' }).fill('5');
-  await page.getByRole('button', { name: 'Issue job card' }).click();
-  // wait until the NEW job's row renders — every row has an "Open" button, so clicking
-  // .first() before the refetch lands on the previous (completed) job
+  await page.getByRole('button', { name: '+ Issue goods' }).click();
+  const jobDialog = page.getByRole('dialog', { name: 'Issue goods to a contractor' });
+  await jobDialog.getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
+  await jobDialog.getByLabel('Code 1').selectOption({ label: code });
+  await jobDialog.getByLabel('Color 1').selectOption({ label: color });
+  await jobDialog.getByLabel('Size 1').selectOption({ label: 'XL' });
+  await jobDialog.getByRole('textbox', { name: 'Dozens' }).fill('5');
+  await jobDialog.getByRole('button', { name: 'Issue goods' }).click();
+  await expect(page.getByText(/Job card JOB-\d+ created/)).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByRole('row', { name: /JOB-\d+/ })).toHaveCount(jobRowsBefore + 1);
-  const jobRow = page.getByRole('row', { name: /JOB-\d+/ }).first();
+  const jobRow = page.getByRole('row', { name: new RegExp(code) }).first();
   await jobRow.getByRole('button', { name: 'Open' }).click();
   await page.getByRole('button', { name: 'Receive goods' }).click();
-  await page.getByRole('dialog', { name: /Receive against/ }).getByRole('textbox', { name: 'Dozens' }).fill('5');
-  await page.getByRole('button', { name: 'Record receipt' }).click();
-  await expect(page.getByRole('dialog', { name: /JOB-\d+/ }).getByText('Completed', { exact: true })).toBeVisible();
+  const receiveDialog = page.getByRole('dialog', { name: /Receive against/ });
+  await receiveDialog.getByRole('textbox', { name: 'Dozens' }).fill('5');
+  await receiveDialog.locator('input[type=file]').setInputFiles({
+    name: 'returned.png',
+    mimeType: 'image/png',
+    buffer: TINY_PNG,
+  });
+  await expect(receiveDialog.getByAltText('Reference')).toBeVisible(); // upload finished
+  await receiveDialog.getByRole('button', { name: 'Record receipt' }).click();
+  await expect(
+    page.getByRole('dialog', { name: /JOB-\d+/ }).getByText('Completed', { exact: true }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Close window' }).click();
 
   // 4. checking: the received batch sits in "Pending for checking" with the contractor's
-  // name — allot THAT batch to a checker (contractor ↔ checker mapping)
+  // name and the return photo — allot THAT batch to a checker
   await page.goto('/checking');
   const pendingRow = page
-    .getByRole('row', { name: new RegExp(color) })
+    .getByRole('row', { name: new RegExp(code) })
     .filter({ hasText: 'Sunita Job Work' })
     .first();
   await expect(pendingRow).toBeVisible();
@@ -90,47 +104,77 @@ test('purchase → cutting → job work → checking → packing → finished go
   await page.getByRole('dialog').getByLabel('Checker').selectOption({ label: 'Pooja' });
   // quantity defaults to the whole batch (5 dz) — issue it all
   await page.getByRole('button', { name: 'Issue for checking' }).click();
+
+  // 5. result: 4dz pass; 6pc rejected for stitching; 6pc "missing" — a reason in the
+  // SAME rejected dropdown (there is no separate missing box any more)
   const chkRow = page.getByRole('row', { name: /CHK-\d+/ }).first();
   await chkRow.getByRole('button', { name: 'Record result' }).click();
   const resultDialog = page.getByRole('dialog', { name: /Checking result/ });
-  // DzPc inputs in dialog order: [0]=Passed, [1]=Missing, [2]=rejection (after add)
-  await resultDialog.getByRole('textbox', { name: 'Dozens' }).nth(0).fill('4');
-  await resultDialog.getByRole('textbox', { name: 'Pieces' }).nth(1).fill('6');
-  await resultDialog.getByRole('button', { name: '+ Add rejection reason' }).click();
+  await resultDialog.getByRole('textbox', { name: 'Dozens' }).nth(0).fill('4'); // Passed
+  await resultDialog.getByRole('button', { name: /Add rejected pieces/ }).click();
   await resultDialog.getByLabel('Rejection reason 1').selectOption({ label: 'Stitching Issue' });
+  await resultDialog.getByRole('textbox', { name: 'Pieces' }).nth(1).fill('6');
+  await resultDialog.getByRole('button', { name: /Add rejected pieces/ }).click();
+  await resultDialog.getByLabel('Rejection reason 2').selectOption({ label: 'Missing' });
   await resultDialog.getByRole('textbox', { name: 'Pieces' }).nth(2).fill('6');
-  await resultDialog.getByRole('button', { name: /Record result/ }).click();
-  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
+  await resultDialog.getByRole('button', { name: /^Record result \(/ }).click();
 
-  // 5. packing: all 4dz packed by Kavita (any staff can pack — no fixed roles)
-  await page.goto('/packing');
-  await page.getByRole('button', { name: '+ Issue to packer' }).click();
-  await page.getByRole('dialog').getByLabel('Packer').selectOption({ label: 'Kavita' });
-  await page.getByRole('dialog').getByLabel('Model').selectOption({ index: modelIndex });
-  await page.getByRole('dialog').getByLabel('Color').selectOption({ label: color });
-  await page.getByRole('dialog').getByLabel('Size').selectOption({ label: 'XL' });
-  await page.getByRole('textbox', { name: 'Dozens' }).fill('4');
-  await page.getByRole('button', { name: 'Issue for packing' }).click();
-  const pckRow = page.getByRole('row', { name: /PCK-\d+/ }).first();
-  await pckRow.getByRole('button', { name: 'Record result' }).click();
-  const packDialog = page.getByRole('dialog', { name: /Packing result/ });
-  await packDialog.getByRole('textbox', { name: 'Dozens' }).nth(0).fill('4'); // Packed
-  await packDialog.getByRole('button', { name: 'Record packing result' }).click();
-  await expect(page.getByRole('cell', { name: 'completed' }).first()).toBeVisible();
+  // the checked row now offers its passed pieces for packing
+  const checkedRow = page.getByRole('row', { name: /CHK-\d+/ }).first();
+  await expect(checkedRow.getByText('4dz to pack')).toBeVisible();
 
-  // 6. finished goods inventory shows 4dz
+  // 6a. pack 3dz now — the checker (Pooja) is the default packer
+  await checkedRow.getByRole('button', { name: 'Pack', exact: true }).click();
+  const packDialog = page.getByRole('dialog', { name: /^Pack — / });
+  await expect(packDialog.getByText(/checker packs their own goods/)).toBeVisible();
+  await expect(packDialog.getByLabel('Packer')).toHaveValue(/\d+/); // pre-selected
+  await packDialog.getByRole('textbox', { name: 'Dozens' }).fill('3');
+  await packDialog.getByRole('button', { name: 'Allot for packing' }).click();
+
+  // 6b. keep the last 1dz aside as a labeled BUNDLE for later
+  await expect(checkedRow.getByText('1dz to pack')).toBeVisible();
+  await checkedRow.getByRole('button', { name: 'Pack', exact: true }).click();
+  const bundleDialog = page.getByRole('dialog', { name: /^Pack — / });
+  await bundleDialog
+    .getByLabel('What happens to these pieces?')
+    .selectOption({ label: 'Keep aside as a bundle (pack later)' });
+  await bundleDialog.getByLabel('Bundle name').fill(`Reserve ${code}`);
+  await bundleDialog.getByRole('button', { name: 'Keep bundle aside' }).click();
+
+  // 7. record the 3dz packing from "Packing in progress"
+  const packWorkRow = page
+    .getByRole('row', { name: /PCK-\d+/ })
+    .filter({ hasText: new RegExp(code) })
+    .first();
+  await packWorkRow.getByRole('button', { name: 'Record packing' }).click();
+  const packResult = page.getByRole('dialog', { name: /Packing result/ });
+  await packResult.getByRole('textbox', { name: 'Dozens' }).nth(0).fill('3'); // Packed
+  await packResult.getByRole('button', { name: 'Record packing' }).click();
+
+  // 8. the bundle sits in "Bundles kept aside" — pack it whenever needed
+  const bundleRow = page.getByRole('row', { name: new RegExp(`Reserve ${code}`) }).first();
+  await expect(bundleRow).toBeVisible();
+  await bundleRow.getByRole('button', { name: 'Pack from bundle' }).click();
+  const bundleResult = page.getByRole('dialog', { name: /Pack from bundle/ });
+  await bundleResult.getByRole('textbox', { name: 'Dozens' }).nth(0).fill('1');
+  await bundleResult.getByRole('button', { name: 'Record packing' }).click();
+  await expect(bundleRow).toHaveCount(0); // fully packed — the bundle is gone
+
+  // 9. finished goods inventory shows all 4dz under the size-code
   await page.goto('/stock/fg');
-  const fgRow = page.getByRole('row', { name: new RegExp(color) }).first();
+  const fgRow = page.getByRole('row', { name: new RegExp(code) }).first();
   await expect(fgRow.getByText('4dz', { exact: true })).toBeVisible();
 
-  // rejected stage shows the 6pc
+  // rejected stage shows the 6pc (missing pieces are NOT stock — they are written off)
   await page.goto('/stock/rejected');
-  await expect(page.getByRole('row', { name: new RegExp(color) }).first().getByText('6pc')).toBeVisible();
+  await expect(
+    page.getByRole('row', { name: new RegExp(code) }).first().getByText('6pc'),
+  ).toBeVisible();
 
-  // 7. the checking shortfall landed on the Discrepancies review page
+  // 10. the "missing" pieces landed on the Discrepancies review page
   await page.goto('/discrepancies');
   const missingRow = page
-    .getByRole('row', { name: new RegExp(color) })
+    .getByRole('row', { name: new RegExp(code) })
     .filter({ hasText: 'Missing' })
     .first();
   await expect(missingRow).toBeVisible();

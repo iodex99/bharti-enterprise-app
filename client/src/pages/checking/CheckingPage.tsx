@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CHECK_REJECTION_REASONS,
+  PACK_SHORT_REASONS,
   formatBusinessDate,
   formatPieces,
   label as enumLabel,
@@ -15,13 +16,23 @@ import { DzPcInput } from '../../components/inputs';
 import { useMasterOptions } from '../../api/masters';
 import { VoidModal } from '../purchases/PurchasesPage';
 
+/**
+ * Checking & Packing (ADR-034/035). One page for the whole verification flow:
+ *   pending batches → issue to a checker → record pass/rejected (missing is a reason)
+ *   → allot the passed pieces to packing (usually the same person) or keep a bundle
+ *   → record packing → finished goods.
+ */
+
 type CheckIssue = {
   id: number;
   docNo: string;
   issueDate: string;
   status: 'open' | 'completed';
+  staffId: number;
   staffName: string;
-  modelCode: string;
+  code: string;
+  sizeCodeLabel: string;
+  codeImagePath: string | null;
   colorName: string;
   sizeCode: string;
   qtyPcs: number;
@@ -29,6 +40,7 @@ type CheckIssue = {
   rejectedPcs: number;
   missingPcs: number;
   pendingPcs: number;
+  packablePcs: number;
   voidedAt: string | null;
   contractorName: string | null;
   receiptDocNo: string | null;
@@ -40,7 +52,8 @@ type PendingBatch = {
   lotType: 'receipt_line' | 'opening';
   lotId: number;
   qtyPcs: number;
-  modelCode: string;
+  sizeCodeLabel: string;
+  codeImagePath: string | null;
   colorName: string;
   sizeCode: string;
   receiptDocNo: string | null;
@@ -51,6 +64,23 @@ type PendingBatch = {
   openingDocNo: string | null;
 };
 
+type PackIssue = {
+  id: number;
+  docNo: string;
+  issueDate: string;
+  status: 'open' | 'completed';
+  staffName: string;
+  kind: 'pack' | 'bundle';
+  label: string;
+  sizeCodeLabel: string;
+  colorName: string;
+  qtyPcs: number;
+  packedPcs: number;
+  shortPcs: number;
+  heldPcs: number;
+  voidedAt: string | null;
+};
+
 export default function CheckingPage() {
   const { user } = useAuth();
   const canWrite = user?.role === 'admin' || user?.role === 'operator';
@@ -58,6 +88,8 @@ export default function CheckingPage() {
   const queryClient = useQueryClient();
   const [issueFor, setIssueFor] = useState<PendingBatch | null>(null);
   const [resultFor, setResultFor] = useState<CheckIssue | null>(null);
+  const [packFor, setPackFor] = useState<CheckIssue | null>(null);
+  const [packResultFor, setPackResultFor] = useState<PackIssue | null>(null);
   const [voidFor, setVoidFor] = useState<CheckIssue | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -68,19 +100,27 @@ export default function CheckingPage() {
     queryKey: ['checking', 'pending'],
     queryFn: () => api.get<{ items: PendingBatch[] }>('/api/checking/pending'),
   });
+  const { data: packing } = useQuery({
+    queryKey: ['packing'],
+    queryFn: () => api.get<{ items: PackIssue[] }>('/api/packing'),
+  });
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['checking'] });
+    void queryClient.invalidateQueries({ queryKey: ['packing'] });
     void queryClient.invalidateQueries({ queryKey: ['stock'] });
     void queryClient.invalidateQueries({ queryKey: ['jobs'] });
   };
 
+  const bundles = packing?.items.filter((p) => p.kind === 'bundle' && p.heldPcs > 0) ?? [];
+  const packWork = packing?.items.filter((p) => p.kind === 'pack' && p.status === 'open') ?? [];
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Checking</h1>
+        <h1 className="text-xl font-bold text-gray-900">Checking &amp; Packing</h1>
         <p className="text-sm text-gray-500">
-          Goods a contractor returns count only after a checker verifies them (Module 7)
+          Returned goods count only after checking — and the checker usually packs them too
         </p>
       </div>
 
@@ -104,7 +144,7 @@ export default function CheckingPage() {
                   <th className="px-3 py-2">Received</th>
                   <th className="px-3 py-2">From</th>
                   <th className="px-3 py-2">Receipt</th>
-                  <th className="px-3 py-2">Item</th>
+                  <th className="px-3 py-2">Size-code</th>
                   <th className="px-3 py-2">Waiting</th>
                   <th className="px-3 py-2">Photo</th>
                   {canWrite && <th className="px-3 py-2 text-right">Action</th>}
@@ -121,7 +161,8 @@ export default function CheckingPage() {
                       {b.receiptDocNo ?? b.openingDocNo ?? '—'}
                     </td>
                     <td className="px-3 py-2">
-                      {b.modelCode} <span className="text-gray-500">{b.colorName} · {b.sizeCode}</span>
+                      <span className="font-medium">{b.sizeCodeLabel}</span>{' '}
+                      <span className="text-gray-500">{b.colorName}</span>
                     </td>
                     <td className="px-3 py-2">
                       <span className="font-semibold text-red-700">{formatPieces(b.qtyPcs)}</span>
@@ -176,14 +217,17 @@ export default function CheckingPage() {
           },
           {
             key: 'item',
-            header: 'Item',
-            value: (r) => `${r.modelCode} ${r.colorName} ${r.sizeCode}`,
+            header: 'Size-code',
+            value: (r) => `${r.sizeCodeLabel} ${r.colorName}`,
             render: (r) => (
               <span>
-                <span className="font-medium">{r.modelCode}</span>{' '}
-                <span className="text-gray-500">
-                  {r.colorName} · {r.sizeCode}
-                </span>
+                <span className="font-medium">{r.sizeCodeLabel}</span>{' '}
+                <span className="text-gray-500">{r.colorName}</span>
+                {r.codeImagePath && (
+                  <a href={r.codeImagePath} target="_blank" rel="noreferrer" className="ml-1" title="Product photo">
+                    📷
+                  </a>
+                )}
               </span>
             ),
           },
@@ -196,12 +240,11 @@ export default function CheckingPage() {
           },
           {
             key: 'progress',
-            header: 'Passed / Rejected / Missing',
+            header: 'Passed / Rejected',
             render: (r) => (
               <span className="space-x-1 whitespace-nowrap">
                 <Badge tone="green">{formatPieces(r.passedPcs)}</Badge>
-                <Badge tone="red">{formatPieces(r.rejectedPcs)}</Badge>
-                <Badge tone="gray">{formatPieces(r.missingPcs)}</Badge>
+                <Badge tone="red">{formatPieces(r.rejectedPcs + r.missingPcs)}</Badge>
               </span>
             ),
           },
@@ -209,10 +252,12 @@ export default function CheckingPage() {
             key: 'status',
             header: 'Status',
             render: (r) =>
-              r.status === 'completed' ? (
-                <Badge tone="green">completed</Badge>
+              r.status === 'completed' && r.packablePcs === 0 ? (
+                <Badge tone="green">done</Badge>
+              ) : r.packablePcs > 0 ? (
+                <Badge tone="violet">{formatPieces(r.packablePcs)} to pack</Badge>
               ) : (
-                <Badge tone="amber">{formatPieces(r.pendingPcs)} pending</Badge>
+                <Badge tone="amber">{formatPieces(r.pendingPcs)} to check</Badge>
               ),
           },
         ]}
@@ -233,6 +278,11 @@ export default function CheckingPage() {
                 Record result
               </Button>
             )}
+            {canWrite && row.packablePcs > 0 && (
+              <Button variant="ghost" className="text-emerald-700" onClick={() => setPackFor(row)}>
+                Pack
+              </Button>
+            )}
             {isAdmin && row.passedPcs + row.rejectedPcs + row.missingPcs === 0 && (
               <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
                 Void
@@ -241,6 +291,99 @@ export default function CheckingPage() {
           </>
         )}
       />
+
+      {/* packing in progress — allotted from the checking rows above */}
+      {(packWork.length > 0 || bundles.length > 0) && (
+        <section className="mt-6 space-y-4">
+          {packWork.length > 0 && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
+              <h2 className="mb-2 text-sm font-bold text-gray-900">📦 Packing in progress</h2>
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+                      <th className="px-3 py-2">Doc</th>
+                      <th className="px-3 py-2">Packer</th>
+                      <th className="px-3 py-2">Size-code</th>
+                      <th className="px-3 py-2">With packer</th>
+                      <th className="px-3 py-2">Packed</th>
+                      {canWrite && <th className="px-3 py-2 text-right">Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {packWork.map((p) => (
+                      <tr key={p.id} className="border-b border-gray-100 last:border-0">
+                        <td className="px-3 py-2 font-mono text-xs">{p.docNo}</td>
+                        <td className="px-3 py-2 font-medium">{p.staffName}</td>
+                        <td className="px-3 py-2">
+                          {p.sizeCodeLabel} <span className="text-gray-500">{p.colorName}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge tone="blue">{formatPieces(p.heldPcs)}</Badge>
+                        </td>
+                        <td className="px-3 py-2 text-emerald-700">{formatPieces(p.packedPcs)}</td>
+                        {canWrite && (
+                          <td className="px-3 py-2 text-right">
+                            <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(p)}>
+                              Record packing
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {bundles.length > 0 && (
+            <div className="rounded-2xl border border-sky-200 bg-sky-50/40 p-4">
+              <h2 className="mb-1 text-sm font-bold text-gray-900">🎁 Bundles kept aside</h2>
+              <p className="mb-2 text-xs text-gray-500">
+                Checked goods the owner asked to reserve — pack them whenever needed.
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+                      <th className="px-3 py-2">Bundle</th>
+                      <th className="px-3 py-2">With</th>
+                      <th className="px-3 py-2">Size-code</th>
+                      <th className="px-3 py-2">Kept aside</th>
+                      {canWrite && <th className="px-3 py-2 text-right">Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bundles.map((b) => (
+                      <tr key={b.id} className="border-b border-gray-100 last:border-0">
+                        <td className="px-3 py-2">
+                          <span className="font-medium">{b.label || b.docNo}</span>{' '}
+                          <span className="font-mono text-xs text-gray-400">{b.docNo}</span>
+                        </td>
+                        <td className="px-3 py-2">{b.staffName}</td>
+                        <td className="px-3 py-2">
+                          {b.sizeCodeLabel} <span className="text-gray-500">{b.colorName}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge tone="blue">{formatPieces(b.heldPcs)}</Badge>
+                        </td>
+                        {canWrite && (
+                          <td className="px-3 py-2 text-right">
+                            <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(b)}>
+                              Pack from bundle
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {issueFor && (
         <IssueModal
@@ -254,6 +397,15 @@ export default function CheckingPage() {
         key={resultFor?.id ?? 'none'}
         issue={resultFor}
         onClose={() => setResultFor(null)}
+        onDone={invalidate}
+      />
+      {packFor && (
+        <PackModal key={`pack-${packFor.id}`} issue={packFor} onClose={() => setPackFor(null)} onDone={invalidate} />
+      )}
+      <PackResultModal
+        key={`pr-${packResultFor?.id ?? 'none'}`}
+        issue={packResultFor}
+        onClose={() => setPackResultFor(null)}
         onDone={invalidate}
       />
       <VoidModal
@@ -311,8 +463,7 @@ function IssueModal({
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <strong>{batch.contractorName ?? 'Opening stock'}</strong>
           {batch.receiptDocNo && <> · receipt <span className="font-mono text-xs">{batch.receiptDocNo}</span></>} ·{' '}
-          {batch.modelCode} {batch.colorName} {batch.sizeCode} ·{' '}
-          <strong>{formatPieces(batch.qtyPcs)}</strong> waiting
+          {batch.sizeCodeLabel} {batch.colorName} · <strong>{formatPieces(batch.qtyPcs)}</strong> waiting
           {batch.imagePath && (
             <>
               {' '}
@@ -349,6 +500,7 @@ function IssueModal({
   );
 }
 
+/** v2 results: passed + ONE rejected breakdown — 'missing' is a reason in the dropdown. */
 function ResultModal({
   issue,
   onClose,
@@ -360,7 +512,6 @@ function ResultModal({
 }) {
   const [resultDate, setResultDate] = useState(todayIST());
   const [passed, setPassed] = useState<number | null>(null);
-  const [missing, setMissing] = useState<number | null>(null);
   const [rejections, setRejections] = useState<Array<{ reason: string; qtyPcs: number | null }>>([]);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
@@ -372,8 +523,6 @@ function ResultModal({
       api.post(`/api/checking/${issue!.id}/results`, {
         resultDate,
         qtyPassed: passed ?? 0,
-        qtyRejected: rejectedTotal,
-        qtyMissing: missing ?? 0,
         rejections: rejections
           .filter((r) => r.qtyPcs)
           .map((r) => ({ reason: r.reason, qtyPcs: r.qtyPcs })),
@@ -387,7 +536,7 @@ function ResultModal({
   });
 
   if (!issue) return null;
-  const sessionTotal = (passed ?? 0) + rejectedTotal + (missing ?? 0);
+  const sessionTotal = (passed ?? 0) + rejectedTotal;
 
   return (
     <Modal title={`Checking result — ${issue.docNo}`} open onClose={onClose} wide>
@@ -400,19 +549,16 @@ function ResultModal({
       >
         <p className="rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900">
           {issue.staffName} holds <strong>{formatPieces(issue.pendingPcs)}</strong> of{' '}
-          {issue.modelCode} {issue.colorName} {issue.sizeCode}
+          {issue.sizeCodeLabel} {issue.colorName}
           {issue.contractorName && <> (from {issue.contractorName})</>}. You can record
           results in parts — this session covers {formatPieces(sessionTotal)}.
         </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Result date">
             <TextInput type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} required />
           </Field>
           <Field label="Passed">
             <DzPcInput pieces={passed} onChange={setPassed} />
-          </Field>
-          <Field label="Missing">
-            <DzPcInput pieces={missing} onChange={setMissing} />
           </Field>
         </div>
 
@@ -464,7 +610,7 @@ function ResultModal({
             variant="secondary"
             onClick={() => setRejections([...rejections, { reason: 'stitching_issue', qtyPcs: null }])}
           >
-            + Add rejection reason
+            + Add rejected pieces (reason includes “missing”)
           </Button>
         </div>
 
@@ -474,6 +620,187 @@ function ResultModal({
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending || sessionTotal === 0} className="w-full">
           {save.isPending ? 'Saving…' : `Record result (${formatPieces(sessionTotal)})`}
+        </Button>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Allot this check issue's passed pieces to packing — default packer is the checker —
+ * or keep them aside as a labeled bundle for later.
+ */
+function PackModal({
+  issue,
+  onClose,
+  onDone,
+}: {
+  issue: CheckIssue;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [issueDate, setIssueDate] = useState(todayIST());
+  const [staffId, setStaffId] = useState<number | null>(issue.staffId);
+  const [qtyPcs, setQty] = useState<number | null>(issue.packablePcs);
+  const [kind, setKind] = useState<'pack' | 'bundle'>('pack');
+  const [bundleLabel, setBundleLabel] = useState('');
+  const [error, setError] = useState('');
+  const { data: staff } = useMasterOptions('staff');
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.post(`/api/checking/${issue.id}/pack`, {
+        issueDate,
+        staffId,
+        qtyPcs,
+        kind,
+        label: bundleLabel,
+        notes: '',
+      }),
+    onSuccess: () => {
+      onDone();
+      onClose();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
+  });
+
+  return (
+    <Modal title={`Pack — ${issue.sizeCodeLabel} ${issue.colorName}`} open onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (kind === 'bundle' && !bundleLabel.trim()) {
+            setError('Give the bundle a name so it can be found later.');
+            return;
+          }
+          save.mutate();
+        }}
+        className="space-y-4"
+      >
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          <strong>{formatPieces(issue.packablePcs)}</strong> passed by {issue.staffName} are
+          ready. 9 times out of 10 the checker packs their own goods — change the person
+          only if someone else will pack.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Date">
+            <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
+          </Field>
+          <Field label="Packer">
+            <Select value={staffId ?? ''} onChange={(e) => setStaffId(e.target.value ? Number(e.target.value) : null)}>
+              {staff?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name as string}
+                  {s.id === issue.staffId ? ' (checked these goods)' : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <Field label="Quantity">
+          <DzPcInput pieces={qtyPcs} onChange={setQty} />
+        </Field>
+        <Field label="What happens to these pieces?">
+          <Select value={kind} onChange={(e) => setKind(e.target.value as 'pack' | 'bundle')}>
+            <option value="pack">Pack now (towards finished goods)</option>
+            <option value="bundle">Keep aside as a bundle (pack later)</option>
+          </Select>
+        </Field>
+        {kind === 'bundle' && (
+          <Field label="Bundle name" hint="e.g. “Festival order reserve” — how you’ll find it later">
+            <TextInput value={bundleLabel} onChange={(e) => setBundleLabel(e.target.value)} />
+          </Field>
+        )}
+        <ErrorText>{error}</ErrorText>
+        <Button type="submit" disabled={save.isPending || !staffId || !qtyPcs} className="w-full">
+          {save.isPending ? 'Saving…' : kind === 'bundle' ? 'Keep bundle aside' : 'Allot for packing'}
+        </Button>
+      </form>
+    </Modal>
+  );
+}
+
+/** Record packed / short pieces for a pack issue or a bundle. */
+function PackResultModal({
+  issue,
+  onClose,
+  onDone,
+}: {
+  issue: PackIssue | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [resultDate, setResultDate] = useState(todayIST());
+  const [packed, setPacked] = useState<number | null>(null);
+  const [short, setShort] = useState<number | null>(null);
+  const [shortReason, setShortReason] = useState('');
+  const [error, setError] = useState('');
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.post(`/api/packing/${issue!.id}/results`, {
+        resultDate,
+        qtyPacked: packed ?? 0,
+        qtyShort: short ?? 0,
+        shortReason: shortReason || null,
+        notes: '',
+      }),
+    onSuccess: () => {
+      onDone();
+      onClose();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
+  });
+
+  if (!issue) return null;
+
+  return (
+    <Modal
+      title={`${issue.kind === 'bundle' ? 'Pack from bundle' : 'Packing result'} — ${issue.label || issue.docNo}`}
+      open
+      onClose={onClose}
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+        className="space-y-4"
+      >
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          {issue.staffName} holds <strong>{formatPieces(issue.heldPcs)}</strong> of{' '}
+          {issue.sizeCodeLabel} {issue.colorName}. Packed pieces become Finished Goods.
+        </p>
+        <Field label="Date">
+          <TextInput type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} required />
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Packed">
+            <DzPcInput pieces={packed} onChange={setPacked} />
+          </Field>
+          <Field label="Short (if any)">
+            <DzPcInput pieces={short} onChange={setShort} />
+          </Field>
+        </div>
+        {(short ?? 0) > 0 && (
+          <Field label="Reason for shortage">
+            <Select value={shortReason} onChange={(e) => setShortReason(e.target.value)}>
+              <option value="">— reason —</option>
+              {PACK_SHORT_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {enumLabel(r)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        <ErrorText>{error}</ErrorText>
+        <Button
+          type="submit"
+          disabled={save.isPending || (packed ?? 0) + (short ?? 0) === 0}
+          className="w-full"
+        >
+          {save.isPending ? 'Saving…' : 'Record packing'}
         </Button>
       </form>
     </Modal>

@@ -32,6 +32,7 @@ afterAll(() => ctx.cleanup());
 
 const raw = (qty: number, refType = 'purchase', refId = 1): Movement => ({
   stage: 'RAW',
+  officeId: 1,
   modelId: 1,
   colorId: 1,
   sizeId: null,
@@ -44,6 +45,7 @@ const raw = (qty: number, refType = 'purchase', refId = 1): Movement => ({
 
 const cut = (qty: number, refType: string, refId: number, lotId = 1): Movement => ({
   stage: 'CUT',
+  officeId: 1,
   modelId: 1,
   colorId: 1,
   sizeId: 1,
@@ -61,7 +63,7 @@ describe('ledger conservation rules', () => {
 
   it('genesis creates stock; balances reflect it', () => {
     post([raw(10000)]);
-    const lots = ledger.availableLots(ctx.db, { stage: 'RAW', modelId: 1, colorId: 1 });
+    const lots = ledger.availableLots(ctx.db, { stage: 'RAW', officeId: 1, modelId: 1, colorId: 1 });
     expect(lots).toHaveLength(1);
     expect(lots[0]!.qty).toBe(10000);
   });
@@ -97,7 +99,7 @@ describe('ledger conservation rules', () => {
     expect(() => post([raw(-20000, 'cutting_consume', 1)])).toThrow(/Not enough stock/);
     // exact draw is fine
     post([raw(-4000, 'cutting_consume', 1)]);
-    const lots = ledger.availableLots(ctx.db, { stage: 'RAW', modelId: 1, colorId: 1 });
+    const lots = ledger.availableLots(ctx.db, { stage: 'RAW', officeId: 1, modelId: 1, colorId: 1 });
     expect(lots[0]!.qty).toBe(6000);
   });
 
@@ -124,6 +126,7 @@ describe('ledger conservation rules', () => {
       cut(-50, 'job_issue', 1),
       {
         stage: 'WIP',
+        officeId: 1,
         modelId: 1,
         colorId: 1,
         sizeId: 1,
@@ -135,8 +138,8 @@ describe('ledger conservation rules', () => {
         refId: 1,
       },
     ]);
-    const cutLots = ledger.availableLots(ctx.db, { stage: 'CUT', modelId: 1, colorId: 1, sizeId: 1 });
-    const wipLots = ledger.availableLots(ctx.db, { stage: 'WIP', modelId: 1, colorId: 1, sizeId: 1 });
+    const cutLots = ledger.availableLots(ctx.db, { stage: 'CUT', officeId: 1, modelId: 1, colorId: 1, sizeId: 1 });
+    const wipLots = ledger.availableLots(ctx.db, { stage: 'WIP', officeId: 1, modelId: 1, colorId: 1, sizeId: 1 });
     expect(cutLots[0]!.qty).toBe(70);
     expect(wipLots[0]!.qty).toBe(50);
   });
@@ -150,6 +153,7 @@ describe('ledger conservation rules', () => {
         cut(-10, 'check_issue', 5),
         {
           stage: 'CHECKING',
+          officeId: 1,
           modelId: 1,
           colorId: 1,
           sizeId: 1,
@@ -168,7 +172,7 @@ describe('ledger conservation rules', () => {
   });
 
   it('stockByDimensions groups correctly', () => {
-    const rows = ledger.stockByDimensions(ctx.db, 'CUT');
+    const rows = ledger.stockByDimensions(ctx.db, 'CUT', 1);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.qty).toBe(70);
     expect(rows[0]!.modelCode).toBe('M1');

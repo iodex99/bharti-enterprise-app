@@ -5,6 +5,38 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-24 — **Fix: entering demo mode now migrates an existing demo database first.**
+  A demo db built by an older app version is missing the newer tables; swapping onto it
+  un-migrated made every request fail (found when the E2E server reused a pre-v2 demo db
+  — the same thing would happen on a real install after any update). Regression test
+  rolls a migration back and proves re-enter heals it. The E2E server also wipes the
+  demo sibling directory now, so suite runs are hermetic.
+
+- 2026-07-24 — **Back to the central-PC web app, now multi-office, and the workflow
+  reworked end to end** (ADR-027…036). The client runs the system on one office computer
+  again; operators enter data from browsers. What changed in the business flow:
+  - **Offices**: the admin configures offices in the app; each office's documents, stock
+    and numbering stay separate (`BR-RM-0001` style prefixes for offices after the
+    first); operators are pinned to one office, admin/owner switch from the top bar and
+    create logins per office.
+  - **Yards + width**: cloth is bought in yards (1 yd = 36") with its width; cutting
+    works out cloth as strips across the width (`ceil(pcs ÷ across) × inches/pc`).
+  - **The code number is given at cutting**: no Models master — the code is typed beside
+    each size (with the product photo) and that "size-code" (e.g. `315-XS`) follows the
+    goods everywhere.
+  - **Cutting is final**: the entry consumes cloth and creates pieces in one step (no
+    "record actuals"); entries can be edited/deleted until pieces are issued onward.
+  - **Job work**: per-dozen cost set at issue; multi-code issues split into one card per
+    code + color; unstarted cards can be edited/deleted; receipts REQUIRE a photo of the
+    returned goods.
+  - **Checking**: one "rejected pieces" entry with a reason dropdown — 'missing' is a
+    reason, not a separate box.
+  - **Packing folded into checking**: a Pack button on the checked row; the checker packs
+    their own goods by default; "keep aside" is a labeled bundle packed later.
+  - **Pending dues**: a dedicated view + report of what each contractor is owed.
+  Android/local runtime is dormant (ADR-027): PC releases build on every push again
+  (1.0.x), the Android workflow is manual-only, and the app-mode E2E project was removed.
+
 - 2026-07-23 — **The system is now an Android app.** Everything runs on one device: the
   screens, the business rules and the database, with no server and no network (the
   internet is used only to look for updates). The server was not rewritten — the same

@@ -75,14 +75,14 @@ export function addReportSheet(
     opts.columns.forEach((c, i) => {
       const cell = added.getCell(i + 1);
       if (c.type === 'paise') cell.numFmt = '₹#,##0.00';
-      if (c.type === 'cm') cell.numFmt = '#,##0.00 "m"';
+      if (c.type === 'len') cell.numFmt = '#,##0.00 "yd"';
       if (c.type === 'pct') cell.numFmt = '0.0"%"';
       if (c.type === 'date') cell.numFmt = 'dd/mm/yyyy';
     });
   }
 
   // totals for numeric columns
-  const numericTypes = new Set(['pcs', 'cm', 'paise', 'int']);
+  const numericTypes = new Set(['pcs', 'len', 'paise', 'int']);
   if (opts.rows.length > 1 && opts.columns.some((c) => numericTypes.has(c.type))) {
     const totals = opts.columns.map((c, i) => {
       if (i === 0) return 'TOTAL';
@@ -95,7 +95,7 @@ export function addReportSheet(
     opts.columns.forEach((c, i) => {
       const cell = totalRow.getCell(i + 1);
       if (c.type === 'paise') cell.numFmt = '₹#,##0.00';
-      if (c.type === 'cm') cell.numFmt = '#,##0.00 "m"';
+      if (c.type === 'len') cell.numFmt = '#,##0.00 "yd"';
       cell.border = { top: { style: 'thin', color: { argb: 'FF999999' } } };
     });
   }
@@ -115,7 +115,7 @@ function cellValue(column: ReportColumn, value: unknown): unknown {
   switch (column.type) {
     case 'pcs':
       return formatPieces(Number(value)); // owners read "2dz 6pc", not 30
-    case 'cm':
+    case 'len':
       return Number(value) / 100; // meters as a real number
     case 'paise':
       return Number(value) / 100; // rupees as a real number

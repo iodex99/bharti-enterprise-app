@@ -10,7 +10,7 @@ export function MasterSelect({
   emptyLabel = '— select —',
   disabled,
 }: {
-  master: 'models' | 'colors' | 'sizes' | 'vendors' | 'contractors' | 'staff';
+  master: 'colors' | 'sizes' | 'vendors' | 'contractors' | 'staff';
   value: number | null;
   onChange: (id: number | null) => void;
   allowEmpty?: boolean;

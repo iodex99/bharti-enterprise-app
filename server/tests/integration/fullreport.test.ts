@@ -17,7 +17,6 @@ beforeAll(async () => {
   operator = await loginAs(ctx.app, 'operator', 'Operator@123');
   owner = await loginAs(ctx.app, 'owner', 'Owner@123');
   ctx.db.exec(`
-    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1);
     INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
     INSERT INTO sizes (id, code, created_by) VALUES (1, 'XS', 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'Vendor & Sons <fine>', 1);
@@ -27,8 +26,9 @@ beforeAll(async () => {
     receivedDate: '2026-07-01',
     vendorId: 1,
     colorId: 1,
-    qtyCm: 10000,
-    ratePaisePerMeter: 4000,
+    lenInchC: 360000, // 100 yd
+    widthInchC: 4400,
+    ratePaisePerYard: 4000,
     notes: '',
   });
 });
@@ -51,8 +51,8 @@ describe('Complete Business Report', () => {
     expect(html).toContain('&#60;fine&#62;');
     // self-contained: no external scripts or stylesheets
     expect(html).not.toMatch(/<script src=|<link rel="stylesheet"/);
-    // raw stock table carries the purchase
-    expect(html).toContain('100 m');
+    // raw stock table carries the purchase (yards, v2)
+    expect(html).toContain('100 yd');
   });
 
   it('XLSX: one sheet per report plus the summary', async () => {

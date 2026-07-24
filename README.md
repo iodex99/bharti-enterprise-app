@@ -1,12 +1,15 @@
 # Bharti Enterprises — Production & Inventory Management System
 
 A complete ERP for scrunchie manufacturing, replacing paper registers with full
-traceability: **cloth purchase → cutting → contractor job-work → checking → packing →
-finished goods → dispatch**, plus contractor payments, an owner dashboard, 15
-Excel-exportable reports, batch traceability, audit trail and automatic backups.
+traceability: **cloth purchase → cutting (where the code number is given) → contractor
+job-work → checking & packing → finished goods → dispatch**, plus contractor payments and
+pending dues, an owner dashboard, 16 Excel-exportable reports, batch traceability, audit
+trail and automatic backups.
 
-**It ships as an Android app that runs the entire system on one device** — no server, no
-network, works offline — and **updates itself with one tap**.
+**It runs on the central office computer** — operators enter the day's work from
+browsers, the owner watches from anywhere, and **multiple offices share one system while
+their data stays separate**. Updates are one click. (An Android on-device build also
+exists, dormant — see docs/DEPLOYMENT.md.)
 
 **📚 Start here:** [`docs/PROGRESS.md`](docs/PROGRESS.md) (build state) ·
 [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) (the business) ·
@@ -23,14 +26,17 @@ network, works offline — and **updates itself with one tap**.
 - **Owner visibility**: dashboard KPIs + charts, alerts (delayed jobs, discrepancies,
   idle goods), every report downloadable as Excel, print views, full batch traceability
   back to the vendor.
-- **Runs on one Android device**: the same route and service code that runs under
-  Express is compiled into a Web Worker, with SQLite as WebAssembly on OPFS. No server,
-  no network, no accounts to manage — and one implementation of the business rules, so
-  one test suite covers both hosts.
-- **Zero-drama updates**: push to `main` → CI (typecheck, lint, 330 unit/integration,
-  58 E2E) → GitHub Release → in-app banner → Admin taps once → the app verifies the
-  download's checksum, swaps its own bundle and restarts. **Business data is never part
-  of an update**, and a bundle that fails to start twice is rolled back automatically.
+- **Multi-office**: the admin configures offices in the app; every document, stock
+  figure and report belongs to one office (prefixed document numbers like `BR-RM-0001`),
+  operators are pinned to theirs, and the admin/owner switch offices from the top bar.
+- **Made for the shop floor**: cloth in yards + width with the piece math done for you,
+  the product photo following its code everywhere, required photos of returned goods,
+  and packing folded into checking (the checker packs their own goods, or keeps a
+  labeled bundle aside).
+- **Zero-drama updates**: push to `main` → CI (typecheck, lint, 329 unit/integration,
+  the full E2E suite) → GitHub Release → banner on the office PC → Admin clicks once →
+  the supervisor swaps versions with a health gate and automatic rollback. **Business
+  data is never part of an update.**
 - **Phone-friendly**: responsive UI throughout; also installable as a PWA when served
   from the optional PC deployment.
 

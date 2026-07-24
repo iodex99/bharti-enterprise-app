@@ -6,10 +6,40 @@ export class ApiError extends Error {
   }
 }
 
+const OFFICE_KEY = 'bharti.office';
+
+/**
+ * The office this browser works in (ADR-028). Operators are pinned server-side (the
+ * header is ignored for them); admin/owner pick one in the header switcher. Changing it
+ * reloads the app so every cached query is refetched in the new office.
+ */
+export function activeOfficeId(): number {
+  try {
+    const raw = localStorage.getItem(OFFICE_KEY);
+    const parsed = raw ? Number(raw) : 1;
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function switchOffice(id: number): void {
+  try {
+    localStorage.setItem(OFFICE_KEY, String(id));
+  } catch {
+    /* no storage — header falls back to office 1 */
+  }
+  window.location.assign('/');
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
     ...init,
+    headers: {
+      'X-Office-Id': String(activeOfficeId()),
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;

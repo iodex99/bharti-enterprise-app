@@ -8,14 +8,15 @@ let admin: string;
 let operator: string;
 let owner: string;
 
-// no model — cloth is bought as vendor + color; the model is decided at cutting
+// no code — cloth is bought as vendor + color + yards + width; the code is given at cutting
 const PURCHASE = {
   purchaseDate: '2026-07-01',
   receivedDate: '2026-07-03',
   vendorId: 1,
   colorId: 1,
-  qtyCm: 12550, // 125.50 m
-  ratePaisePerMeter: 4550, // ₹45.50/m
+  lenInchC: 451800, // 125.50 yd
+  widthInchC: 4400, // 44" wide
+  ratePaisePerYard: 4550, // ₹45.50/yd
   notes: 'first lot',
 };
 
@@ -47,13 +48,14 @@ describe('purchases', () => {
     const row = ctx.db
       .prepare('SELECT total_paise FROM purchases WHERE id = ?')
       .get(res.body.id) as { total_paise: number };
-    // 125.5 m × ₹45.50 = ₹5,710.25 = 571025 paise
+    // 125.5 yd × ₹45.50 = ₹5,710.25 = 571025 paise
     expect(row.total_paise).toBe(571025);
 
     const stock = await request(ctx.app).get('/api/stock/raw').set('Cookie', owner);
     expect(stock.status).toBe(200);
     expect(stock.body.lots).toHaveLength(1);
-    expect(stock.body.lots[0].qtyCm).toBe(12550);
+    expect(stock.body.lots[0].qtyInchC).toBe(451800);
+    expect(stock.body.lots[0].widthInchC).toBe(4400);
     expect(stock.body.lots[0].vendorName).toBe('V1');
   });
 
@@ -81,7 +83,7 @@ describe('purchases', () => {
     const zeroQty = await request(ctx.app)
       .post('/api/purchases')
       .set('Cookie', operator)
-      .send({ ...PURCHASE, qtyCm: 0 });
+      .send({ ...PURCHASE, lenInchC: 0 });
     expect(zeroQty.status).toBe(400);
   });
 
@@ -138,7 +140,7 @@ describe('purchases', () => {
         )
         .get(id) as { q: number }
     ).q;
-    expect(beforeQty).toBe(PURCHASE.qtyCm);
+    expect(beforeQty).toBe(PURCHASE.lenInchC);
 
     const voided = await request(ctx.app)
       .post(`/api/purchases/${id}/void`)
@@ -180,14 +182,14 @@ describe('purchases', () => {
     // simulate a cutting consumption directly through the ledger
     ctx.db
       .prepare(
-        `INSERT INTO cutting_batches (doc_no, cut_date, raw_lot_type, raw_lot_id, model_id, color_id, meters_used_cm, status, created_by)
-         VALUES ('CUT-TEST', '2026-07-04', 'purchase', ?, 1, 1, 500, 'planned', 1)`,
+        `INSERT INTO cutting_batches (doc_no, cut_date, raw_lot_type, raw_lot_id, model_id, color_id, meters_used_cm, consumed_inch_c, status, created_by)
+         VALUES ('CUT-TEST', '2026-07-04', 'purchase', ?, 1, 1, 500, 1800, 'completed', 1)`,
       )
       .run(id);
     ctx.db
       .prepare(
-        `INSERT INTO stock_ledger (stage, model_id, color_id, size_id, lot_type, lot_id, qty, ref_type, ref_id, created_by)
-         VALUES ('RAW', 1, 1, NULL, 'purchase', ?, -500, 'cutting_consume', 1, 1)`,
+        `INSERT INTO stock_ledger (stage, office_id, model_id, color_id, size_id, lot_type, lot_id, qty, ref_type, ref_id, created_by)
+         VALUES ('RAW', 1, 1, 1, NULL, 'purchase', ?, -1800, 'cutting_consume', 1, 1)`,
       )
       .run(id);
 
@@ -209,25 +211,25 @@ describe('purchases', () => {
     const edit = await request(ctx.app)
       .put(`/api/purchases/${id}`)
       .set('Cookie', operator)
-      .send({ ratePaisePerMeter: 5000, notes: 'renegotiated', imagePath: null });
+      .send({ ratePaisePerYard: 5000, notes: 'renegotiated', imagePath: null });
     expect(edit.status).toBe(200);
 
     const row = ctx.db
-      .prepare('SELECT total_paise, qty_cm FROM purchases WHERE id = ?')
-      .get(id) as { total_paise: number; qty_cm: number };
-    expect(row.qty_cm).toBe(PURCHASE.qtyCm); // immutable
-    expect(row.total_paise).toBe(Math.round((PURCHASE.qtyCm * 5000) / 100));
+      .prepare('SELECT total_paise, len_inch_c FROM purchases WHERE id = ?')
+      .get(id) as { total_paise: number; len_inch_c: number };
+    expect(row.len_inch_c).toBe(PURCHASE.lenInchC); // immutable
+    expect(row.total_paise).toBe(Math.round((PURCHASE.lenInchC * 5000) / 3600));
 
-    // qty is not editable via the API at all
+    // length is not editable via the API at all
     const qtyAttempt = await request(ctx.app)
       .put(`/api/purchases/${id}`)
       .set('Cookie', operator)
-      .send({ ratePaisePerMeter: 5000, notes: '', qtyCm: 99999 });
+      .send({ ratePaisePerYard: 5000, notes: '', lenInchC: 99999 });
     expect(qtyAttempt.status).toBe(200); // extra key ignored by schema
-    const rowAfter = ctx.db.prepare('SELECT qty_cm FROM purchases WHERE id = ?').get(id) as {
-      qty_cm: number;
+    const rowAfter = ctx.db.prepare('SELECT len_inch_c FROM purchases WHERE id = ?').get(id) as {
+      len_inch_c: number;
     };
-    expect(rowAfter.qty_cm).toBe(PURCHASE.qtyCm);
+    expect(rowAfter.len_inch_c).toBe(PURCHASE.lenInchC);
   });
 });
 
@@ -236,7 +238,7 @@ describe('opening balances', () => {
     const raw = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 5000, note: 'register carry-over' });
+      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 5000, widthInchC: 4400, note: 'register carry-over' });
     expect(raw.status).toBe(201);
     expect(raw.body.docNo).toMatch(/^OPB-/);
 
@@ -246,7 +248,7 @@ describe('opening balances', () => {
       .send({
         balanceDate: '2026-07-01',
         stage: 'WIP',
-        modelId: 1,
+        modelCode: 'M1',
         colorId: 1,
         sizeId: 1,
         contractorId: 1,
@@ -258,7 +260,7 @@ describe('opening balances', () => {
     const fg = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'FG', modelId: 1, colorId: 1, sizeId: 1, qty: 600 });
+      .send({ balanceDate: '2026-07-01', stage: 'FG', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 600 });
     expect(fg.status).toBe(201);
 
     const wipStock = await request(ctx.app).get('/api/stock/WIP').set('Cookie', owner);
@@ -274,14 +276,14 @@ describe('opening balances', () => {
     const wipNoContractor = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'WIP', modelId: 1, colorId: 1, sizeId: 1, qty: 10 });
+      .send({ balanceDate: '2026-07-01', stage: 'WIP', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 10 });
     expect(wipNoContractor.status).toBe(400);
     expect(wipNoContractor.body.error).toMatch(/contractor/i);
 
     const cutNoSize = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'CUT', modelId: 1, colorId: 1, qty: 10 });
+      .send({ balanceDate: '2026-07-01', stage: 'CUT', modelCode: 'M1', colorId: 1, qty: 10 });
     expect(cutNoSize.status).toBe(400);
   });
 
@@ -289,13 +291,13 @@ describe('opening balances', () => {
     const asOperator = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', operator)
-      .send({ balanceDate: '2026-07-01', stage: 'FG', modelId: 1, colorId: 1, sizeId: 1, qty: 5 });
+      .send({ balanceDate: '2026-07-01', stage: 'FG', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 5 });
     expect(asOperator.status).toBe(403);
 
     const created = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'CUT', modelId: 1, colorId: 1, sizeId: 1, qty: 60 });
+      .send({ balanceDate: '2026-07-01', stage: 'CUT', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 60 });
     const voided = await request(ctx.app)
       .post(`/api/opening-balances/${created.body.id}/void`)
       .set('Cookie', admin)

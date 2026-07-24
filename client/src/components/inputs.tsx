@@ -2,21 +2,21 @@ import { useRef, useState } from 'react';
 import { TextInput } from './ui';
 
 /**
- * Meters entry (max 2 decimals), value held in integer CENTIMETERS.
- * Initializes once — remount (key=) to load a different record.
+ * Yards entry (max 2 decimals), value held in integer HUNDREDTHS OF AN INCH
+ * (1 yd = 3600). Initializes once — remount (key=) to load a different record.
  */
-export function MetersInput({
-  cm,
+export function YardsInput({
+  inchC,
   onChange,
   placeholder,
   disabled,
 }: {
-  cm: number | null;
-  onChange: (cm: number | null) => void;
+  inchC: number | null;
+  onChange: (inchC: number | null) => void;
   placeholder?: string;
   disabled?: boolean;
 }) {
-  const [text, setText] = useState(() => (cm == null ? '' : (cm / 100).toString()));
+  const [text, setText] = useState(() => (inchC == null ? '' : (inchC / 3600).toString()));
   return (
     <div className="relative">
       <TextInput
@@ -32,12 +32,12 @@ export function MetersInput({
             onChange(null);
             return;
           }
-          const meters = Number.parseFloat(t);
-          onChange(Number.isFinite(meters) ? Math.round(meters * 100) : null);
+          const yards = Number.parseFloat(t);
+          onChange(Number.isFinite(yards) ? Math.round(yards * 3600) : null);
         }}
       />
       <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-400">
-        m
+        yd
       </span>
     </div>
   );

@@ -1,19 +1,41 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { clothRequiredCm } from '@shared';
+import { clothRequiredInchC } from '@shared';
 import { loginAs, makeTestContext, type TestContext } from '../helpers';
 
 /**
- * Cutting with computed consumption: each line carries cloth-per-piece (hundredths of an
- * inch) and how many pieces fit across the width; the server computes the cm consumed.
- * The MODEL is chosen at cutting (purchases have none). Plans are editable/deletable
- * while still 'planned'.
+ * Cutting v2 (ADR-030/031): the plan IS the cutting — one POST consumes the cloth AND
+ * creates the CUT pieces. The CODE typed per line creates the product identity, and
+ * entries stay editable/deletable until their pieces move downstream.
  */
 let ctx: TestContext;
 let admin: string;
 let operator: string;
 let owner: string;
-let purchaseId: number;
+
+const lotBalance = (lotType: string, lotId: number, stage = 'RAW') =>
+  (
+    ctx.db
+      .prepare(
+        'SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage=? AND lot_type=? AND lot_id=?',
+      )
+      .get(stage, lotType, lotId) as { q: number }
+  ).q;
+
+async function makePurchase(lenInchC = 360000): Promise<number> {
+  const res = await request(ctx.app).post('/api/purchases').set('Cookie', operator).send({
+    purchaseDate: '2026-07-01',
+    receivedDate: '2026-07-01',
+    vendorId: 1,
+    colorId: 1,
+    lenInchC, // default 100 yd
+    widthInchC: 4400,
+    ratePaisePerYard: 4000,
+    notes: '',
+  });
+  if (res.status !== 201) throw new Error(`purchase failed: ${res.text}`);
+  return res.body.id as number;
+}
 
 beforeAll(async () => {
   ctx = await makeTestContext();
@@ -21,52 +43,18 @@ beforeAll(async () => {
   operator = await loginAs(ctx.app, 'operator', 'Operator@123');
   owner = await loginAs(ctx.app, 'owner', 'Owner@123');
   ctx.db.exec(`
-    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1), (2, 'M2', 'Model 2', 1);
     INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
-    INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1), (2, 'S1', 2, 1), (3, 'XL', 3, 1);
+    INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1), (2, 'S1', 2, 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
+    INSERT INTO contractors (id, name, created_by) VALUES (1, 'C1', 1);
   `);
-  const purchase = await request(ctx.app).post('/api/purchases').set('Cookie', operator).send({
-    purchaseDate: '2026-07-01',
-    receivedDate: '2026-07-01',
-    vendorId: 1,
-    colorId: 1,
-    qtyCm: 20000, // 200 m
-    ratePaisePerMeter: 4000,
-    notes: '',
-  });
-  purchaseId = purchase.body.id as number;
 });
 afterAll(() => ctx.cleanup());
 
-const rawBalance = () =>
-  (
-    ctx.db
-      .prepare(
-        "SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage='RAW' AND lot_type='purchase' AND lot_id=?",
-      )
-      .get(purchaseId) as { q: number }
-  ).q;
-
-// geometry used throughout: XS 10" ×3 across, S1 9" ×3, XL 14" ×2
-const GEO: Record<number, { c: number; w: number }> = {
-  1: { c: 1000, w: 3 },
-  2: { c: 900, w: 3 },
-  3: { c: 1400, w: 2 },
-};
-const line = (sizeId: number, expectedPcs: number) => ({
-  sizeId,
-  expectedPcs,
-  clothPerPcInchC: GEO[sizeId]!.c,
-  widthCount: GEO[sizeId]!.w,
-});
-const cmFor = (sizeId: number, pcs: number) =>
-  clothRequiredCm(pcs, GEO[sizeId]!.c, GEO[sizeId]!.w);
-
-describe('cutting', () => {
-  let batchId: number;
-
-  it('plan computes cloth from geometry, consumes it and stores expected lines', async () => {
+describe('cutting v2', () => {
+  it('one POST cuts: cloth consumed from geometry, CUT stock created, code born', async () => {
+    const purchaseId = await makePurchase();
+    // 120 pcs @10" ×4 across = 30 strips = 30000 inch_c; 96 pcs @9" ×4 = 24 strips = 21600
     const res = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
@@ -74,33 +62,78 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1, // the model is decided HERE
         notes: '',
-        lines: [line(1, 120), line(2, 180), line(3, 60)],
+        lines: [
+          { sizeId: 1, code: '315', qtyPcs: 120, clothPerPcInchC: 1000, widthCount: 4 },
+          { sizeId: 2, code: '315', qtyPcs: 96, clothPerPcInchC: 900, widthCount: 4 },
+        ],
       });
     expect(res.status).toBe(201);
     expect(res.body.docNo).toBe('CUT-0001');
-    batchId = res.body.id as number;
 
-    // 120 XS: 40 strips × 10" = 400" = exactly 1016 cm; S1: ceil(1371.6)=1372; XL: ceil(30×14×2.54)=1067
-    const expectedCm = cmFor(1, 120) + cmFor(2, 180) + cmFor(3, 60);
-    expect(cmFor(1, 120)).toBe(1016);
-    expect(rawBalance()).toBe(20000 - expectedCm);
+    const expected =
+      clothRequiredInchC(120, 1000, 4) + clothRequiredInchC(96, 900, 4);
+    expect(expected).toBe(30000 + 21600);
+    expect(lotBalance('purchase', purchaseId)).toBe(360000 - expected);
 
-    const list = await request(ctx.app).get('/api/cutting').set('Cookie', owner);
-    expect(list.status).toBe(200);
-    const batch = list.body.items.find((b: { id: number }) => b.id === batchId);
-    expect(batch.status).toBe('planned');
-    expect(batch.modelCode).toBe('M1');
-    expect(batch.metersUsedCm).toBe(expectedCm);
-    expect(batch.expectedTotalPcs).toBe(360);
-    expect(batch.actualTotalPcs).toBeNull();
-    expect(batch.rawDocNo).toBe('RM-0001');
-    expect(batch.lines[0].clothPerPcInchC).toBe(1000);
-    expect(batch.lines[0].widthCount).toBe(3);
+    // the product identity was created from the typed code
+    const model = ctx.db
+      .prepare("SELECT id, code FROM models WHERE code = '315'")
+      .get() as { id: number; code: string };
+    expect(model).toBeTruthy();
+
+    // CUT stock exists immediately — no separate actuals step
+    const lines = ctx.db
+      .prepare('SELECT id, size_id, model_id, expected_pcs, actual_pcs FROM cutting_lines WHERE cutting_batch_id = ?')
+      .all(res.body.id) as Array<{ id: number; size_id: number; model_id: number; expected_pcs: number; actual_pcs: number }>;
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line.model_id).toBe(model.id);
+      expect(line.actual_pcs).toBe(line.expected_pcs);
+      expect(lotBalance('cutting_line', line.id, 'CUT')).toBe(line.expected_pcs);
+    }
+
+    // there is no actuals endpoint any more
+    const actuals = await request(ctx.app)
+      .post(`/api/cutting/${res.body.id}/actuals`)
+      .set('Cookie', operator)
+      .send({ lines: [] });
+    expect(actuals.status).toBe(404);
   });
 
-  it('rejects over-consumption, duplicate sizes, unknown lots and missing geometry', async () => {
+  it('typing the same code again reuses the identity; a new code creates a new one', async () => {
+    const purchaseId = await makePurchase();
+    const res = await request(ctx.app)
+      .post('/api/cutting')
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-03',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        notes: '',
+        lines: [
+          { sizeId: 1, code: '315', qtyPcs: 40, clothPerPcInchC: 1000, widthCount: 4 },
+          { sizeId: 2, code: '410', qtyPcs: 40, clothPerPcInchC: 1000, widthCount: 4, imagePath: null },
+        ],
+      });
+    expect(res.status).toBe(201);
+    const count315 = (
+      ctx.db.prepare("SELECT COUNT(*) AS n FROM models WHERE code = '315'").get() as { n: number }
+    ).n;
+    expect(count315).toBe(1); // reused, not duplicated
+    expect(ctx.db.prepare("SELECT id FROM models WHERE code = '410'").get()).toBeTruthy();
+
+    // codes appear in the shared picker
+    const products = await request(ctx.app).get('/api/products').set('Cookie', owner);
+    const codes = (products.body.items as Array<{ code: string }>).map((p) => p.code);
+    expect(codes).toContain('315');
+    expect(codes).toContain('410');
+    expect(codes).not.toContain('RAW-CLOTH');
+  });
+
+  it('rejects over-consumption, duplicate sizes, unknown lots and bad codes', async () => {
+    const purchaseId = await makePurchase(36000); // only 10 yd
+
     const tooMuch = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
@@ -108,11 +141,11 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(1, 120000)], // 40000 strips × 10" ≈ 10 km of cloth
+        notes: '',
+        lines: [{ sizeId: 1, code: '999', qtyPcs: 400, clothPerPcInchC: 1000, widthCount: 4 }],
       });
     expect(tooMuch.status).toBe(400);
-    expect(tooMuch.body.error).toMatch(/has only .* available/i);
+    expect(tooMuch.body.error).toMatch(/only .* left/i);
 
     const dupSizes = await request(ctx.app)
       .post('/api/cutting')
@@ -121,207 +154,204 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(1, 12), line(1, 24)],
+        notes: '',
+        lines: [
+          { sizeId: 1, code: '1', qtyPcs: 4, clothPerPcInchC: 1000, widthCount: 4 },
+          { sizeId: 1, code: '1', qtyPcs: 4, clothPerPcInchC: 1000, widthCount: 4 },
+        ],
       });
     expect(dupSizes.status).toBe(400);
 
-    const badLot = await request(ctx.app)
+    const unknownLot = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
       .send({
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: 9999,
-        modelId: 1,
-        lines: [line(1, 12)],
+        notes: '',
+        lines: [{ sizeId: 1, code: '1', qtyPcs: 4, clothPerPcInchC: 1000, widthCount: 4 }],
       });
-    expect(badLot.status).toBe(400);
+    expect(unknownLot.status).toBe(400);
 
-    // geometry is mandatory on every plan line
-    const noGeometry = await request(ctx.app)
+    const badCode = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
       .send({
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [{ sizeId: 1, expectedPcs: 12 }],
+        notes: '',
+        lines: [{ sizeId: 1, code: '!!bad!!', qtyPcs: 4, clothPerPcInchC: 1000, widthCount: 4 }],
       });
-    expect(noGeometry.status).toBe(400);
+    expect(badCode.status).toBe(400);
+
+    // the failed attempts consumed nothing
+    expect(lotBalance('purchase', purchaseId)).toBe(36000);
   });
 
-  it('edit re-plans a planned batch: cloth returned, recomputed, doc number kept', async () => {
-    const before = rawBalance();
-    const plan = await request(ctx.app)
+  it('edit reworks the whole entry atomically and keeps the doc number', async () => {
+    const purchaseId = await makePurchase();
+    const created = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
       .send({
-        cutDate: '2026-07-02',
+        cutDate: '2026-07-04',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(1, 24)],
+        notes: '',
+        lines: [{ sizeId: 1, code: '520', qtyPcs: 120, clothPerPcInchC: 1000, widthCount: 4 }],
       });
-    const id = plan.body.id as number;
-    const docNo = plan.body.docNo as string;
-    expect(rawBalance()).toBe(before - cmFor(1, 24));
+    expect(created.status).toBe(201);
+    const before = lotBalance('purchase', purchaseId);
 
-    // change size, quantity AND model
-    const edited = await request(ctx.app)
-      .put(`/api/cutting/${id}`)
+    const edit = await request(ctx.app)
+      .put(`/api/cutting/${created.body.id}`)
       .set('Cookie', operator)
       .send({
-        cutDate: '2026-07-03',
+        cutDate: '2026-07-05',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 2,
-        lines: [line(2, 36)],
+        notes: 'replanned',
+        lines: [
+          { sizeId: 1, code: '520', qtyPcs: 60, clothPerPcInchC: 1000, widthCount: 4 },
+          { sizeId: 2, code: '521', qtyPcs: 40, clothPerPcInchC: 1200, widthCount: 4 },
+        ],
       });
-    expect(edited.status).toBe(200);
-    expect(rawBalance()).toBe(before - cmFor(2, 36)); // old cloth back, new consumed
+    expect(edit.status).toBe(200);
 
-    const list = await request(ctx.app).get('/api/cutting').set('Cookie', operator);
-    const batch = list.body.items.find((b: { id: number }) => b.id === id);
-    expect(batch.docNo).toBe(docNo); // number survives the edit
-    expect(batch.modelCode).toBe('M2');
-    expect(batch.lines).toHaveLength(1);
-    expect(batch.lines[0].sizeId).toBe(2);
-    expect(batch.lines[0].expectedPcs).toBe(36);
+    // cloth restored then re-consumed with the NEW geometry
+    const newConsumption = clothRequiredInchC(60, 1000, 4) + clothRequiredInchC(40, 1200, 4);
+    const oldConsumption = clothRequiredInchC(120, 1000, 4);
+    expect(lotBalance('purchase', purchaseId)).toBe(before + oldConsumption - newConsumption);
 
-    // an edit that would overdraw the lot is refused and changes nothing
+    // doc number unchanged; lines replaced; new code created
+    const row = ctx.db
+      .prepare('SELECT doc_no FROM cutting_batches WHERE id = ?')
+      .get(created.body.id) as { doc_no: string };
+    expect(row.doc_no).toBe(created.body.docNo);
+    const lines = ctx.db
+      .prepare('SELECT size_id, expected_pcs FROM cutting_lines WHERE cutting_batch_id = ? ORDER BY size_id')
+      .all(created.body.id) as Array<{ size_id: number; expected_pcs: number }>;
+    expect(lines).toEqual([
+      { size_id: 1, expected_pcs: 60 },
+      { size_id: 2, expected_pcs: 40 },
+    ]);
+
+    // an edit that would overdraw is refused atomically — nothing changes
     const tooBig = await request(ctx.app)
-      .put(`/api/cutting/${id}`)
+      .put(`/api/cutting/${created.body.id}`)
       .set('Cookie', operator)
       .send({
-        cutDate: '2026-07-03',
+        cutDate: '2026-07-05',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 2,
-        lines: [line(2, 120000)],
+        notes: '',
+        lines: [{ sizeId: 1, code: '520', qtyPcs: 99999, clothPerPcInchC: 1000, widthCount: 1 }],
       });
     expect(tooBig.status).toBe(409);
-    expect(rawBalance()).toBe(before - cmFor(2, 36));
-
-    // delete restores the cloth (soft: void with a standard reason)
-    const del = await request(ctx.app).delete(`/api/cutting/${id}`).set('Cookie', operator);
-    expect(del.status).toBe(200);
-    expect(rawBalance()).toBe(before);
-    const voided = ctx.db
-      .prepare('SELECT voided_at, void_reason FROM cutting_batches WHERE id = ?')
-      .get(id) as { voided_at: string | null; void_reason: string };
-    expect(voided.voided_at).not.toBeNull();
-    expect(voided.void_reason).toMatch(/deleted before cutting/i);
+    expect(lotBalance('purchase', purchaseId)).toBe(before + oldConsumption - newConsumption);
   });
 
-  it('actuals require a reason for every variance', async () => {
-    const missingReason = await request(ctx.app)
-      .post(`/api/cutting/${batchId}/actuals`)
-      .set('Cookie', operator)
-      .send({
-        lines: [
-          { sizeId: 1, actualPcs: 108 }, // -12 vs expected, no reason
-          { sizeId: 2, actualPcs: 180 },
-          { sizeId: 3, actualPcs: 60 },
-        ],
-      });
-    expect(missingReason.status).toBe(400);
-    expect(missingReason.body.error).toMatch(/reason/i);
-
-    const missingLine = await request(ctx.app)
-      .post(`/api/cutting/${batchId}/actuals`)
-      .set('Cookie', operator)
-      .send({ lines: [{ sizeId: 1, actualPcs: 108, varianceReason: 'wastage' }] });
-    expect(missingLine.status).toBe(400);
-    expect(missingLine.body.error).toMatch(/every planned size/i);
-  });
-
-  it('records actuals incl. unplanned size; CUT stock and discrepancies follow; edit then blocked', async () => {
-    const res = await request(ctx.app)
-      .post(`/api/cutting/${batchId}/actuals`)
-      .set('Cookie', operator)
-      .send({
-        lines: [
-          { sizeId: 1, actualPcs: 108, varianceReason: 'wastage', reasonNote: 'edge damage' }, // 9 dz (-1)
-          { sizeId: 2, actualPcs: 192, varianceReason: 'better_yield' }, // 16 dz (+1)
-          { sizeId: 3, actualPcs: 60 }, // exact
-        ],
-      });
-    expect(res.status).toBe(200);
-
-    const list = await request(ctx.app).get('/api/cutting').set('Cookie', operator);
-    const batch = list.body.items.find((b: { id: number }) => b.id === batchId);
-    expect(batch.status).toBe('completed');
-    expect(batch.actualTotalPcs).toBe(360);
-    expect(batch.variancePct).toBe(0); // -12 +12 nets out
-    const lineXS = batch.lines.find((l: { sizeCode: string }) => l.sizeCode === 'XS');
-    expect(lineXS.actualPcs).toBe(108);
-    expect(lineXS.varianceReason).toBe('wastage');
-
-    const cutStock = await request(ctx.app).get('/api/stock/CUT').set('Cookie', owner);
-    const total = cutStock.body.items.reduce((s: number, r: { qty: number }) => s + r.qty, 0);
-    expect(total).toBe(360);
-
-    const discrepancies = (
-      ctx.db
-        .prepare("SELECT COUNT(*) AS n FROM discrepancies WHERE stage='CUT'")
-        .get() as { n: number }
-    ).n;
-    expect(discrepancies).toBe(2); // XS -12, S1 +12
-
-    const again = await request(ctx.app)
-      .post(`/api/cutting/${batchId}/actuals`)
-      .set('Cookie', operator)
-      .send({ lines: [{ sizeId: 1, actualPcs: 1, varianceReason: 'other' }] });
-    expect(again.status).toBe(409);
-
-    // once actuals exist the plan is frozen: no edit, no operator delete
-    const editAfter = await request(ctx.app)
-      .put(`/api/cutting/${batchId}`)
-      .set('Cookie', operator)
-      .send({
-        cutDate: '2026-07-03',
-        rawLotType: 'purchase',
-        rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(1, 12)],
-      });
-    expect(editAfter.status).toBe(409);
-    const delAfter = await request(ctx.app).delete(`/api/cutting/${batchId}`).set('Cookie', operator);
-    expect(delAfter.status).toBe(409);
-  });
-
-  it('supports unplanned sizes at actual time', async () => {
-    const plan = await request(ctx.app)
+  it('delete restores the cloth and removes the pieces (soft void)', async () => {
+    const purchaseId = await makePurchase();
+    const created = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
       .send({
-        cutDate: '2026-07-03',
+        cutDate: '2026-07-06',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(1, 48)],
+        notes: '',
+        lines: [{ sizeId: 1, code: '520', qtyPcs: 40, clothPerPcInchC: 1000, widthCount: 4 }],
       });
-    const id = plan.body.id as number;
-    const res = await request(ctx.app)
-      .post(`/api/cutting/${id}/actuals`)
-      .set('Cookie', operator)
-      .send({
-        lines: [
-          { sizeId: 1, actualPcs: 48 },
-          { sizeId: 3, actualPcs: 12, varianceReason: 'other', reasonNote: 'leftover strip cut as XL' },
-        ],
-      });
-    expect(res.status).toBe(200);
-    const dbLine = ctx.db
-      .prepare('SELECT expected_pcs, actual_pcs FROM cutting_lines WHERE cutting_batch_id = ? AND size_id = 3')
-      .get(id) as { expected_pcs: number; actual_pcs: number };
-    expect(dbLine.expected_pcs).toBe(0);
-    expect(dbLine.actual_pcs).toBe(12);
+    const before = lotBalance('purchase', purchaseId);
+
+    const del = await request(ctx.app)
+      .delete(`/api/cutting/${created.body.id}`)
+      .set('Cookie', operator);
+    expect(del.status).toBe(200);
+
+    expect(lotBalance('purchase', purchaseId)).toBe(before + clothRequiredInchC(40, 1000, 4));
+    const row = ctx.db
+      .prepare('SELECT voided_at, void_reason FROM cutting_batches WHERE id = ?')
+      .get(created.body.id) as { voided_at: string | null; void_reason: string };
+    expect(row.voided_at).not.toBeNull(); // soft delete — history kept
+    expect(row.void_reason).toMatch(/deleted/);
   });
 
-  it('owner cannot create plans; operator cannot void a completed batch', async () => {
+  it('edit and delete are blocked once pieces moved downstream; admin void too', async () => {
+    const purchaseId = await makePurchase();
+    const created = await request(ctx.app)
+      .post('/api/cutting')
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-07',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        notes: '',
+        lines: [{ sizeId: 1, code: '620', qtyPcs: 48, clothPerPcInchC: 1000, widthCount: 4 }],
+      });
+    const modelId = (ctx.db.prepare("SELECT id FROM models WHERE code='620'").get() as { id: number }).id;
+
+    // issue some of the pieces to a contractor
+    const job = await request(ctx.app)
+      .post('/api/jobs')
+      .set('Cookie', operator)
+      .send({
+        issueDate: '2026-07-08',
+        contractorId: 1,
+        notes: '',
+        lines: [{ modelId, colorId: 1, sizeId: 1, qtyIssuedPcs: 12, unitEntered: 'pieces', ratePaisePerDozen: 3000 }],
+      });
+    expect(job.status).toBe(201);
+
+    const edit = await request(ctx.app)
+      .put(`/api/cutting/${created.body.id}`)
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-07',
+        rawLotType: 'purchase',
+        rawLotId: purchaseId,
+        notes: '',
+        lines: [{ sizeId: 1, code: '620', qtyPcs: 48, clothPerPcInchC: 1000, widthCount: 4 }],
+      });
+    expect(edit.status).toBe(409);
+    expect(edit.body.error).toMatch(/issued to a contractor/i);
+
+    const del = await request(ctx.app).delete(`/api/cutting/${created.body.id}`).set('Cookie', operator);
+    expect(del.status).toBe(409);
+
+    const adminVoid = await request(ctx.app)
+      .post(`/api/cutting/${created.body.id}/void`)
+      .set('Cookie', admin)
+      .send({ reason: 'trying anyway' });
+    expect(adminVoid.status).toBe(409);
+  });
+
+  it('cuts from an opening-balance raw lot too', async () => {
+    const opening = await request(ctx.app)
+      .post('/api/opening-balances')
+      .set('Cookie', admin)
+      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 72000, widthInchC: 4000, note: '' });
+    expect(opening.status).toBe(201);
+
+    const res = await request(ctx.app)
+      .post('/api/cutting')
+      .set('Cookie', operator)
+      .send({
+        cutDate: '2026-07-02',
+        rawLotType: 'opening',
+        rawLotId: opening.body.id,
+        notes: '',
+        lines: [{ sizeId: 1, code: 'OPN-1', qtyPcs: 40, clothPerPcInchC: 900, widthCount: 4 }],
+      });
+    expect(res.status).toBe(201);
+    expect(lotBalance('opening', opening.body.id)).toBe(72000 - clothRequiredInchC(40, 900, 4));
+  });
+
+  it('owner cannot cut; operator cannot use the admin void', async () => {
+    const purchaseId = await makePurchase();
     const asOwner = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', owner)
@@ -329,87 +359,25 @@ describe('cutting', () => {
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(1, 12)],
+        notes: '',
+        lines: [{ sizeId: 1, code: '1', qtyPcs: 4, clothPerPcInchC: 1000, widthCount: 4 }],
       });
     expect(asOwner.status).toBe(403);
 
-    const asOperator = await request(ctx.app)
-      .post(`/api/cutting/${batchId}/void`)
-      .set('Cookie', operator)
-      .send({ reason: 'nope' });
-    expect(asOperator.status).toBe(403);
-  });
-
-  it('void restores RAW and removes CUT while unconsumed; blocked after consumption', async () => {
-    const before = rawBalance();
-    const plan = await request(ctx.app)
+    const created = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
       .send({
-        cutDate: '2026-07-04',
+        cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchaseId,
-        modelId: 1,
-        lines: [line(2, 24)],
+        notes: '',
+        lines: [{ sizeId: 1, code: '520', qtyPcs: 4, clothPerPcInchC: 1000, widthCount: 4 }],
       });
-    const id = plan.body.id as number;
-    await request(ctx.app)
-      .post(`/api/cutting/${id}/actuals`)
+    const opVoid = await request(ctx.app)
+      .post(`/api/cutting/${created.body.id}/void`)
       .set('Cookie', operator)
-      .send({ lines: [{ sizeId: 2, actualPcs: 24 }] });
-
-    const voided = await request(ctx.app)
-      .post(`/api/cutting/${id}/void`)
-      .set('Cookie', admin)
-      .send({ reason: 'test void' });
-    expect(voided.status).toBe(200);
-    expect(rawBalance()).toBe(before); // meters restored
-
-    // now simulate downstream consumption on the FIRST batch and try voiding it
-    const lineId = (
-      ctx.db
-        .prepare('SELECT id FROM cutting_lines WHERE cutting_batch_id = ? AND size_id = 1')
-        .get(batchId) as { id: number }
-    ).id;
-    ctx.db
-      .prepare(
-        `INSERT INTO stock_ledger (stage, model_id, color_id, size_id, lot_type, lot_id, qty, ref_type, ref_id, created_by)
-         VALUES ('CUT', 1, 1, 1, 'cutting_line', ?, -12, 'adjustment_out', 999, 1)`,
-      )
-      .run(lineId);
-    const blocked = await request(ctx.app)
-      .post(`/api/cutting/${batchId}/void`)
-      .set('Cookie', admin)
-      .send({ reason: 'should fail' });
-    expect(blocked.status).toBe(409);
-    expect(blocked.body.error).toMatch(/already issued/i);
-  });
-
-  it('cuts from an opening-balance raw lot too (opening RAW has no model)', async () => {
-    const opening = await request(ctx.app)
-      .post('/api/opening-balances')
-      .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 3000, note: '' });
-    expect(opening.status).toBe(201);
-    const plan = await request(ctx.app)
-      .post('/api/cutting')
-      .set('Cookie', operator)
-      .send({
-        cutDate: '2026-07-05',
-        rawLotType: 'opening',
-        rawLotId: opening.body.id,
-        modelId: 1,
-        lines: [line(1, 72)], // 24 strips × 10" = 609.6 → 610 cm
-      });
-    expect(plan.status).toBe(201);
-    const openingBal = (
-      ctx.db
-        .prepare(
-          "SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage='RAW' AND lot_type='opening' AND lot_id=?",
-        )
-        .get(opening.body.id) as { q: number }
-    ).q;
-    expect(openingBal).toBe(3000 - cmFor(1, 72));
+      .send({ reason: 'nope' });
+    expect(opVoid.status).toBe(403);
   });
 });

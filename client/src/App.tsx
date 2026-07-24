@@ -11,8 +11,9 @@ import CuttingPage from './pages/cutting/CuttingPage';
 import JobsPage from './pages/jobs/JobsPage';
 import ContractorsPage from './pages/contractors/ContractorsPage';
 import CheckingPage from './pages/checking/CheckingPage';
-import PackingPage from './pages/packing/PackingPage';
 import DispatchesPage from './pages/dispatches/DispatchesPage';
+import DuesPage from './pages/dues/DuesPage';
+import OfficesPage from './pages/admin/OfficesPage';
 import DiscrepanciesPage from './pages/discrepancies/DiscrepanciesPage';
 import ReportsPage from './pages/reports/ReportsPage';
 import TracePage from './pages/trace/TracePage';
@@ -75,8 +76,8 @@ export default function App() {
         <Route path="jobs" element={<JobsPage />} />
         <Route path="contractors" element={<ContractorsPage />} />
         <Route path="checking" element={<CheckingPage />} />
-        <Route path="packing" element={<PackingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
+        <Route path="dues" element={<DuesPage />} />
         <Route path="discrepancies" element={<DiscrepanciesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="trace" element={<TracePage />} />
@@ -87,6 +88,14 @@ export default function App() {
           element={
             <Protected roles={['admin']}>
               <OpeningBalancesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="admin/offices"
+          element={
+            <Protected roles={['admin']}>
+              <OfficesPage />
             </Protected>
           }
         />

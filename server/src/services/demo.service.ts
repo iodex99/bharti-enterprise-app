@@ -56,6 +56,15 @@ export function enterDemoMode(fresh: boolean, userId: number, ip: string | null)
 
   if (fresh || !demoDatabaseExists()) {
     buildDemoDatabase();
+  } else {
+    // an existing demo db may be from an older app version — bring its schema up to
+    // date BEFORE swapping to it, or every request would 500 on the missing tables
+    const demoDb = openDatabase(path.join(DEMO_DATA_DIR, 'app.db'));
+    try {
+      migrate(demoDb);
+    } finally {
+      demoDb.close();
+    }
   }
   closeDb();
   setDemoMode(true);

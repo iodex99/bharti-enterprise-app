@@ -8,7 +8,6 @@ import {
   colorSchema,
   contractorSchema,
   formatPaise,
-  modelSchema,
   sizeSchema,
   staffSchema,
   vendorSchema,
@@ -39,34 +38,7 @@ type MasterDef = {
 };
 
 const DEFS: Record<string, MasterDef> = {
-  models: {
-    title: 'Models',
-    singular: 'model',
-    schema: modelSchema,
-    columns: [
-      {
-        key: 'image',
-        header: '',
-        className: 'w-14',
-        render: (r) =>
-          r.imagePath ? (
-            <img src={String(r.imagePath)} alt="" className="h-9 w-9 rounded object-cover" />
-          ) : (
-            <span className="flex h-9 w-9 items-center justify-center rounded bg-gray-100 text-xs text-gray-400">—</span>
-          ),
-      },
-      { key: 'code', header: 'Code', className: 'font-medium' },
-      { key: 'name', header: 'Name' },
-      { key: 'description', header: 'Description', className: 'text-gray-500' },
-    ],
-    fields: [
-      { kind: 'text', name: 'code', label: 'Model code', hint: 'e.g. SCR-VEL', required: true },
-      { kind: 'text', name: 'name', label: 'Model name', required: true },
-      { kind: 'textarea', name: 'description', label: 'Description' },
-      { kind: 'image', name: 'imagePath', label: 'Reference photo' },
-    ],
-    empty: { code: '', name: '', description: '', imagePath: null },
-  },
+  // models are NOT a master (ADR-030): codes are typed at cutting
   colors: {
     title: 'Colors',
     singular: 'color',

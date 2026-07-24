@@ -15,6 +15,7 @@ import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../..
 import { DzPcInput, ImageInput, MoneyInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { useMasterOptions } from '../../api/masters';
+import { useProducts } from '../../api/products';
 import { VoidModal } from '../purchases/PurchasesPage';
 
 export type JobLine = {
@@ -48,6 +49,8 @@ export type JobCard = {
   pendingPcs: number;
   pendingCheckPcs: number;
   jobCostPaise: number;
+  modelImagePath: string | null;
+  editable: boolean;
 };
 
 const STATUS_TONE = {
@@ -69,6 +72,8 @@ export default function JobsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailFor, setDetailFor] = useState<number | null>(null);
   const [voidFor, setVoidFor] = useState<JobCard | null>(null);
+  const [editFor, setEditFor] = useState<JobCard | null>(null);
+  const [deleteFor, setDeleteFor] = useState<JobCard | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['jobs'],
@@ -89,10 +94,10 @@ export default function JobsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Job Work</h1>
           <p className="text-sm text-gray-500">
-            Cut pieces issued to contractors for stitching (Modules 5–6)
+            Issue cut pieces to contractors — one card per code + color, cost set at issue
           </p>
         </div>
-        {canWrite && <Button onClick={() => setCreateOpen(true)}>+ New job card</Button>}
+        {canWrite && <Button onClick={() => setCreateOpen(true)}>+ Issue goods</Button>}
       </div>
 
       <DataTable
@@ -102,12 +107,24 @@ export default function JobsPage() {
           { key: 'contractorName', header: 'Contractor' },
           {
             key: 'item',
-            header: 'Model / Color',
+            header: 'Code / Color',
             value: (r) => `${r.modelCode} ${r.colorName}`,
             render: (r) => (
               <span>
                 <span className="font-medium">{r.modelCode}</span>{' '}
                 <span className="text-gray-500">{r.colorName}</span>
+                {r.modelImagePath && (
+                  <a
+                    href={r.modelImagePath}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-1 text-violet-600"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Product photo"
+                  >
+                    📷
+                  </a>
+                )}
               </span>
             ),
           },
@@ -168,7 +185,7 @@ export default function JobsPage() {
         facets={[
           { key: 'status', label: 'Status', value: (r) => enumLabel(r.status) },
           { key: 'contractor', label: 'Contractor', value: (r) => r.contractorName },
-          { key: 'model', label: 'Model', value: (r) => r.modelCode },
+          { key: 'model', label: 'Code', value: (r) => r.modelCode },
         ]}
         dateRange={{ label: 'Issue date', value: (r) => r.issueDate }}
         actions={(row) => (
@@ -176,7 +193,17 @@ export default function JobsPage() {
             <Button variant="ghost" onClick={() => setDetailFor(row.id)}>
               Open
             </Button>
-            {isAdmin && !row.voidedAt && row.receivedPcs === 0 && row.returnedPcs === 0 && (
+            {canWrite && !row.voidedAt && row.editable && (
+              <>
+                <Button variant="ghost" onClick={() => setEditFor(row)}>
+                  Edit
+                </Button>
+                <Button variant="ghost" className="text-red-600" onClick={() => setDeleteFor(row)}>
+                  Delete
+                </Button>
+              </>
+            )}
+            {isAdmin && !row.voidedAt && !row.editable && row.status !== 'completed' && row.status !== 'closed_with_discrepancy' && (
               <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
                 Void
               </Button>
@@ -201,61 +228,231 @@ export default function JobsPage() {
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
+      {editFor && (
+        <EditJobModal
+          key={editFor.id}
+          job={editFor}
+          onClose={() => setEditFor(null)}
+          onDone={() => {
+            setEditFor(null);
+            invalidate();
+          }}
+        />
+      )}
+      <DeleteJobModal job={deleteFor} onClose={() => setDeleteFor(null)} onDone={invalidate} />
     </div>
+  );
+}
+
+function DeleteJobModal({ job, onClose, onDone }: { job: JobCard | null; onClose: () => void; onDone: () => void }) {
+  const [error, setError] = useState('');
+  const doDelete = useMutation({
+    mutationFn: () => api.delete(`/api/jobs/${job!.id}`),
+    onSuccess: () => {
+      onDone();
+      onClose();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Delete failed.'),
+  });
+  return (
+    <Modal title={`Delete ${job?.docNo ?? ''}?`} open={!!job} onClose={onClose}>
+      <div className="space-y-4">
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          The issued pieces go back into Cut Cloth stock and the card stays in history as
+          deleted. Only possible while nothing has been received against it.
+        </p>
+        <ErrorText>{error}</ErrorText>
+        <Button variant="danger" className="w-full" disabled={doDelete.isPending} onClick={() => doDelete.mutate()}>
+          {doDelete.isPending ? 'Deleting…' : 'Delete job card'}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Edit an unstarted card: date, notes and its size lines (same code + color). */
+function EditJobModal({ job, onClose, onDone }: { job: JobCard; onClose: () => void; onDone: () => void }) {
+  const [issueDate, setIssueDate] = useState(job.issueDate);
+  const [notes, setNotes] = useState(job.notes);
+  const [lines, setLines] = useState(
+    job.lines.map((l) => ({ sizeId: l.sizeId as number | null, qtyPcs: l.qtyIssuedPcs as number | null, rate: l.ratePaisePerDozen as number | null })),
+  );
+  const [error, setError] = useState('');
+  const { data: sizes } = useMasterOptions('sizes');
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.put(`/api/jobs/${job.id}`, {
+        issueDate,
+        notes,
+        lines: lines
+          .filter((l) => l.sizeId && l.qtyPcs)
+          .map((l) => ({ sizeId: l.sizeId, qtyIssuedPcs: l.qtyPcs, unitEntered: 'dozens', ratePaisePerDozen: l.rate ?? 0 })),
+      }),
+    onSuccess: () => onDone(),
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
+  });
+
+  return (
+    <Modal title={`Edit ${job.docNo} — ${job.modelCode} ${job.colorName}`} open onClose={onClose} wide>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!lines.some((l) => l.sizeId && l.qtyPcs)) {
+            setError('Add at least one size with a quantity.');
+            return;
+          }
+          save.mutate();
+        }}
+        className="space-y-4"
+      >
+        <Field label="Issue date">
+          <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
+        </Field>
+        <div className="space-y-2">
+          {lines.map((line, i) => (
+            <div key={i} className="flex flex-wrap items-end gap-2">
+              <div className="w-28">
+                <Select
+                  aria-label={`Size ${i + 1}`}
+                  value={line.sizeId ?? ''}
+                  onChange={(e) => {
+                    const next = [...lines];
+                    next[i] = { ...line, sizeId: e.target.value ? Number(e.target.value) : null };
+                    setLines(next);
+                  }}
+                >
+                  <option value="" disabled>
+                    Size
+                  </option>
+                  {sizes?.map((sz) => (
+                    <option key={sz.id} value={sz.id}>
+                      {sz.code as string}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="min-w-[12rem] flex-1">
+                <DzPcInput
+                  pieces={line.qtyPcs}
+                  onChange={(pcs) => {
+                    const next = [...lines];
+                    next[i] = { ...line, qtyPcs: pcs };
+                    setLines(next);
+                  }}
+                />
+              </div>
+              <div className="w-32">
+                <MoneyInput
+                  paise={line.rate}
+                  onChange={(pp) => {
+                    const next = [...lines];
+                    next[i] = { ...line, rate: pp };
+                    setLines(next);
+                  }}
+                  placeholder="cost/dz"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-red-500"
+                onClick={() => setLines(lines.filter((_, j) => j !== i))}
+                disabled={lines.length === 1}
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+        </div>
+        <Button type="button" variant="secondary" onClick={() => setLines([...lines, { sizeId: null, qtyPcs: null, rate: null }])}>
+          + Add size
+        </Button>
+        <Field label="Notes">
+          <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <ErrorText>{error}</ErrorText>
+        <Button type="submit" disabled={save.isPending} className="w-full">
+          {save.isPending ? 'Saving…' : 'Save changes'}
+        </Button>
+      </form>
+    </Modal>
   );
 }
 
 function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const [issueDate, setIssueDate] = useState(todayIST());
   const [contractorId, setContractorId] = useState<number | null>(null);
-  const [modelId, setModelId] = useState<number | null>(null);
-  const [colorId, setColorId] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<Array<{ sizeId: number | null; qtyPcs: number | null; rate: number | null }>>([
-    { sizeId: null, qtyPcs: null, rate: null },
-  ]);
+  const [lines, setLines] = useState<
+    Array<{ modelId: number | null; colorId: number | null; sizeId: number | null; qtyPcs: number | null; rate: number | null }>
+  >([{ modelId: null, colorId: null, sizeId: null, qtyPcs: null, rate: null }]);
   const [error, setError] = useState('');
+  const [created, setCreated] = useState<Array<{ docNo: string }> | null>(null);
   const { data: sizes } = useMasterOptions('sizes');
+  const { data: colors } = useMasterOptions('colors');
   const { data: contractors } = useMasterOptions('contractors');
+  const { data: products } = useProducts();
 
   const defaultRate =
     (contractors?.find((c) => c.id === contractorId)?.defaultRatePaisePerDozen as number | undefined) ?? null;
 
+  const distinctCards = new Set(
+    lines.filter((l) => l.modelId && l.colorId).map((l) => `${l.modelId}|${l.colorId}`),
+  ).size;
+
   const save = useMutation({
     mutationFn: () =>
-      api.post('/api/jobs', {
+      api.post<{ cards: Array<{ docNo: string }> }>('/api/jobs', {
         issueDate,
         contractorId,
-        modelId,
-        colorId,
         notes,
         lines: lines
-          .filter((l) => l.sizeId && l.qtyPcs)
+          .filter((l) => l.modelId && l.colorId && l.sizeId && l.qtyPcs)
           .map((l) => ({
+            modelId: l.modelId,
+            colorId: l.colorId,
             sizeId: l.sizeId,
             qtyIssuedPcs: l.qtyPcs,
             unitEntered: 'dozens',
             ratePaisePerDozen: l.rate ?? defaultRate ?? 0,
           })),
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       onDone();
-      onClose();
+      setCreated(res.cards);
     },
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
   });
 
+  if (created) {
+    return (
+      <Modal title="Goods issued" open={open} onClose={onClose}>
+        <div className="space-y-4">
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {created.length === 1
+              ? `Job card ${created[0]!.docNo} created.`
+              : `One card per code + color: ${created.map((c) => c.docNo).join(', ')}.`}
+          </p>
+          <Button className="w-full" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal title="New job card" open={open} onClose={onClose} wide>
+    <Modal title="Issue goods to a contractor" open={open} onClose={onClose} wide>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!contractorId || !modelId || !colorId) {
-            setError('Pick contractor, model and color.');
+          if (!contractorId) {
+            setError('Pick the contractor.');
             return;
           }
-          if (!lines.some((l) => l.sizeId && l.qtyPcs)) {
-            setError('Add at least one size with a quantity.');
+          if (!lines.some((l) => l.modelId && l.colorId && l.sizeId && l.qtyPcs)) {
+            setError('Add at least one line with code, color, size and quantity.');
             return;
           }
           save.mutate();
@@ -266,23 +463,59 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
           <Field label="Issue date">
             <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
           </Field>
-          <Field label="Contractor" hint={defaultRate != null ? `Default rate ${formatPaise(defaultRate)}/dz` : undefined}>
+          <Field label="Contractor" hint={defaultRate != null ? `Default cost ${formatPaise(defaultRate)}/dz` : undefined}>
             <MasterSelect master="contractors" value={contractorId} onChange={setContractorId} />
-          </Field>
-          <Field label="Model">
-            <MasterSelect master="models" value={modelId} onChange={setModelId} />
-          </Field>
-          <Field label="Color">
-            <MasterSelect master="colors" value={colorId} onChange={setColorId} />
           </Field>
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-medium text-gray-700">Sizes to issue (from cut stock)</p>
+          <p className="mb-2 text-sm font-medium text-gray-700">
+            Lines to issue (from cut stock) — the cost per dozen is set here
+          </p>
           <div className="space-y-2">
             {lines.map((line, i) => (
               <div key={i} className="flex flex-wrap items-end gap-2">
                 <div className="w-28">
+                  <Select
+                    aria-label={`Code ${i + 1}`}
+                    value={line.modelId ?? ''}
+                    onChange={(e) => {
+                      const next = [...lines];
+                      next[i] = { ...line, modelId: e.target.value ? Number(e.target.value) : null };
+                      setLines(next);
+                    }}
+                  >
+                    <option value="" disabled>
+                      Code
+                    </option>
+                    {products?.map((pr) => (
+                      <option key={pr.id} value={pr.id}>
+                        {pr.code}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="w-32">
+                  <Select
+                    aria-label={`Color ${i + 1}`}
+                    value={line.colorId ?? ''}
+                    onChange={(e) => {
+                      const next = [...lines];
+                      next[i] = { ...line, colorId: e.target.value ? Number(e.target.value) : null };
+                      setLines(next);
+                    }}
+                  >
+                    <option value="" disabled>
+                      Color
+                    </option>
+                    {colors?.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name as string}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="w-24">
                   <Select
                     aria-label={`Size ${i + 1}`}
                     value={line.sizeId ?? ''}
@@ -295,14 +528,14 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
                     <option value="" disabled>
                       Size
                     </option>
-                    {sizes?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.code as string}
+                    {sizes?.map((sz) => (
+                      <option key={sz.id} value={sz.id}>
+                        {sz.code as string}
                       </option>
                     ))}
                   </Select>
                 </div>
-                <div className="min-w-[12rem] flex-1">
+                <div className="min-w-[11rem] flex-1">
                   <DzPcInput
                     pieces={line.qtyPcs}
                     onChange={(pcs) => {
@@ -315,12 +548,12 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
                 <div className="w-32">
                   <MoneyInput
                     paise={line.rate ?? defaultRate}
-                    onChange={(p) => {
+                    onChange={(pp) => {
                       const next = [...lines];
-                      next[i] = { ...line, rate: p };
+                      next[i] = { ...line, rate: pp };
                       setLines(next);
                     }}
-                    placeholder="rate/dz"
+                    placeholder="cost/dz"
                   />
                 </div>
                 <Button
@@ -339,10 +572,16 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
             type="button"
             variant="secondary"
             className="mt-2"
-            onClick={() => setLines([...lines, { sizeId: null, qtyPcs: null, rate: null }])}
+            onClick={() => setLines([...lines, { modelId: null, colorId: null, sizeId: null, qtyPcs: null, rate: null }])}
           >
-            + Add size
+            + Add line
           </Button>
+          {distinctCards > 1 && (
+            <p className="mt-2 text-xs text-gray-500">
+              These lines cover {distinctCards} code/color combinations — {distinctCards} separate
+              job cards will be created (issued together, tracked separately).
+            </p>
+          )}
         </div>
 
         <Field label="Notes">
@@ -350,7 +589,7 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending} className="w-full">
-          {save.isPending ? 'Issuing…' : 'Issue job card'}
+          {save.isPending ? 'Issuing…' : 'Issue goods'}
         </Button>
       </form>
     </Modal>
@@ -546,6 +785,10 @@ function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
             setError('Enter at least one received quantity.');
             return;
           }
+          if (!imagePath) {
+            setError('Take a photo of the returned goods first.');
+            return;
+          }
           save.mutate();
         }}
         className="space-y-4"
@@ -553,7 +796,7 @@ function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
         <Field label="Receipt date">
           <TextInput type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} required />
         </Field>
-        <Field label="Photo of the returned goods" hint="Handy reference when the batch reaches the checker">
+        <Field label="Photo of the returned goods (required)" hint="Every code's return is photographed — the checker refers to it">
           <ImageInput path={imagePath} onChange={setImagePath} />
         </Field>
         <div className="space-y-3">

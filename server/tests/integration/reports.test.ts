@@ -5,7 +5,7 @@ import { loginAs, makeTestContext, type TestContext } from '../helpers';
 import { REPORTS } from '../../src/services/reports.service';
 
 /**
- * Fixture: one full chain (purchase → cut → job → receipt → check → pack → dispatch)
+ * Fixture: one full v2 chain (purchase → cut → job → receipt → check → pack → dispatch)
  * so every report has data, then each report + xlsx round-trip + trace trees.
  */
 let ctx: TestContext;
@@ -14,6 +14,7 @@ let owner: string;
 let admin: string;
 let purchaseId: number;
 let packIssueId: number;
+let modelM1 = 0;
 
 beforeAll(async () => {
   ctx = await makeTestContext();
@@ -21,7 +22,6 @@ beforeAll(async () => {
   operator = await loginAs(ctx.app, 'operator', 'Operator@123');
   owner = await loginAs(ctx.app, 'owner', 'Owner@123');
   ctx.db.exec(`
-    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1);
     INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
     INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
@@ -31,128 +31,179 @@ beforeAll(async () => {
 
   const post = (url: string, body: unknown, cookie = operator) =>
     request(ctx.app).post(url).set('Cookie', cookie).send(body as object);
+  const must = async (p: ReturnType<typeof post>, what: string) => {
+    const res = await p;
+    if (res.status >= 400) throw new Error(`fixture ${what} failed: ${res.text}`);
+    return res;
+  };
 
   purchaseId = (
-    await post('/api/purchases', {
-      purchaseDate: '2026-07-01',
-      receivedDate: '2026-07-01',
-      vendorId: 1,
-      colorId: 1,
-      qtyCm: 10000,
-      ratePaisePerMeter: 4000,
-      notes: '',
-    })
+    await must(
+      post('/api/purchases', {
+        purchaseDate: '2026-07-01',
+        receivedDate: '2026-07-01',
+        vendorId: 1,
+        colorId: 1,
+        lenInchC: 72000, // 20 yd
+        widthInchC: 4400,
+        ratePaisePerYard: 4000,
+        notes: '',
+      }),
+      'purchase',
+    )
   ).body.id;
-  const plan = await post('/api/cutting', {
-    cutDate: '2026-07-02',
-    rawLotType: 'purchase',
-    rawLotId: purchaseId,
-    modelId: 1,
-    lines: [{ sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 }],
-  });
-  await post(`/api/cutting/${plan.body.id}/actuals`, {
-    lines: [{ sizeId: 1, actualPcs: 108, varianceReason: 'wastage', reasonNote: '' }],
-  });
-  const job = await post('/api/jobs', {
-    issueDate: '2026-07-03',
-    contractorId: 1,
-    modelId: 1,
-    colorId: 1,
-    lines: [{ sizeId: 1, qtyIssuedPcs: 108, unitEntered: 'dozens', ratePaisePerDozen: 3000 }],
-  });
+  // cutting IS final (ADR-031): 108 pcs, 3 across → 36 strips × 1000 = 36000 inch_c
+  await must(
+    post('/api/cutting', {
+      cutDate: '2026-07-02',
+      rawLotType: 'purchase',
+      rawLotId: purchaseId,
+      notes: '',
+      lines: [{ sizeId: 1, code: 'M1', qtyPcs: 108, clothPerPcInchC: 1000, widthCount: 3 }],
+    }),
+    'cutting',
+  );
+  modelM1 = (ctx.db.prepare("SELECT id FROM models WHERE code = 'M1'").get() as { id: number }).id;
+  const job = await must(
+    post('/api/jobs', {
+      issueDate: '2026-07-03',
+      contractorId: 1,
+      notes: '',
+      lines: [
+        { modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 108, unitEntered: 'dozens', ratePaisePerDozen: 3000 },
+      ],
+    }),
+    'job',
+  );
+  const jobCardId = job.body.cards[0].id as number;
   const jobLineId = (
-    ctx.db.prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?').get(job.body.id) as {
+    ctx.db.prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?').get(jobCardId) as {
       id: number;
     }
   ).id;
-  const receipt = await post(`/api/jobs/${job.body.id}/receipts`, {
-    receiptDate: '2026-07-05',
-    lines: [{ jobCardLineId: jobLineId, qtyPcs: 108, returnType: 'stitched' }],
-  });
+  const receipt = await must(
+    post(`/api/jobs/${jobCardId}/receipts`, {
+      receiptDate: '2026-07-05',
+      imagePath: '/uploads/2026-07/returned.webp',
+      lines: [{ jobCardLineId: jobLineId, qtyPcs: 108, returnType: 'stitched' }],
+    }),
+    'receipt',
+  );
   const receiptLineId = (
     ctx.db
       .prepare('SELECT id FROM job_receipt_lines WHERE job_receipt_id = ?')
       .get(receipt.body.id) as { id: number }
   ).id;
-  const check = await post('/api/checking', {
-    issueDate: '2026-07-06',
-    staffId: 1,
-    lotType: 'receipt_line',
-    lotId: receiptLineId,
-    qtyPcs: 108,
-  });
-  await post(`/api/checking/${check.body.id}/results`, {
-    resultDate: '2026-07-07',
-    qtyPassed: 96,
-    qtyRejected: 8,
-    qtyMissing: 4,
-    rejections: [
-      { reason: 'stitching_issue', qtyPcs: 6 },
-      { reason: 'elastic_issue', qtyPcs: 2 },
-    ],
-  });
-  const pack = await post('/api/packing', {
-    issueDate: '2026-07-08',
-    staffId: 2,
-    modelId: 1,
-    colorId: 1,
-    sizeId: 1,
-    qtyPcs: 96,
-  });
+  const check = await must(
+    post('/api/checking', {
+      issueDate: '2026-07-06',
+      staffId: 1,
+      lotType: 'receipt_line',
+      lotId: receiptLineId,
+      qtyPcs: 108,
+      notes: '',
+    }),
+    'check issue',
+  );
+  // 96 pass; rejected 8 (stitching 6 + elastic 2); 'missing' is a rejection reason too (4)
+  await must(
+    post(`/api/checking/${check.body.id}/results`, {
+      resultDate: '2026-07-07',
+      qtyPassed: 96,
+      rejections: [
+        { reason: 'stitching_issue', qtyPcs: 6 },
+        { reason: 'elastic_issue', qtyPcs: 2 },
+        { reason: 'missing', qtyPcs: 4 },
+      ],
+      notes: '',
+    }),
+    'check result',
+  );
+  // packing is directed at the checker's passed goods (ADR-035)
+  const pack = await must(
+    post('/api/packing', {
+      issueDate: '2026-07-08',
+      staffId: 2,
+      lotType: 'check_issue',
+      lotId: check.body.id,
+      qtyPcs: 96,
+      kind: 'pack',
+      notes: '',
+    }),
+    'pack issue',
+  );
   packIssueId = pack.body.id as number;
-  await post(`/api/packing/${packIssueId}/results`, {
-    resultDate: '2026-07-09',
-    qtyPacked: 90,
-    qtyShort: 6,
-    shortReason: 'damage',
-  });
-  await post(
-    '/api/dispatches',
-    { dispatchDate: '2026-07-10', modelId: 1, colorId: 1, sizeId: 1, qtyPcs: 12, notes: '' },
-    admin,
+  await must(
+    post(`/api/packing/${packIssueId}/results`, {
+      resultDate: '2026-07-09',
+      qtyPacked: 90,
+      qtyShort: 6,
+      shortReason: 'damage',
+    }),
+    'pack result',
+  );
+  await must(
+    post(
+      '/api/dispatches',
+      { dispatchDate: '2026-07-10', modelId: modelM1, colorId: 1, sizeId: 1, qtyPcs: 12, notes: '' },
+      admin,
+    ),
+    'dispatch',
   );
 
   // second small batch so CUT stock, pending work and contractor discrepancies all
   // have data for their reports: cut 12 → job2 6pcs (4 received, closed short 2) →
   // job3 2pcs left open/pending. CUT keeps 4 pcs.
-  const plan2 = await post('/api/cutting', {
-    cutDate: '2026-07-04',
-    rawLotType: 'purchase',
-    rawLotId: purchaseId,
-    modelId: 1,
-    lines: [{ sizeId: 1, expectedPcs: 12, clothPerPcInchC: 1000, widthCount: 3 }],
-  });
-  await post(`/api/cutting/${plan2.body.id}/actuals`, {
-    lines: [{ sizeId: 1, actualPcs: 12 }],
-  });
-  const job2 = await post('/api/jobs', {
-    issueDate: '2026-07-05',
-    contractorId: 1,
-    modelId: 1,
-    colorId: 1,
-    lines: [{ sizeId: 1, qtyIssuedPcs: 6, unitEntered: 'pieces', ratePaisePerDozen: 3000 }],
-  });
+  await must(
+    post('/api/cutting', {
+      cutDate: '2026-07-04',
+      rawLotType: 'purchase',
+      rawLotId: purchaseId,
+      notes: '',
+      lines: [{ sizeId: 1, code: 'M1', qtyPcs: 12, clothPerPcInchC: 1000, widthCount: 3 }],
+    }),
+    'cutting 2',
+  );
+  const job2 = await must(
+    post('/api/jobs', {
+      issueDate: '2026-07-05',
+      contractorId: 1,
+      notes: '',
+      lines: [
+        { modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 6, unitEntered: 'pieces', ratePaisePerDozen: 3000 },
+      ],
+    }),
+    'job 2',
+  );
+  const job2CardId = job2.body.cards[0].id as number;
   const job2LineId = (
-    ctx.db.prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?').get(job2.body.id) as {
+    ctx.db.prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?').get(job2CardId) as {
       id: number;
     }
   ).id;
-  await post(`/api/jobs/${job2.body.id}/receipts`, {
-    receiptDate: '2026-07-06',
-    lines: [{ jobCardLineId: job2LineId, qtyPcs: 4, returnType: 'stitched' }],
-  });
-  await post(
-    `/api/jobs/${job2.body.id}/close`,
-    { reason: 'missing_pieces', note: 'lost 2 pcs' },
-    admin,
+  await must(
+    post(`/api/jobs/${job2CardId}/receipts`, {
+      receiptDate: '2026-07-06',
+      imagePath: '/uploads/2026-07/returned2.webp',
+      lines: [{ jobCardLineId: job2LineId, qtyPcs: 4, returnType: 'stitched' }],
+    }),
+    'receipt 2',
   );
-  await post('/api/jobs', {
-    issueDate: '2026-07-07',
-    contractorId: 1,
-    modelId: 1,
-    colorId: 1,
-    lines: [{ sizeId: 1, qtyIssuedPcs: 2, unitEntered: 'pieces', ratePaisePerDozen: 3000 }],
-  });
+  await must(
+    post(`/api/jobs/${job2CardId}/close`, { reason: 'missing_pieces', note: 'lost 2 pcs' }, admin),
+    'job 2 close',
+  );
+  await must(
+    post('/api/jobs', {
+      issueDate: '2026-07-07',
+      contractorId: 1,
+      notes: '',
+      lines: [
+        { modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 2, unitEntered: 'pieces', ratePaisePerDozen: 3000 },
+      ],
+    }),
+    'job 3',
+  );
 });
 afterAll(() => ctx.cleanup());
 
@@ -182,15 +233,15 @@ describe('reports registry', () => {
     expect((await request(ctx.app).get('/api/reports/losses')).status).toBe(401);
   });
 
-  it('filters narrow results (cutting-variance by date)', async () => {
-    const all = await request(ctx.app).get('/api/reports/cutting-variance').set('Cookie', owner);
-    expect(all.body.rows.length).toBe(2); // both completed batches
+  it('filters narrow results (cutting-register by date)', async () => {
+    const all = await request(ctx.app).get('/api/reports/cutting-register').set('Cookie', owner);
+    expect(all.body.rows.length).toBe(2); // both batches
     const one = await request(ctx.app)
-      .get('/api/reports/cutting-variance?to=2026-07-03')
+      .get('/api/reports/cutting-register?to=2026-07-03')
       .set('Cookie', owner);
     expect(one.body.rows.length).toBe(1);
     const none = await request(ctx.app)
-      .get('/api/reports/cutting-variance?from=2030-01-01')
+      .get('/api/reports/cutting-register?from=2030-01-01')
       .set('Cookie', owner);
     expect(none.body.rows.length).toBe(0);
   });
@@ -198,7 +249,7 @@ describe('reports registry', () => {
   it('specific numbers: losses report carries every recorded loss', async () => {
     const res = await request(ctx.app).get('/api/reports/losses').set('Cookie', owner);
     const reasons = res.body.rows.map((r: { reason: string }) => r.reason);
-    expect(reasons).toContain('wastage'); // cutting -12
+    expect(reasons).toContain('missing pieces'); // job2 closed 2 short
     expect(reasons.some((r: string) => r.includes('stitching'))).toBe(true); // rejection
     expect(reasons).toContain('missing'); // check missing 4
     expect(reasons).toContain('damage'); // pack short 6
@@ -221,7 +272,7 @@ describe('reports registry', () => {
     await workbook.xlsx.load(res.body as never);
     const sheet = workbook.worksheets[0]!;
     expect(sheet.getCell(1, 1).value).toBe('Finished Goods Stock');
-    expect(sheet.getCell(3, 1).value).toBe('Model'); // header row after title+subtitle
+    expect(sheet.getCell(3, 1).value).toBe('Code'); // header row after title+subtitle
     expect(sheet.getCell(4, 1).value).toBe('M1'); // first data row
     expect(sheet.getCell(4, 4).value).toBe('6dz 6pc'); // 90 packed − 12 dispatched = 78
   });

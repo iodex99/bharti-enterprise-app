@@ -8,7 +8,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Self-update (supervisor, releases, banner) | ✅ | Phase 1 |
 | Auth, sessions, RBAC, audit | ✅ | Phase 2 |
 | Users admin | ✅ | Phase 2 |
-| Masters: Models / Colors / Sizes / Vendors / Contractors / Staff | ✅ | Phase 3 |
+| Masters: Colors / Sizes / Vendors / Contractors / Staff (Models removed → v2) | ✅ | Phase 3, v2 |
 | Image uploads (model refs, purchase refs) | ✅ | Phase 3 |
 | Stock ledger engine (7 stages) | ✅ | Phase 4 |
 | Raw material purchases + RAW stock | ✅ | Phase 4 |
@@ -44,3 +44,13 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | PWA install + polish | ✅ | Phase 10 |
 | Backups (daily + pre-update + UI) | ✅ | Phase 2 |
 | Deployment docs (WinSW + Cloudflare Tunnel) | ✅ | Phase 11 |
+| **Back to the central-PC web app (Android dormant)** | ✅ | v2 (ADR-027) |
+| Multi-office: offices admin, per-office data + doc numbers, operator pinning, office switcher | ✅ | v2 (ADR-028) |
+| Cloth in yards + width (inch_c integers; rate per yard) | ✅ | v2 (ADR-029) |
+| Code number typed at cutting + product photo → "size-code" everywhere | ✅ | v2 (ADR-030) |
+| Cutting is final (no actuals); edit/delete until issued | ✅ | v2 (ADR-031) |
+| Job receipts require a photo of the returned goods | ✅ | v2 (ADR-032) |
+| Combined issue → one job card per code+color; job edit/delete; cost per dozen at issue | ✅ | v2 (ADR-033) |
+| Checking: single rejected box, 'missing' as a dropdown reason | ✅ | v2 (ADR-034) |
+| Packing from the checking row (checker packs by default); labeled bundles kept aside | ✅ | v2 (ADR-035) |
+| Pending dues view + report | ✅ | v2 (ADR-036) |

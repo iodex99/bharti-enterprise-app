@@ -13,17 +13,24 @@ afterAll(() => ctx.cleanup());
 
 describe('user management', () => {
   it('creates a user who must change password at first login', async () => {
-    const create = await request(ctx.app)
+    // operators MUST be pinned to an office (ADR-028)
+    const noOffice = await request(ctx.app)
       .post('/api/users')
       .set('Cookie', adminCookie)
       .send({ username: 'sunita', displayName: 'Sunita', role: 'operator', password: 'Temp1234' });
+    expect(noOffice.status).toBe(400);
+
+    const create = await request(ctx.app)
+      .post('/api/users')
+      .set('Cookie', adminCookie)
+      .send({ username: 'sunita', displayName: 'Sunita', role: 'operator', password: 'Temp1234', officeId: 1 });
     expect(create.status).toBe(201);
 
     // duplicate rejected (case-insensitive)
     const dup = await request(ctx.app)
       .post('/api/users')
       .set('Cookie', adminCookie)
-      .send({ username: 'SUNITA', displayName: 'S2', role: 'operator', password: 'Temp1234' });
+      .send({ username: 'SUNITA', displayName: 'S2', role: 'operator', password: 'Temp1234', officeId: 1 });
     expect(dup.status).toBe(409);
 
     const cookie = await loginAs(ctx.app, 'sunita', 'Temp1234');
@@ -51,7 +58,7 @@ describe('user management', () => {
     await request(ctx.app)
       .post('/api/users')
       .set('Cookie', adminCookie)
-      .send({ username: 'temp1', displayName: 'Temp', role: 'operator', password: 'Temp1234' });
+      .send({ username: 'temp1', displayName: 'Temp', role: 'operator', password: 'Temp1234', officeId: 1 });
     const cookie = await loginAs(ctx.app, 'temp1', 'Temp1234');
     const id = (ctx.db.prepare("SELECT id FROM users WHERE username='temp1'").get() as { id: number }).id;
 
@@ -104,7 +111,7 @@ describe('user management', () => {
     await request(ctx.app)
       .post('/api/users')
       .set('Cookie', adminCookie)
-      .send({ username: 'temp3', displayName: 'Temp3', role: 'operator', password: 'Temp1234' });
+      .send({ username: 'temp3', displayName: 'Temp3', role: 'operator', password: 'Temp1234', officeId: 1 });
     const cookie = await loginAs(ctx.app, 'temp3', 'Temp1234');
     const id = (ctx.db.prepare("SELECT id FROM users WHERE username='temp3'").get() as { id: number }).id;
 

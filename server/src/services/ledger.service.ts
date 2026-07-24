@@ -21,6 +21,8 @@ import type { Db } from '../db/connection';
 
 export type Movement = {
   stage: Stage;
+  /** every stock row belongs to exactly one office (ADR-028) */
+  officeId: number;
   modelId: number;
   colorId: number;
   sizeId: number | null;
@@ -70,6 +72,9 @@ export function postMovements(db: Db, movements: Movement[], userId: number): vo
     if (!Number.isInteger(m.qty) || m.qty === 0) {
       throw new LedgerError(`Ledger quantities must be non-zero integers (got ${m.qty}).`);
     }
+    if (!Number.isInteger(m.officeId) || m.officeId <= 0) {
+      throw new LedgerError('Every movement must carry its office.');
+    }
     if (m.stage === 'RAW' ? m.sizeId !== null : m.sizeId === null) {
       throw new LedgerError(`size is ${m.stage === 'RAW' ? 'not allowed' : 'required'} for ${m.stage}.`);
     }
@@ -102,10 +107,10 @@ export function postMovements(db: Db, movements: Movement[], userId: number): vo
   }
   const balanceStmt = db.prepare(
     `SELECT COALESCE(SUM(qty), 0) AS bal FROM stock_ledger
-     WHERE stage = ? AND lot_type = ? AND lot_id = ?`,
+     WHERE office_id = ? AND stage = ? AND lot_type = ? AND lot_id = ?`,
   );
   for (const { m, total } of outgoingByLot.values()) {
-    const { bal } = balanceStmt.get(m.stage, m.lotType, m.lotId) as { bal: number };
+    const { bal } = balanceStmt.get(m.officeId, m.stage, m.lotType, m.lotId) as { bal: number };
     if (bal < total) {
       throw new InsufficientStockError(m.stage, total, bal);
     }
@@ -113,13 +118,14 @@ export function postMovements(db: Db, movements: Movement[], userId: number): vo
 
   const insert = db.prepare(
     `INSERT INTO stock_ledger
-       (stage, model_id, color_id, size_id, contractor_id, staff_id,
+       (stage, office_id, model_id, color_id, size_id, contractor_id, staff_id,
         lot_type, lot_id, qty, ref_type, ref_id, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const m of movements) {
     insert.run(
       m.stage,
+      m.officeId,
       m.modelId,
       m.colorId,
       m.sizeId,
@@ -152,6 +158,7 @@ export function availableLots(
   db: Db,
   filter: {
     stage: Stage;
+    officeId: number;
     modelId: number;
     colorId: number;
     sizeId?: number | null;
@@ -159,8 +166,8 @@ export function availableLots(
     staffId?: number | null;
   },
 ): Lot[] {
-  const where: string[] = ['stage = ?', 'model_id = ?', 'color_id = ?'];
-  const params: unknown[] = [filter.stage, filter.modelId, filter.colorId];
+  const where: string[] = ['office_id = ?', 'stage = ?', 'model_id = ?', 'color_id = ?'];
+  const params: unknown[] = [filter.officeId, filter.stage, filter.modelId, filter.colorId];
   if (filter.sizeId !== undefined) {
     where.push(filter.sizeId === null ? 'size_id IS NULL' : 'size_id = ?');
     if (filter.sizeId !== null) params.push(filter.sizeId);
@@ -234,10 +241,11 @@ export function splitFifo(lots: Array<{ lotType: LotType; lotId: number; qty: nu
 export function stockByDimensions(
   db: Db,
   stage: Stage,
+  officeId: number,
   filters: { modelId?: number; colorId?: number; sizeId?: number; contractorId?: number } = {},
 ): Array<Record<string, unknown>> {
-  const where: string[] = ['stage = ?'];
-  const params: unknown[] = [stage];
+  const where: string[] = ['office_id = ?', 'stage = ?'];
+  const params: unknown[] = [officeId, stage];
   if (filters.modelId) {
     where.push('model_id = ?');
     params.push(filters.modelId);

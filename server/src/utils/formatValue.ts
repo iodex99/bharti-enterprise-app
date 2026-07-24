@@ -1,4 +1,4 @@
-import { formatBusinessDate, formatCm, formatPaise, formatPieces } from '@shared';
+import { formatBusinessDate, formatLen, formatPaise, formatPieces } from '@shared';
 import type { ColumnType } from '../services/reports.service';
 
 /** Human formatting for report cells — mirror of the client table renderer. */
@@ -7,8 +7,8 @@ export function formatValue(type: ColumnType, value: unknown): string {
   switch (type) {
     case 'pcs':
       return formatPieces(Number(value));
-    case 'cm':
-      return formatCm(Number(value));
+    case 'len':
+      return formatLen(Number(value));
     case 'paise':
       return formatPaise(Number(value));
     case 'pct':
@@ -20,4 +20,4 @@ export function formatValue(type: ColumnType, value: unknown): string {
   }
 }
 
-export const NUMERIC_TYPES = new Set<ColumnType>(['pcs', 'cm', 'paise', 'pct', 'int']);
+export const NUMERIC_TYPES = new Set<ColumnType>(['pcs', 'len', 'paise', 'pct', 'int']);

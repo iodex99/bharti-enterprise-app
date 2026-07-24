@@ -36,12 +36,13 @@ export async function makeTestContext(): Promise<TestContext> {
   migrate(db);
 
   const insertUser = db.prepare(
-    `INSERT INTO users (username, password_hash, display_name, role, must_change_password)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO users (username, password_hash, display_name, role, office_id, must_change_password)
+     VALUES (?, ?, ?, ?, ?, ?)`,
   );
-  insertUser.run('admin', hashPassword('Admin@123'), 'Admin', 'admin', 0);
-  insertUser.run('operator', hashPassword('Operator@123'), 'Operator', 'operator', 0);
-  insertUser.run('owner', hashPassword('Owner@123'), 'Owner', 'owner', 0);
+  // operators are pinned to an office (ADR-028); office 1 exists from migration 004
+  insertUser.run('admin', hashPassword('Admin@123'), 'Admin', 'admin', null, 0);
+  insertUser.run('operator', hashPassword('Operator@123'), 'Operator', 'operator', 1, 0);
+  insertUser.run('owner', hashPassword('Owner@123'), 'Owner', 'owner', null, 0);
 
   const app = createApp();
   return {

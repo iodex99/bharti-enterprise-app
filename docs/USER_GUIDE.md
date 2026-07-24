@@ -1,31 +1,39 @@
 # User Guide — Bharti Enterprises System
 
-Written for the people using the app daily. **The system is an app on one Android tablet
-or phone** — tap its icon to open it. Everything is stored on that device: it works
-without internet, and nothing is sent anywhere. The internet is used only to check for
-app updates.
-
-> **Everything lives on this one device.** That makes the weekly backup important — see
-> *Backups and moving to a new device* near the end of this guide.
+Written for the people using the app daily. **The system runs on the office computer**;
+everyone opens it in a browser — on the office PC itself or from a phone using the office
+link. Operators enter the day's work; the owner watches everything from anywhere.
 
 ## Signing in
 
 Enter the username and password given by the Admin. The first sign-in asks you to set a
 new password (at least 8 characters with letters and numbers).
 
-The very first time the app is opened on a new device it creates the **admin** account
-itself and shows the password once — write it down, and change it at the first sign-in.
-
 | Role | What you can do |
 |---|---|
-| **Admin** | Everything: users, masters, corrections (voids), closing problem jobs, updates, settings |
-| **Operator** | Daily entries: purchases, cutting, job work, receipts, checking, packing, payments |
-| **Owner** | See everything (dashboard, reports, stock, traceability) — read-only |
+| **Admin** | Everything: offices, users, masters, corrections (voids), closing problem jobs, updates, settings |
+| **Operator** | Daily entries in THEIR office: purchases, cutting, job work, receipts, checking, packing, payments |
+| **Owner** | See everything in every office (dashboard, reports, stock, traceability) — read-only |
+
+## Offices
+
+The business can have more than one office. **Each office's work stays separate** — its
+purchases, cutting, jobs, stock and document numbers belong to it alone. Masters (colors,
+sizes, vendors, contractors, staff) are shared by all offices.
+
+- **Operators belong to one office** and always see that office's data — nothing to pick.
+- **Admin and the owner** see an office selector in the top bar; pick an office and the
+  whole screen shows that office's numbers. The first office uses plain document numbers
+  (`RM-0001`); other offices carry their code (`BR-RM-0001`) so a document number always
+  says where it belongs.
+- The **Admin adds offices** at **Administration → Offices** (short code + name) and
+  creates each operator's login on the **Users** page, choosing their office there.
 
 ## Entering quantities
 
 - Stitched goods: **dozens + pieces** — `2 dz 6 pc` means 30 pieces.
-- Cloth: **meters**, up to 2 decimals (e.g. `125.5`).
+- Cloth: **yards** for length, up to 2 decimals (e.g. `125.5`), and **inches** for the
+  cloth width and per-piece measurements. 1 yard = 36 inches.
 - Money: **₹**, up to paise (e.g. `45.50`).
 - Dates show as DD/MM/YYYY. You can backdate an entry if it was written in the register
   earlier — reports follow the date you enter.
@@ -33,7 +41,7 @@ itself and shows the password once — write it down, and change it at the first
 ## The production flow (who does what)
 
 ```
-Purchases → Cutting → Job Work → Checking → Packing → Finished Goods → Dispatch
+Purchases → Cutting (code given here) → Job Work → Checking & Packing → Finished Goods → Dispatch
 ```
 
 > **Ink colors, like the registers:** everywhere in the app, **blue numbers = goods going
@@ -42,36 +50,47 @@ Purchases → Cutting → Job Work → Checking → Packing → Finished Goods �
 > old paper registers.
 
 ### 1. Purchases (cloth in)
-**Production → Purchases → + New purchase.** Pick vendor and color; enter meters and
-rate; the total is calculated automatically. Attach a photo of the bill if you like.
-**No model is chosen here** — cloth is just cloth until it is cut. It immediately appears
-in **Inventory → Raw Material** (by color and vendor).
+**Production → Purchases → + New purchase.** Pick vendor and color; enter the **length in
+yards**, the **cloth width in inches**, and the rate per yard; the total is calculated
+automatically. Attach a photo of the bill if you like. **No code number is given here** —
+cloth is just cloth until it is cut. It immediately appears in **Inventory → Raw
+Material** (by color and vendor, with its width).
 
-### 2. Cutting
-**Production → Cutting → + New cutting plan.** Pick the exact cloth batch, pick the
-**model** this cloth is being cut into (this is where the model number is given), and for
-each size enter the expected dozens plus **how the cloth is used**: the length one piece
-takes in **inches**, and **how many pieces fit side-by-side** across the cloth width.
-The app then calculates the cloth needed by itself and shows **how much will be left in
-the batch** — it refuses a plan that needs more cloth than the batch has.
+### 2. Cutting — where the code number is given
+**Production → Cutting → + New cutting.** Pick the exact cloth roll. For each size line:
 
-A plan that hasn't been cut yet can be **edited** (everything can change; the batch
-number stays the same) or **deleted** (the cloth goes back to the batch). Once actuals
-are recorded the plan is frozen — only the Admin can void it.
+- type the **CODE NUMBER** in the box beside the size — that code + size (e.g. `315-XS`)
+  becomes the **size-code** the goods carry everywhere from here on;
+- add the **product photo** there — it follows the code on every later screen;
+- enter the pieces cut, the length one piece takes in **inches**, and **how many pieces
+  fit side-by-side across the cloth width**.
 
-When cutting is finished, press **Record actuals** and enter what was really cut. If
-actual differs from expected — even if MORE came out — you must pick a reason. The cut
-pieces appear in **Inventory → Cut Cloth**.
+The app works out the cloth used by itself (pieces ÷ across-the-width, times inches per
+piece) and shows **how much will be left on the roll** — it refuses an entry that needs
+more cloth than the roll has.
+
+**The entry IS the cutting** — saving it takes the cloth and creates the cut pieces at
+once; there is no separate "record actuals" step. While none of its pieces have been
+given to a contractor, the entry can be **edited** (the batch number stays the same) or
+**deleted** (the cloth goes back onto the roll). After that, only the Admin can void it.
+The cut pieces appear in **Inventory → Cut Cloth** under their size-code.
 
 ### 3. Job Work (contractors)
-**Production → Job Work → + New job card.** Pick the contractor; their rate fills in
-automatically but can be changed per size line. The system refuses to issue more than the
-cut stock available.
+**Production → Job Work → + Issue goods.** Pick the contractor; add lines by **code,
+color and size** from cut stock. The **cost per dozen is set here** — the contractor's
+usual rate fills in automatically and can be changed per line. The system refuses to
+issue more than the cut stock available.
 
-When goods come back, open the job → **Receive goods**. **Take a photo of the returned
-goods** — it travels with the batch and the checker can refer to it later. Partial
-deliveries are normal — receive 2 dz today, 3 dz tomorrow; the job stays open until
-everything is settled. Two special cases:
+If the lines cover more than one code/color, the goods are issued together but the system
+makes **a separate job card for each code + color** — so every card tracks one product,
+while the contractor got everything in one go.
+
+A job card that nothing has been received against can be **edited or deleted**.
+
+When goods come back, open the job → **Receive goods**. **A photo of the returned goods
+is required** — every code's return is photographed, and the checker refers to it later.
+Partial deliveries are normal — receive 2 dz today, 3 dz tomorrow; the job stays open
+until everything is settled. Two special cases:
 - **Unstitched return** — contractor returns cut-but-unstitched pieces; they go back to
   Cut Cloth stock.
 - **More than pending** — the app asks for a reason and records an excess discrepancy.
@@ -86,57 +105,69 @@ missing and the contractor cannot return them, only the **Admin** can close the 
 ("Close with discrepancy") — the shortage is written off and recorded against the
 contractor permanently.
 
-### 4. Checking
-**Production → Checking.** The top of the page lists every batch **pending for checking**
-— which contractor it came from, the receipt number, the photo, and how many pieces are
-waiting. Press **Issue to checker** on a batch to allot it: you always know **which
-contractor's goods each checker is checking**. Any staff member can check.
+### 4. Checking & Packing (one page)
+**Production → Checking & Packing.** The top of the page lists every batch **pending for
+checking** — which contractor it came from, the receipt number, the return photo, and how
+many pieces are waiting. Press **Issue to checker** on a batch to allot it: you always
+know **which contractor's goods each checker is checking**. Any staff member can check.
 
-Record results in sessions (today 3 dz, tomorrow 2 dz): **passed**, **rejected** (with
-reasons — stitching, elastic, color, damage), **missing**. Missing or rejected pieces are
-recorded against that contractor's batch on the Discrepancies page. Passed pieces wait
-for packing; rejected pieces sit in the Rejected stock so nothing disappears silently.
+Record results in sessions (today 3 dz, tomorrow 2 dz): **passed** and **rejected
+pieces** with a reason — stitching, elastic, color, damage, **missing**, or other.
+"Missing" is simply one of the reasons in the dropdown; the system knows missing pieces
+are gone (they never sit in Rejected stock) and records them against that contractor's
+batch on the Discrepancies page.
 
-### 5. Packing
-**Production → Packing → + Issue to packer.** Works exactly like checking — and any
-staff member can pack. Packed pieces become **Finished Goods**.
+**Packing happens right here.** When a batch has passed pieces, a **Pack** button appears
+on its row. Nine times out of ten the checker packs their own goods, so the checker is
+already selected — change the person only if someone else will pack. Two choices:
 
-### 6. Dispatches (Admin)
+- **Pack now** — the pieces go to that packer; record the packed dozens under
+  **📦 Packing in progress** below, and they become **Finished Goods**.
+- **Keep aside as a bundle** — when the owner asks for some dozens to be kept aside for
+  later. Give the bundle a name ("Festival order reserve"); it waits under **🎁 Bundles
+  kept aside** and can be packed by anyone, any time, straight from that list.
+
+### 5. Dispatches (Admin)
 **Production → Dispatches.** Records finished goods leaving for sale so FG stock stays
 true.
 
-## Contractors page
+## Contractors, payments and pending dues
 
 **Production → Contractors** shows every contractor's scorecard: how much they've been
 given, returned, lost (shortage), extra (excess), their discrepancy %, average turnaround
-days, the job-work cost earned and **dues** (cost − payments). Record payments here
-(cash/UPI/bank/cheque).
+days, the job-work cost earned and dues. Record payments here (cash/UPI/bank/cheque).
+
+**Production → Pending Dues 💰** is the quick money view: for each contractor, the
+job-work cost so far (received goods × the rate set at issue), what has been paid, **what
+is still owed**, the last payment date and how many jobs are still open. The same view is
+available as a report for Excel/print.
 
 ## Discrepancies (review & close the loop)
 
-Whenever actual differs from expected anywhere — cutting variance, contractor excess or
-shortage, missing/rejected pieces at checking, packing shortfalls — the system records a
-**discrepancy** automatically. **Production → Discrepancies** (also reached by clicking
-the dashboard alerts or the "Unresolved discrepancies" tile) lists them all with the
-source document, item and contractor/staff involved.
+Whenever actual differs from expected anywhere — contractor excess or shortage,
+missing/rejected pieces at checking, packing shortfalls — the system records a
+**discrepancy** automatically. **Production → Discrepancies** (also reached from the
+dashboard alerts) lists them all with the source document, size-code and
+contractor/staff involved.
 
 Once the matter is looked into, the **Admin** presses **Resolve** and writes what was
 decided ("recovered from contractor", "written off", "counting error confirmed"…).
 Resolving only records the review — stock was already adjusted the moment the difference
-was recorded, so nothing moves again. Resolved items keep their note, who resolved them
-and when, and drop off the dashboard warnings.
+was recorded, so nothing moves again.
 
 ## Finding things fast
 
-Every list has instant **search**, **dropdown filters** (vendor, contractor, model,
+Every list has instant **search**, **dropdown filters** (vendor, contractor, code,
 color, size, status, checker/packer…), a **date range**, and **click-to-sort column
-headings** (tap once for ascending, again for descending).
+headings**. The size-code and its photo appear on every screen the goods pass through —
+cutting, job cards, checking, packing, stock, reports and traceability all speak the
+same language.
 
 ## Inventory
 
-**Inventory** shows live stock at all seven stages. Nothing here can be edited by hand —
-stock only moves when a transaction is recorded. That is what makes the numbers
-trustworthy.
+**Inventory** shows live stock at all seven stages **for the selected office**. Nothing
+here can be edited by hand — stock only moves when a transaction is recorded. That is
+what makes the numbers trustworthy.
 
 ## Reports & Excel
 
@@ -144,9 +175,9 @@ trustworthy.
 At the top of the page, the **Complete Business Report** downloads EVERYTHING in one
 document: a visual HTML report (opens in any browser, prints cleanly) or an Excel
 workbook with one sheet per report — both with an optional date range.
-Everything the owner asked for lives here: stock, expected-vs-actual cutting, contractor
-performance and pending work, checker performance, rejection analysis, all losses,
-inventory aging, monthly production trends.
+Everything the owner asked for lives here: stock, the cutting register, contractor
+performance and pending work, checker performance, rejection analysis, pending dues, all
+losses, inventory aging, monthly production trends.
 
 ## Traceability
 
@@ -158,10 +189,12 @@ forward.
 ## Fixing mistakes
 
 Nothing is ever deleted. If a document was entered wrongly:
+- A cutting entry or an unstarted job card can be **edited or deleted** directly while
+  nothing downstream has used it — the stock adjusts itself.
 - Financial details of a purchase (rate, notes, photo) can be edited — changes are logged.
-- Quantities/model/color cannot be edited once saved. The **Admin voids** the document
-  (reason required) and it is re-entered correctly. Voiding puts the stock back exactly
-  as it was, and is blocked if later steps already used the material (void those first).
+- Everything else: the **Admin voids** the document (reason required) and it is re-entered
+  correctly. Voiding puts the stock back exactly as it was, and is blocked if later steps
+  already used the material (void those first).
 
 Every change is recorded in **Administration → Audit Log** — who, when, and what changed.
 
@@ -170,54 +203,41 @@ Every change is recorded in **Administration → Audit Log** — who, when, and 
 **Admin → System Health → Demo mode** has one-click buttons:
 
 - **Enter demo mode** — switches the whole app onto a separate sample database with
-  ~3 months of realistic business (every screen, chart, alert and report has data).
-  Everyone is signed out; sign in with `admin / Admin@123`. A bright **DEMO MODE**
-  banner stays visible so nobody mistakes sample data for real records. Demo mode stays
-  on until you leave it, even if the app is closed and reopened.
+  ~3 months of realistic business across two offices (every screen, chart, alert and
+  report has data). Everyone is signed out; sign in with `admin / Admin@123` (or
+  `branch-op / Branch@123` to see a pinned operator's view). A bright **DEMO MODE**
+  banner stays visible so nobody mistakes sample data for real records.
 - **Rebuild fresh & enter** — resets the demo to its original state first.
 - **Exit demo mode** — back to real data, sign in with your usual account.
 - **Remove demo data** — deletes the demo database entirely (real data unaffected).
 
-Anything entered during a demo stays in the demo database and vanishes with it.
-Developers can also use `npm run seed:demo` + `npm run dev:demo` from a checkout.
-
 ## For the Admin
 
-- **Users** — create accounts, set roles, deactivate instantly, reset passwords.
-- **Opening Balances** — one-time entry of existing register stock at go-live.
+- **Offices** — add an office (short code + name); its documents get the code as a
+  prefix. Deactivating an office hides it from switching and blocks its operators.
+- **Users** — create accounts, set roles, pick an operator's office, deactivate
+  instantly, reset passwords.
+- **Opening Balances** — one-time entry of existing register stock at go-live, per
+  office (RAW takes yards + width; stitched stages take a typed code number).
 - **System Health** — inventory self-checks (all should always be ✅) and the
   delayed-job threshold.
 
-## Backups and moving to a new device
+## Backups
 
-Everything — every record **and every photo** — is kept in a single file on this device.
-That makes backing up simple, and important.
+Everything — every record **and every photo** — is one file on the office computer.
 
-- The app takes a **backup by itself every day**, kept on the device. If the device was
-  switched off, it catches up the next time the app is opened.
-- **Once a week**, and always before changing devices, do this:
-  **Administration → Backups → Download complete backup.** The file is saved to the
-  device and Android's share sheet opens — choose **Google Drive** (or WhatsApp, or
-  email) to keep a copy somewhere other than this device. That one file is the whole
-  business.
-- **Moving to a new phone or tablet:** install the app on the new device and open it. The
-  setup screen offers **"Move from another device"** — pick the backup file (from Google
-  Drive or Files) and everything is restored. Restoring replaces all current data, so it
-  asks you to type RESTORE first. Everyone signs in again afterwards.
-
-If a file that is not one of the app's own backups is chosen, it is refused rather than
-attempted.
+- The app takes a **backup by itself every day**.
+- **Administration → Backups → Download complete backup** saves the whole business as
+  one file — keep a weekly copy in Google Drive. A cloud-synced folder can also be
+  configured so backups mirror there automatically.
+- **Restore** (new computer, or going back to a snapshot): feed the backup file into the
+  Restore card on the same page. It shows what is inside before replacing anything and
+  asks you to type RESTORE. Everyone signs in again afterwards.
 
 ## Updates
 
-When a new version is ready, a banner appears at the top of the screen.
-
-- Press **Update now**. The app downloads the new version, checks it, and restarts
-  itself — a few seconds, and nothing to confirm.
-- **Your data is never part of an update.** It is stored separately from the app, and a
-  safety copy is taken just before every update anyway.
-- If a new version will not start, the app **puts the previous one back by itself** and
-  tells you so. Nothing is lost; press Dismiss once you have read it.
-- Occasionally the banner says **Download app file** instead. That means the app itself
-  (not just its contents) has to be replaced, so Android will ask you to confirm the
-  install, exactly like the first time it was installed. Your data stays on the device.
+When a new version is ready, a banner appears at the top of the screen. The **Admin**
+presses **Update now**: the office computer downloads the new version, checks it, backs
+the data up, and restarts itself — under a minute, and nothing else to do. If the new
+version fails to start, the previous one is put back automatically. Data is never part
+of an update.

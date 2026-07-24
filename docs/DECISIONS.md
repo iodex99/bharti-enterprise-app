@@ -96,3 +96,49 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   twice, the previous one is put back automatically and the user is told — the notice
   persists until acknowledged, because whoever tapped Update is often not who opens the
   app next.
+- **ADR-027** The product is a **PC web app again** (client decision, 2026-07-24): a
+  central office computer runs the server, operators enter data from browsers/phones.
+  `release.yml` builds PC zips on every push to main (1.0.x line, supervisor feed);
+  `android-release.yml` is dormant (manual dispatch only). The Android/local runtime code
+  stays in the tree but nothing ships it; the app-mode E2E project was deleted.
+- **ADR-028** Multi-office is **one database with an `office_id` column**, not one file
+  per office. Backup/restore/demo/reconciliation stay whole-business operations. Office 1
+  ('HO') exists from the migration and keeps plain document numbers; later offices prefix
+  theirs (`BR-RM-0001`) so numbers stay unique globally. Operators are pinned to exactly
+  one office (users.office_id); admin/owner have no office and pick one per session via
+  the `X-Office-Id` header (stored client-side; switching reloads the whole app). Masters,
+  staff, contractors, vendors and users are shared; every document, ledger row and report
+  is office-scoped. Conservation checks stay global — cloth is cloth wherever it is.
+- **ADR-029** Cloth is measured in **yards and inches, stored as integer
+  hundredths-of-an-inch** ("inch_c", 1 yd = 3600). Purchases record length AND width;
+  cutting computes cloth as `ceil(pieces ÷ pieces-across-the-width) × inches-per-piece` —
+  pure integer arithmetic, no floats in the database (the meters/cm columns are still
+  written for compatibility but never read). Rates are per yard.
+- **ADR-030** There is **no Models master**. The CODE NUMBER is typed on each cutting
+  line (beside the size, with the product photo) and becomes the "size-code" —
+  `315-XS` — shown everywhere downstream. Codes are find-or-created in the legacy models
+  table so the ledger's dimension system, trace and reports are unchanged; a re-used code
+  reactivates itself and the newest photo wins. Pickers read `GET /api/products`.
+- **ADR-031** The cutting **plan IS the cutting**: recording it consumes the cloth and
+  creates the cut pieces in one step — there is no "record actuals" and no cutting
+  variance. Entries can be edited or deleted while none of their pieces have been issued
+  onward; an edit reverses and re-applies inside one transaction and keeps the document
+  number.
+- **ADR-032** A job receipt **requires a photo** of the returned goods — every code's
+  return is photographed, and the checker refers to it.
+- **ADR-033** One job issue can cover several codes/colors, but the system creates **one
+  job card per code + color** in a single transaction ("issued together, tracked
+  separately"). Cards with no receipts yet can be edited or deleted. The per-dozen cost is
+  set at issue on every line.
+- **ADR-034** Checking has **one "rejected pieces" entry with a reason dropdown** —
+  'missing' is one of the reasons. Internally missing pieces are a terminal write-off plus
+  a discrepancy row (they do not physically exist, so they never sit in REJECTED stock);
+  the other reasons move pieces to REJECTED.
+- **ADR-035** There is **no packing module**. Packing is allotted from the checking row
+  ("Pack" button on the passed pieces), the checker is the default packer, and "keep
+  aside" is a **labeled bundle** (`pack_issues.kind = 'bundle'`) that can be packed later
+  by anyone. Bundle stock carries its original allocations forward so trace still reaches
+  the vendor.
+- **ADR-036** **Pending dues** is a first-class view (`GET /api/contractors/dues`, the
+  Dues page, and a report): job-work cost (received × rate set at issue) minus payments,
+  per contractor.

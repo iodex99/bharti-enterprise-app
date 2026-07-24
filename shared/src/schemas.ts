@@ -2,9 +2,10 @@ import { z } from 'zod';
 import {
   CHECK_REJECTION_REASONS,
   CHECKING_POOL_LOT_TYPES,
-  CUTTING_VARIANCE_REASONS,
   JOB_DISCREPANCY_REASONS,
+  PACK_KINDS,
   PACK_SHORT_REASONS,
+  PACKING_POOL_LOT_TYPES,
   PAYMENT_MODES,
   RECEIPT_RETURN_TYPES,
   STAFF_ROLES,
@@ -15,8 +16,9 @@ import { isValidBusinessDate } from './dates';
 
 /**
  * API payload schemas shared by server validation and client forms.
- * Convention: money in integer PAISE, lengths in integer CM, quantities in integer
- * PIECES — the UI converts at the boundary (MoneyInput etc.), the API never sees floats.
+ * Convention: money in integer PAISE, cloth lengths/widths in integer HUNDREDTHS OF AN
+ * INCH (entered as yards / inches — the UI converts), quantities in integer PIECES.
+ * The API never sees floats.
  */
 
 const trimmed = (max: number, min = 1) => z.string().trim().min(min).max(max);
@@ -28,12 +30,9 @@ const mobile = z
   .regex(/^[0-9+\-() ]*$/, 'Digits, +, -, ( ) and spaces only')
   .default('');
 
-export const modelSchema = z.object({
-  code: trimmed(30),
-  name: trimmed(100),
-  description: optionalText(500),
-  imagePath: z.string().max(300).nullish(),
-});
+// ---------------------------------------------------------------------------
+// masters (models are NOT a master any more — codes are typed at cutting, ADR-030)
+// ---------------------------------------------------------------------------
 
 export const colorSchema = z.object({
   name: trimmed(50),
@@ -83,12 +82,32 @@ export const staffSchema = z.object({
   notes: optionalText(500),
 });
 
-export type ModelInput = z.infer<typeof modelSchema>;
 export type ColorInput = z.infer<typeof colorSchema>;
 export type SizeInput = z.infer<typeof sizeSchema>;
 export type VendorInput = z.infer<typeof vendorSchema>;
 export type ContractorInput = z.infer<typeof contractorSchema>;
 export type StaffInput = z.infer<typeof staffSchema>;
+
+// ---------------------------------------------------------------------------
+// offices (ADR-028): each office's operations are separate; admin manages them here
+// ---------------------------------------------------------------------------
+
+export const officeSchema = z.object({
+  /** short code embedded in that office's document numbers, e.g. "BR" → BR-RM-0001 */
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(2)
+    .max(6)
+    .regex(/^[A-Z0-9]+$/, 'Letters and digits only'),
+  name: trimmed(100),
+});
+export type OfficeInput = z.infer<typeof officeSchema>;
+
+// ---------------------------------------------------------------------------
+// documents
+// ---------------------------------------------------------------------------
 
 export const businessDate = z
   .string()
@@ -96,16 +115,27 @@ export const businessDate = z
 
 const id = z.number().int().positive();
 
+/** The product code typed at cutting — becomes the "size-code" identity everywhere. */
+const productCode = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .min(1, 'Enter the code number')
+  .max(30)
+  .regex(/^[A-Z0-9][A-Z0-9 ._/-]*$/, 'Letters, digits, space, . _ / - only');
+
 export const purchaseSchema = z
   .object({
     purchaseDate: businessDate,
     receivedDate: businessDate,
     vendorId: id,
-    // NO model here — cloth is bought as color + meters; the model is decided at cutting
+    // NO model/code here — cloth is bought as color + yards; the code is given at cutting
     colorId: id,
-    /** integer centimeters (UI converts from meters) */
-    qtyCm: z.number().int().positive().max(100_000_000),
-    ratePaisePerMeter: z.number().int().min(0).max(100_000_00),
+    /** cloth LENGTH, integer hundredths of an inch (UI converts from yards) */
+    lenInchC: z.number().int().positive().max(400_000_000), // ≈ 111,000 yards
+    /** cloth WIDTH, integer hundredths of an inch (UI converts from inches, e.g. 44") */
+    widthInchC: z.number().int().positive().max(20_000), // up to 200"
+    ratePaisePerYard: z.number().int().min(0).max(100_000_00),
     imagePath: z.string().max(300).nullish(),
     notes: optionalText(500),
   })
@@ -116,8 +146,8 @@ export const purchaseSchema = z
 export type PurchaseInput = z.infer<typeof purchaseSchema>;
 
 export const purchaseEditSchema = z.object({
-  // financial/reference fields only — quantity/model/color are immutable (void + re-enter)
-  ratePaisePerMeter: z.number().int().min(0).max(100_000_00),
+  // financial/reference fields only — quantity/color are immutable (void + re-enter)
+  ratePaisePerYard: z.number().int().min(0).max(100_000_00),
   imagePath: z.string().max(300).nullish(),
   notes: optionalText(500),
 });
@@ -133,28 +163,35 @@ export const resolveDiscrepancySchema = z.object({
 });
 export type ResolveDiscrepancyInput = z.infer<typeof resolveDiscrepancySchema>;
 
+/**
+ * Cutting v2 (ADR-030/031): the plan IS the cutting — no separate actuals step. Each
+ * size line carries the CODE typed here (creating the "CODE-SIZE" product identity used
+ * everywhere downstream) and optionally its photo. Cloth consumed is computed
+ * server-side from the geometry.
+ */
 export const cuttingPlanSchema = z
   .object({
     cutDate: businessDate,
     rawLotType: z.enum(['purchase', 'opening']),
     rawLotId: id,
-    /** the model this cloth is being cut into — decided HERE, not at purchase */
-    modelId: id,
     notes: optionalText(500),
     lines: z
       .array(
         z.object({
           sizeId: id,
-          /** expected output in integer pieces */
-          expectedPcs: z.number().int().positive().max(10_000_000),
+          /** the code number for this size — together they are the "size-code" */
+          code: productCode,
+          /** pieces cut, integer */
+          qtyPcs: z.number().int().positive().max(10_000_000),
           /** cloth length per piece, integer hundredths of an inch (10.25" = 1025) */
           clothPerPcInchC: z.number().int().positive().max(100_000),
           /** pieces cut side-by-side across the cloth width */
           widthCount: z.number().int().positive().max(1000),
+          /** photo of this product (stored as the code's photo, shown everywhere) */
+          imagePath: z.string().max(300).nullish(),
         }),
       )
       .min(1, 'Add at least one size'),
-    // cloth consumed is COMPUTED server-side from the lines (clothRequiredCm)
   })
   .refine((p) => new Set(p.lines.map((l) => l.sizeId)).size === p.lines.length, {
     message: 'Each size may appear only once',
@@ -162,31 +199,41 @@ export const cuttingPlanSchema = z
   });
 export type CuttingPlanInput = z.infer<typeof cuttingPlanSchema>;
 
-export const cuttingActualsSchema = z
-  .object({
-    lines: z
-      .array(
-        z.object({
-          sizeId: id,
-          actualPcs: z.number().int().min(0).max(10_000_000),
-          varianceReason: z.enum(CUTTING_VARIANCE_REASONS).nullish(),
-          reasonNote: optionalText(300),
-        }),
-      )
-      .min(1),
-  })
-  .refine((p) => new Set(p.lines.map((l) => l.sizeId)).size === p.lines.length, {
-    message: 'Each size may appear only once',
-    path: ['lines'],
-  });
-export type CuttingActualsInput = z.infer<typeof cuttingActualsSchema>;
-
-export const jobCardSchema = z
+/**
+ * Job issue v2 (ADR-033): one physical handover can cover several codes/colors, but the
+ * job CARDS are per code+color — the server splits this input into one card per
+ * (model, color) group. Rate (cost per dozen) is set here, at issue.
+ */
+export const jobIssueSchema = z
   .object({
     issueDate: businessDate,
     contractorId: id,
-    modelId: id,
-    colorId: id,
+    notes: optionalText(500),
+    lines: z
+      .array(
+        z.object({
+          modelId: id,
+          colorId: id,
+          sizeId: id,
+          qtyIssuedPcs: z.number().int().positive().max(10_000_000),
+          unitEntered: z.enum(UNIT_TYPES).default('dozens'),
+          ratePaisePerDozen: z.number().int().min(0).max(100_000_00),
+        }),
+      )
+      .min(1, 'Add at least one line'),
+  })
+  .refine(
+    (p) =>
+      new Set(p.lines.map((l) => `${l.modelId}|${l.colorId}|${l.sizeId}`)).size ===
+      p.lines.length,
+    { message: 'Each code + color + size may appear only once', path: ['lines'] },
+  );
+export type JobIssueInput = z.infer<typeof jobIssueSchema>;
+
+/** Edit an UNSTARTED job card (no receipts yet): date, notes and its size lines. */
+export const jobEditSchema = z
+  .object({
+    issueDate: businessDate,
     notes: optionalText(500),
     lines: z
       .array(
@@ -203,12 +250,12 @@ export const jobCardSchema = z
     message: 'Each size may appear only once',
     path: ['lines'],
   });
-export type JobCardInput = z.infer<typeof jobCardSchema>;
+export type JobEditInput = z.infer<typeof jobEditSchema>;
 
 export const jobReceiptSchema = z.object({
   receiptDate: businessDate,
-  /** photo of the returned goods — easy reference at checking time */
-  imagePath: z.string().max(300).nullish(),
+  /** photo of the returned goods — REQUIRED: every model's return is photographed */
+  imagePath: z.string().trim().min(1, 'Take a photo of the returned goods').max(300),
   notes: optionalText(500),
   lines: z
     .array(
@@ -252,12 +299,15 @@ export const checkIssueSchema = z.object({
 });
 export type CheckIssueInput = z.infer<typeof checkIssueSchema>;
 
+/**
+ * Check result v2 (ADR-034): passed + ONE rejected box broken down by reason, where
+ * 'missing' is a reason like any other for the user. (Internally missing pieces are a
+ * terminal write-off — they do not physically exist to sit in REJECTED stock.)
+ */
 export const checkResultSchema = z
   .object({
     resultDate: businessDate,
     qtyPassed: z.number().int().min(0).max(10_000_000).default(0),
-    qtyRejected: z.number().int().min(0).max(10_000_000).default(0),
-    qtyMissing: z.number().int().min(0).max(10_000_000).default(0),
     rejections: z
       .array(
         z.object({
@@ -268,23 +318,26 @@ export const checkResultSchema = z
       .default([]),
     notes: optionalText(300),
   })
-  .refine((r) => r.qtyPassed + r.qtyRejected + r.qtyMissing > 0, {
+  .refine((r) => r.qtyPassed + r.rejections.reduce((s, x) => s + x.qtyPcs, 0) > 0, {
     message: 'Enter at least one quantity',
     path: ['qtyPassed'],
-  })
-  .refine((r) => r.rejections.reduce((s, x) => s + x.qtyPcs, 0) === r.qtyRejected, {
-    message: 'Rejection reasons must add up to the rejected quantity',
-    path: ['rejections'],
   });
 export type CheckResultInput = z.infer<typeof checkResultSchema>;
 
+/**
+ * Packing v2 (ADR-035): packing is allotted FROM the checking page, directed at a
+ * specific source lot — a checker's passed goods, an opening lot, or a bundle.
+ * kind 'bundle' = keep these checked pieces aside, labeled, to pack later.
+ */
 export const packIssueSchema = z.object({
   issueDate: businessDate,
   staffId: id,
-  modelId: id,
-  colorId: id,
-  sizeId: id,
+  lotType: z.enum(PACKING_POOL_LOT_TYPES),
+  lotId: id,
   qtyPcs: z.number().int().positive().max(10_000_000),
+  kind: z.enum(PACK_KINDS).default('pack'),
+  /** bundle label, e.g. "Diwali order reserve" — how the owner refers to it later */
+  label: optionalText(100),
   notes: optionalText(300),
 });
 export type PackIssueInput = z.infer<typeof packIssueSchema>;
@@ -321,18 +374,24 @@ export const openingBalanceSchema = z
   .object({
     balanceDate: businessDate,
     stage: z.enum(STAGES),
-    /** not applicable to RAW — raw cloth has no model until it is cut */
-    modelId: id.nullish(),
+    /**
+     * The code for stitched stages, typed like at cutting (product identities are
+     * created from codes, not a master). Not applicable to RAW — cloth has no code
+     * until it is cut.
+     */
+    modelCode: productCode.nullish(),
     colorId: id,
     sizeId: id.nullish(),
     contractorId: id.nullish(),
-    /** cm for RAW, pieces for all other stages */
-    qty: z.number().int().positive().max(100_000_000),
+    /** length in hundredths of an inch for RAW (entered as yards), pieces otherwise */
+    qty: z.number().int().positive().max(400_000_000),
+    /** cloth width for RAW lots, hundredths of an inch */
+    widthInchC: z.number().int().positive().max(20_000).nullish(),
     note: optionalText(300),
   })
-  .refine((b) => (b.stage === 'RAW' ? true : b.modelId != null), {
-    message: 'Model is required for this stage',
-    path: ['modelId'],
+  .refine((b) => (b.stage === 'RAW' ? true : b.modelCode != null && b.modelCode !== ''), {
+    message: 'The code number is required for this stage',
+    path: ['modelCode'],
   })
   .refine((b) => (b.stage === 'RAW' ? true : b.sizeId != null), {
     message: 'Size is required for this stage',

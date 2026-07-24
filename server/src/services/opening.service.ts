@@ -4,24 +4,25 @@ import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
 import { LedgerError, postMovements } from './ledger.service';
+import type { Office } from './offices.service';
+import { modelIdForCode } from './products.service';
 import { assertActive, rawClothModelId, type ServiceResult } from './purchases.service';
 
 /**
  * Opening balances bring the paper-register stock into the system at go-live
  * (admin-only). Each creates its own ledger lot (lot_type 'opening') at the chosen
- * stage; qty is cm for RAW, pieces elsewhere.
+ * stage IN THE ACTIVE OFFICE; qty is hundredths of an inch of length for RAW (entered
+ * as yards, with the cloth width), pieces elsewhere. Stitched stages take the CODE as
+ * typed at cutting — the product identity is created from it (ADR-030).
  */
 export function createOpeningBalance(
   db: Db,
+  office: Office,
   input: OpeningBalanceInput,
   userId: number,
   ip: string | null,
 ): ServiceResult<{ id: number; docNo: string }> {
-  // opening balances are an ENTRY point — masters must exist and be active.
-  // RAW carries no model (decided at cutting) — the sentinel fills the NOT NULL column.
-  const modelId = input.stage === 'RAW' ? rawClothModelId(db) : (input.modelId as number);
   const checks: Array<[string, number | null | undefined, string]> = [
-    ['models', input.stage === 'RAW' ? null : input.modelId, 'Model'],
     ['colors', input.colorId, 'Color'],
     ['sizes', input.stage === 'RAW' ? null : input.sizeId, 'Size'],
     ['contractors', input.stage === 'WIP' ? input.contractorId : null, 'Contractor'],
@@ -31,19 +32,28 @@ export function createOpeningBalance(
     const err = assertActive(db, table, id, label);
     if (err) return { ok: false, code: 400, error: err };
   }
+  if (input.stage === 'RAW' && !input.widthInchC) {
+    return { ok: false, code: 400, error: 'Enter the cloth width for a raw-cloth opening lot.' };
+  }
 
   let id = 0;
   let docNo = '';
   const tx = db.transaction(() => {
-    docNo = nextDocNo(db, 'opening');
+    // RAW carries no code (given at cutting); other stages create/reuse the typed code
+    const modelId =
+      input.stage === 'RAW'
+        ? rawClothModelId(db)
+        : modelIdForCode(db, input.modelCode as string, userId);
+    docNo = nextDocNo(db, 'opening', office);
     const info = db
       .prepare(
-        `INSERT INTO opening_balances (doc_no, balance_date, stage, model_id, color_id,
-          size_id, contractor_id, qty, note, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO opening_balances (doc_no, office_id, balance_date, stage, model_id, color_id,
+          size_id, contractor_id, qty, width_inch_c, note, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         docNo,
+        office.id,
         input.balanceDate,
         input.stage,
         modelId,
@@ -51,6 +61,7 @@ export function createOpeningBalance(
         input.stage === 'RAW' ? null : input.sizeId,
         input.stage === 'WIP' ? input.contractorId : null,
         input.qty,
+        input.stage === 'RAW' ? (input.widthInchC ?? null) : null,
         input.note,
         userId,
       );
@@ -60,6 +71,7 @@ export function createOpeningBalance(
       [
         {
           stage: input.stage,
+          officeId: office.id,
           modelId,
           colorId: input.colorId,
           sizeId: input.stage === 'RAW' ? null : (input.sizeId as number),
@@ -78,7 +90,7 @@ export function createOpeningBalance(
       action: 'create',
       entityType: 'opening_balance',
       entityId: id,
-      new: { docNo, ...input },
+      new: { docNo, officeId: office.id, ...input },
       ip,
     });
   });
@@ -88,14 +100,15 @@ export function createOpeningBalance(
 
 export function voidOpeningBalance(
   db: Db,
+  office: Office,
   id: number,
   reason: string,
   userId: number,
   ip: string | null,
 ): ServiceResult {
   const existing = db
-    .prepare('SELECT * FROM opening_balances WHERE id = ?')
-    .get(id) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM opening_balances WHERE id = ? AND office_id = ?')
+    .get(id, office.id) as Record<string, unknown> | undefined;
   if (!existing) return { ok: false, code: 404, error: 'Opening balance not found.' };
   if (existing.voided_at) return { ok: false, code: 409, error: 'Already voided.' };
 
@@ -106,6 +119,7 @@ export function voidOpeningBalance(
         [
           {
             stage: existing.stage as never,
+            officeId: office.id,
             modelId: existing.model_id as number,
             colorId: existing.color_id as number,
             sizeId: existing.size_id as number | null,
@@ -145,7 +159,7 @@ export function voidOpeningBalance(
   return { ok: true, id };
 }
 
-export function listOpeningBalances(db: Db): Array<Record<string, unknown>> {
+export function listOpeningBalances(db: Db, officeId: number): Array<Record<string, unknown>> {
   return db
     .prepare(
       `SELECT o.id, o.doc_no AS docNo, o.balance_date AS balanceDate, o.stage,
@@ -153,13 +167,14 @@ export function listOpeningBalances(db: Db): Array<Record<string, unknown>> {
               o.color_id AS colorId, c.name AS colorName,
               o.size_id AS sizeId, s.code AS sizeCode,
               o.contractor_id AS contractorId, ct.name AS contractorName,
-              o.qty, o.note, o.voided_at AS voidedAt
+              o.qty, o.width_inch_c AS widthInchC, o.note, o.voided_at AS voidedAt
        FROM opening_balances o
        JOIN models m ON m.id = o.model_id
        JOIN colors c ON c.id = o.color_id
        LEFT JOIN sizes s ON s.id = o.size_id
        LEFT JOIN contractors ct ON ct.id = o.contractor_id
+       WHERE o.office_id = ?
        ORDER BY o.id DESC`,
     )
-    .all() as Array<Record<string, unknown>>;
+    .all(officeId) as Array<Record<string, unknown>>;
 }

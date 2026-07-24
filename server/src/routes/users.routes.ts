@@ -8,20 +8,28 @@ import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { ROLES } from '@shared';
 
-const createSchema = z.object({
-  username: z
-    .string()
-    .min(3)
-    .max(50)
-    .regex(/^[a-zA-Z0-9._-]+$/, 'Letters, numbers, dot, dash and underscore only'),
-  displayName: z.string().min(1).max(100),
-  role: z.enum(ROLES),
-  password: z.string().min(8).max(200),
-});
+const createSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3)
+      .max(50)
+      .regex(/^[a-zA-Z0-9._-]+$/, 'Letters, numbers, dot, dash and underscore only'),
+    displayName: z.string().min(1).max(100),
+    role: z.enum(ROLES),
+    /** operators belong to ONE office (ADR-028); admin/owner see all (null) */
+    officeId: z.number().int().positive().nullish(),
+    password: z.string().min(8).max(200),
+  })
+  .refine((u) => u.role !== 'operator' || u.officeId != null, {
+    message: 'Pick the office this operator works in',
+    path: ['officeId'],
+  });
 
 const updateSchema = z.object({
   displayName: z.string().min(1).max(100).optional(),
   role: z.enum(ROLES).optional(),
+  officeId: z.number().int().positive().nullish(),
 });
 
 const resetPasswordSchema = z.object({
@@ -33,6 +41,8 @@ type UserListRow = {
   username: string;
   display_name: string;
   role: string;
+  office_id: number | null;
+  office_name: string | null;
   is_active: number;
   must_change_password: number;
   created_at: string;
@@ -46,8 +56,9 @@ export function usersRoutes(): Router {
   router.get('/', (_req, res) => {
     const rows = getDb()
       .prepare(
-        `SELECT id, username, display_name, role, is_active, must_change_password, created_at
-         FROM users ORDER BY username`,
+        `SELECT u.id, u.username, u.display_name, u.role, u.office_id, o.name AS office_name,
+                u.is_active, u.must_change_password, u.created_at
+         FROM users u LEFT JOIN offices o ON o.id = u.office_id ORDER BY u.username`,
       )
       .all() as UserListRow[];
     res.json({
@@ -56,6 +67,8 @@ export function usersRoutes(): Router {
         username: r.username,
         displayName: r.display_name,
         role: r.role,
+        officeId: r.office_id,
+        officeName: r.office_name,
         isActive: !!r.is_active,
         mustChangePassword: !!r.must_change_password,
         createdAt: r.created_at,
@@ -77,17 +90,24 @@ export function usersRoutes(): Router {
     const tx = db.transaction(() => {
       const info = db
         .prepare(
-          `INSERT INTO users (username, password_hash, display_name, role, must_change_password, created_by)
-           VALUES (?, ?, ?, ?, 1, ?)`,
+          `INSERT INTO users (username, password_hash, display_name, role, office_id, must_change_password, created_by)
+           VALUES (?, ?, ?, ?, ?, 1, ?)`,
         )
-        .run(body.username, hashPassword(body.password), body.displayName, body.role, req.user!.id);
+        .run(
+          body.username,
+          hashPassword(body.password),
+          body.displayName,
+          body.role,
+          body.role === 'operator' ? body.officeId : null,
+          req.user!.id,
+        );
       id = Number(info.lastInsertRowid);
       audit(getDb(), {
         userId: req.user!.id,
         action: 'create',
         entityType: 'user',
         entityId: id,
-        new: { username: body.username, displayName: body.displayName, role: body.role },
+        new: { username: body.username, displayName: body.displayName, role: body.role, officeId: body.officeId },
         ip: req.ip,
       });
     });
@@ -100,16 +120,26 @@ export function usersRoutes(): Router {
     const id = Number(req.params.id);
     const body = req.body as z.infer<typeof updateSchema>;
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
-      | { id: number; display_name: string; role: string }
+      | { id: number; display_name: string; role: string; office_id: number | null }
       | undefined;
     if (!user) {
       res.status(404).json({ error: 'User not found.' });
       return;
     }
+    const nextRole = body.role ?? user.role;
+    const nextOffice =
+      nextRole === 'operator'
+        ? (body.officeId !== undefined ? body.officeId : user.office_id)
+        : null;
+    if (nextRole === 'operator' && nextOffice == null) {
+      res.status(400).json({ error: 'Pick the office this operator works in.' });
+      return;
+    }
     const tx = db.transaction(() => {
-      db.prepare('UPDATE users SET display_name = ?, role = ? WHERE id = ?').run(
+      db.prepare('UPDATE users SET display_name = ?, role = ?, office_id = ? WHERE id = ?').run(
         body.displayName ?? user.display_name,
-        body.role ?? user.role,
+        nextRole,
+        nextOffice,
         id,
       );
       audit(db, {
@@ -117,17 +147,20 @@ export function usersRoutes(): Router {
         action: 'update',
         entityType: 'user',
         entityId: id,
-        old: { displayName: user.display_name, role: user.role },
+        old: { displayName: user.display_name, role: user.role, officeId: user.office_id },
         new: {
           displayName: body.displayName ?? user.display_name,
-          role: body.role ?? user.role,
+          role: nextRole,
+          officeId: nextOffice,
         },
         ip: req.ip,
       });
     });
     tx();
-    // Role changes take effect immediately on other devices.
-    if (body.role && body.role !== user.role) revokeAllSessions(db, id);
+    // Role or office changes take effect immediately on other devices.
+    if ((body.role && body.role !== user.role) || nextOffice !== user.office_id) {
+      revokeAllSessions(db, id);
+    }
     res.json({ ok: true });
   });
 

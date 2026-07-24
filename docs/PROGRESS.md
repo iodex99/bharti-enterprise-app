@@ -79,38 +79,57 @@
 
 ## Current state
 
-**THE PRODUCT IS AN ANDROID APP** (ADR-021…026). The whole system runs on one device with
-no server and no network: the real routes/services are compiled into a Web Worker
-(`vite build --mode app`) where `express`, `multer`, `cookie-parser`, `better-sqlite3` and
-`node:fs/path/crypto/url` resolve to shims in `client/src/local/shims/`; storage is
-SQLite-WASM on the OPFS SAH-pool VFS; photos live in the database (migration 003). The
-page reaches the worker by patching `fetch` for `/api` and `/uploads`, so no page, hook or
-query changed. Device operations (update/backups/restore/demo) are served on the UI thread
-by `local/native-ops.ts` under the SAME urls as `routes/system.node.routes.ts`.
-Updates: `android-release.yml` publishes `web-bundle-v*.zip` + APK + `app-manifest.json`;
-the app polls, verifies sha256 + bundle completeness, swaps the bundle and restarts —
-data lives in the origin's storage and is untouched; two failed starts auto-roll-back.
-The Node/Express host is unchanged and still used for dev, the test suites and optionally
-a PC deployment.
+**THE PRODUCT IS THE CENTRAL-PC WEB APP AGAIN, NOW MULTI-OFFICE** (ADR-027…036,
+2026-07-24). A central office computer runs the server; operators enter from browsers.
+`release.yml` publishes PC zips (1.0.x) on every push; `android-release.yml` is dormant
+(manual dispatch only) and the Android/local runtime stays in the tree unused.
 
-ALL PHASES COMPLETE (0–11) + post-ship additions. 330 unit/integration + 58 E2E green
-(desktop + mobile + the new `app` project);
-update drill 13/13. IN-APP DEMO MODE: Admin → System Health buttons switch the live app
-onto a separate demo database (data-demo sibling; sessions/uploads/backups follow the
-active DB via db/dataDirs.ts activeDataDir(); flag file survives restarts). Remote
-access documented for NO-DOMAIN reality: Tailscale + tailscale serve (https) primary.
-Discrepancy review workflow live: /discrepancies page (all roles view, admin resolves
-with a note — acknowledgement-only per ADR-013); dashboard alerts + KPI tile link there.
-MIGRATION/COMPLETE BACKUP live (ADR-014/015): one-zip snapshot (DB+photos+manifest) via
-snapshot.service.ts; safe in-app restore = synchronous connection-swap + auto-rollback +
-session clear; first-run setup wizard (/setup) for a new PC; Backups page has download /
-send-to-Drive / restore. adm-zip@0.6.0 dependency added.
-WORKFLOW CORRECTIONS (migration 002, ADR-016…020): model decided at CUTTING (RAW-CLOTH
-sentinel model id 1000000, hidden everywhere); cutting geometry in inches × width-count →
-computed consumption (shared clothRequiredCm) with live remaining; plan edit/delete while
-planned; DIRECTED checking from per-receipt "pending for checking" lots with explicit
-contractor↔checker mapping + receipt photos; staff roles removed (any staff checks/packs);
-register ink colors in UI (blue=out, red=in).
+**v2 workflow (what the app does now):**
+- **Multi-office (ADR-028)**: one database, `office_id` on every document/ledger row.
+  Office 1 'HO' from the migration keeps plain doc numbers; later offices prefix
+  (`BR-RM-0001`; counters keyed `family@officeId`). Operators pinned to one office
+  (users.office_id, sessions revoked on change); admin/owner pick per session via
+  X-Office-Id header (client localStorage 'bharti.office'; switching reloads). Masters/
+  staff/contractors/vendors/users shared. Admin configures offices at /admin/offices.
+- **Yards + width (ADR-029)**: integer hundredths-of-an-inch ("inch_c", 1 yd = 3600).
+  Purchases take length AND width, rate per yard; cutting consumption =
+  `ceil(pcs ÷ widthCount) × clothPerPcInchC` (shared clothRequiredInchC). Legacy cm
+  columns still written, never read.
+- **Codes at cutting (ADR-030)**: no Models master. Code typed per cutting line + photo →
+  find-or-create in the hidden models table (ids > 1000000, after the RAW-CLOTH
+  sentinel); "size-code" label `CODE-SIZE` everywhere; pickers use GET /api/products.
+- **Cutting is final (ADR-031)**: creation consumes RAW and creates CUT in one tx (no
+  actuals, no variance); edit/delete while nothing is issued downstream (reverse +
+  re-apply, doc number kept; delete = void with standard reason).
+- **Jobs (ADR-032/033)**: receipts REQUIRE a photo; one issue → one card per code+color
+  (`{cards:[…]}` response); per-dozen cost set at issue; receipt-less cards editable/
+  deletable.
+- **Checking (ADR-034)**: single "rejected pieces" + reason dropdown; 'missing' reason →
+  terminal write-off + discrepancy (never REJECTED stock); others → REJECTED.
+- **Packing from checking (ADR-035)**: no packing page. Pack button on the checked row
+  (POST /api/checking/:id/pack), checker = default packer; bundles = pack_issues
+  kind='bundle' with a label, packed later by anyone; allocations carried forward so
+  trace reaches the vendor.
+- **Pending dues (ADR-036)**: /dues page + GET /api/contractors/dues + report.
+
+Tests: 27 files / 329 unit+integration green; E2E rewritten for v2 (incl. offices.spec,
+photo-required receipts, pack-from-checking + bundle flow). Demo data (populateDemo) is
+v2: HO + BR offices, branch operator `branch-op`/Branch@123, codes 315/410/…, combined
+job issue → 2 cards, a bundle, missing-as-reason.
+
+Still live from earlier phases: in-app demo mode, complete backup/restore + setup wizard,
+discrepancies review, reconciliation self-checks, PWA, dashboard.
+
+**v2 quirks discovered (don't relearn these):**
+- Code-created models get ids > 1000000 (the RAW-CLOTH sentinel holds 1000000) — tests
+  must look model ids up by code, never hardcode.
+- SQLite has no CEILING(): integer ceil is `((a + b - 1) / b)` (reports SQL).
+- SQLite can't ADD COLUMN with REFERENCES + non-NULL default — office_id columns are
+  plain INTEGER validated by the office middleware.
+- check_result_rejections has an immutable CHECK that does NOT allow 'missing' — the
+  service splits missing into qty_missing before writing rejections rows.
+- pack_allocations' CHECK disallows lot_type 'pack_issue' — bundle sources carry the
+  bundle's ORIGINAL allocations forward instead.
 
 **Android quirks discovered (don't relearn these):**
 - Capacitor finds plugins in the package.json NEXT TO capacitor.config.ts — the
@@ -140,15 +159,27 @@ register ink colors in UI (blue=out, red=in).
 
 ## Next steps
 
-1. **Create the Android signing keystore and add the four repository secrets**
-   (docs/DEPLOYMENT.md → Releasing). Until then CI builds a debug-signed APK, which
-   installs fine but CANNOT be upgraded in place by a later release.
-2. Install the APK on the client's device and walk through go-live: masters, opening
-   balances, a backup to Google Drive, and one update drill on the real device.
+1. Office go-live on the central PC (docs/DEPLOYMENT.md): install service + tunnel, run
+   the first-run wizard, create the second office + operator logins, enter opening
+   balances per office.
 2. Roadmap candidates when the owner asks: docs/ROADMAP.md (sales module, QR labels,
    WhatsApp alerts, low-stock thresholds, rework flow…).
+3. If the client ever wants the Android app back: android-release.yml still works via
+   manual dispatch (signing secrets already configured; keystore at the developer's
+   `bharti-signing` folder).
 
 ## Session notes
+
+- 2026-07-24 (PC + multi-office pivot, workflow v2): the client reverted to the central-PC
+  setup and asked for 14 workflow changes — all shipped (ADR-027…036, see CHANGELOG).
+  Implementation notes for the future: editCuttingPlan re-checks raw availability INSIDE
+  the tx after reversing (same-lot edits get their own cloth back first); createJobIssue
+  groups lines by (modelId,colorId) and returns `{cards:[…]}` — client shows one
+  confirmation listing all cards; packHereSchema = packIssueSchema minus lot fields (the
+  checking row IS the lot); recordCheckResult splits 'missing' rejections into qty_missing
+  BEFORE writing rejections rows (DB CHECK forbids 'missing' there); listPendingDues joins
+  last payment date; offices>1 doc numbers embed the office code so the global UNIQUE on
+  doc_no holds; resolveOffice must run AFTER attachUser (it reads req.user).
 
 - 2026-07-23 (Android pivot): see ADR-021…026. Implementation notes for the future: the
   express shim implements exactly the surface the routes use (verified by

@@ -12,6 +12,7 @@ const dataDir = path.resolve(process.env.DATA_DIR ?? './.e2e-data');
 for (let attempt = 0; ; attempt++) {
   try {
     fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(`${dataDir}-demo`, { recursive: true, force: true }); // stale demo db from a previous run
     break;
   } catch (err) {
     if (attempt >= 4) throw err;

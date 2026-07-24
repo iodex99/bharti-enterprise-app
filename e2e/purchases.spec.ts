@@ -17,7 +17,7 @@ async function openNav(page: Page) {
   if (await burger.isVisible()) await burger.click();
 }
 
-test('operator records a purchase and sees it in raw stock', async ({ page }) => {
+test('operator records a purchase (yards + width) and sees it in raw stock', async ({ page }) => {
   await signIn(page, 'operator', 'Operator@123');
   await openNav(page);
   await page.getByRole('link', { name: 'Purchases' }).click();
@@ -26,14 +26,16 @@ test('operator records a purchase and sees it in raw stock', async ({ page }) =>
   await page.getByRole('button', { name: '+ New purchase' }).click();
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ label: 'Sharma Textiles' });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ label: 'Maroon' });
-  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('125.5');
-  await page.getByRole('dialog').getByLabel('Rate per meter').fill('45.50');
+  await page.getByRole('dialog').getByLabel('Length (yards)').fill('125.5');
+  await page.getByRole('dialog').getByLabel('Width (inches)').fill('44');
+  await page.getByRole('dialog').getByLabel('Rate per yard').fill('45.50');
   await expect(page.locator('form').getByText('₹5,710.25')).toBeVisible(); // auto total preview
   await page.getByRole('button', { name: 'Save purchase' }).click();
 
-  // row lands in the table with batch number and full remaining qty
+  // row lands in the table with batch number, yards and the cloth width
   await expect(page.getByRole('cell', { name: /RM-\d+/ }).first()).toBeVisible();
-  await expect(page.getByRole('cell', { name: '125.5 m' }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: '125.5 yd' }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: '44"' }).first()).toBeVisible();
 
   // raw stock shows the lot with the vendor
   await openNav(page);
@@ -49,8 +51,9 @@ test('purchase validation: received date before purchase date is rejected', asyn
   await page.getByRole('dialog').getByLabel('Date received').fill('2026-07-01');
   await page.getByRole('dialog').getByLabel('Vendor').selectOption({ index: 1 });
   await page.getByRole('dialog').getByLabel('Color').selectOption({ index: 1 });
-  await page.getByRole('dialog').getByLabel('Quantity (meters)').fill('10');
-  await page.getByRole('dialog').getByLabel('Rate per meter').fill('40');
+  await page.getByRole('dialog').getByLabel('Length (yards)').fill('10');
+  await page.getByRole('dialog').getByLabel('Width (inches)').fill('44');
+  await page.getByRole('dialog').getByLabel('Rate per yard').fill('40');
   await page.getByRole('button', { name: 'Save purchase' }).click();
   await expect(page.getByText(/received date cannot be before/i)).toBeVisible();
 });

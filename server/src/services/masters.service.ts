@@ -2,7 +2,6 @@ import type { ZodType } from 'zod';
 import {
   colorSchema,
   contractorSchema,
-  modelSchema,
   RAW_CLOTH_MODEL_CODE,
   sizeSchema,
   staffSchema,
@@ -19,7 +18,7 @@ import { audit } from './audit.service';
  * when nothing references the row.
  */
 
-export type MasterKey = 'models' | 'colors' | 'sizes' | 'vendors' | 'contractors' | 'staff';
+export type MasterKey = 'colors' | 'sizes' | 'vendors' | 'contractors' | 'staff';
 
 type FieldMap = Record<string, string>; // payload key -> column
 
@@ -36,20 +35,7 @@ export type MasterConfig = {
 };
 
 export const MASTERS: Record<MasterKey, MasterConfig> = {
-  models: {
-    table: 'models',
-    entityType: 'model',
-    schema: modelSchema,
-    fields: { code: 'code', name: 'name', description: 'description', imagePath: 'image_path' },
-    uniqueBy: { payloadKey: 'code', column: 'code', label: 'Model code' },
-    searchColumns: ['code', 'name', 'description'],
-    orderBy: 'code',
-    refChecks: [
-      { table: 'purchases', column: 'model_id', label: 'purchases' },
-      { table: 'job_cards', column: 'model_id', label: 'job cards' },
-      { table: 'stock_ledger', column: 'model_id', label: 'stock movements' },
-    ],
-  },
+  // models are NOT a master any more (ADR-030): codes are typed at cutting
   colors: {
     table: 'colors',
     entityType: 'color',

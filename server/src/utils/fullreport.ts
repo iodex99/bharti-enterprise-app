@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { formatBusinessDate, formatCm, formatPaise, formatPieces } from '@shared';
+import { formatBusinessDate, formatLen, formatPaise, formatPieces } from '@shared';
 import type { Db } from '../db/connection';
 import { REPORTS, type ReportFilters } from '../services/reports.service';
 import { dashboardData } from '../services/dashboard.service';
@@ -29,7 +29,7 @@ export function buildFullWorkbook(db: Db, f: ReportFilters): ExcelJS.Workbook {
   workbook.creator = 'Bharti Enterprises System';
 
   // executive summary sheet
-  const dash = dashboardData(db) as {
+  const dash = dashboardData(db, f.officeId) as {
     kpis: Record<string, number>;
   };
   const summary = workbook.addWorksheet('Summary');
@@ -43,7 +43,7 @@ export function buildFullWorkbook(db: Db, f: ReportFilters): ExcelJS.Workbook {
   };
   summary.addRow([]);
   const kpiRows: Array<[string, string]> = [
-    ['Raw cloth in stock', formatCm(dash.kpis.rawCm!)],
+    ['Raw cloth in stock', formatLen(dash.kpis.rawLen!)],
     ['Cut pieces in stock', formatPieces(dash.kpis.cutPcs!)],
     ['With contractors (WIP)', formatPieces(dash.kpis.wipPcs!)],
     ['In checking', formatPieces(dash.kpis.checkingPcs!)],
@@ -107,7 +107,7 @@ function barChart(
 }
 
 export function buildFullReportHtml(db: Db, f: ReportFilters): string {
-  const dash = dashboardData(db) as {
+  const dash = dashboardData(db, f.officeId) as {
     kpis: Record<string, number>;
     contractorBars: Array<{ name: string; receivedPcs: number }>;
     rejectionReasons: Array<{ reason: string; qtyPcs: number }>;
@@ -117,7 +117,7 @@ export function buildFullReportHtml(db: Db, f: ReportFilters): string {
   const generated = formatBusinessDate(new Date().toISOString().slice(0, 10));
 
   const kpis: Array<[string, string]> = [
-    ['Raw cloth', formatCm(dash.kpis.rawCm!)],
+    ['Raw cloth', formatLen(dash.kpis.rawLen!)],
     ['Cut pieces', formatPieces(dash.kpis.cutPcs!)],
     ['With contractors', formatPieces(dash.kpis.wipPcs!)],
     ['In checking', formatPieces(dash.kpis.checkingPcs!)],

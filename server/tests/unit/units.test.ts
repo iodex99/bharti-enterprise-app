@@ -1,20 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-  clothRequiredCm,
-  cmToMeters,
+  clothRequiredInchC,
   dozensToPieces,
   dzPcToPieces,
-  formatCm,
   formatInchC,
+  formatLen,
   formatPaise,
   formatPieces,
   inchCToInches,
+  inchCToYards,
   inchesToInchC,
-  metersToCm,
   paiseToRupees,
   piecesToDzPc,
   rupeesToPaise,
+  suggestedWidthCount,
   variancePct,
+  yardsToInchC,
 } from '@shared';
 
 describe('pieces/dozens', () => {
@@ -57,25 +58,26 @@ describe('pieces/dozens', () => {
   });
 });
 
-describe('meters/cm', () => {
-  it('converts meters to cm', () => {
-    expect(metersToCm(125.5)).toBe(12550);
-    expect(metersToCm(0.01)).toBe(1);
-    expect(metersToCm(1000)).toBe(100000);
+describe('yards / hundredths of an inch', () => {
+  it('converts yards to inch_c exactly (2dp yards always fit integers)', () => {
+    expect(yardsToInchC(125.5)).toBe(451800);
+    expect(yardsToInchC(0.01)).toBe(36); // one hundredth of a yard = 0.36" = 36 inch_c
+    expect(yardsToInchC(1)).toBe(3600);
+    expect(yardsToInchC(1.25)).toBe(4500);
   });
 
-  it('rejects sub-centimeter lengths', () => {
-    expect(() => metersToCm(0.005)).toThrow(/whole number/);
+  it('rejects lengths finer than the unit can hold', () => {
+    expect(() => yardsToInchC(0.001)).toThrow(/whole number/);
   });
 
   it('round-trips', () => {
-    expect(cmToMeters(metersToCm(37.25))).toBe(37.25);
+    expect(inchCToYards(yardsToInchC(37.25))).toBe(37.25);
   });
 
-  it('formats cm as meters', () => {
-    expect(formatCm(12550)).toBe('125.5 m');
-    expect(formatCm(100)).toBe('1 m');
-    expect(formatCm(12345)).toBe('123.45 m');
+  it('formats inch_c as yards', () => {
+    expect(formatLen(451800)).toBe('125.5 yd');
+    expect(formatLen(3600)).toBe('1 yd');
+    expect(formatLen(4500)).toBe('1.25 yd');
   });
 });
 
@@ -137,20 +139,26 @@ describe('cutting geometry (inches + width count)', () => {
     expect(formatInchC(1050)).toBe('10.5"');
   });
 
-  it('computes cloth consumption: strips of the width, rounded up', () => {
-    // 120 pcs, 10" each, 3 across → 40 strips × 10" = 400" = exactly 1016 cm
-    expect(clothRequiredCm(120, 1000, 3)).toBe(1016);
+  it('computes cloth consumption: strips of the width, pure integers, no rounding loss', () => {
+    // 120 pcs, 10" each, 3 across → 40 strips × 1000 = 40000 inch_c (≈11.11 yd)
+    expect(clothRequiredInchC(120, 1000, 3)).toBe(40000);
     // partial strip still consumes a full strip: 121 pcs → 41 strips
-    expect(clothRequiredCm(121, 1000, 3)).toBe(Math.ceil((41 * 1000 * 254) / 10000));
+    expect(clothRequiredInchC(121, 1000, 3)).toBe(41000);
     // width 1 = every piece is its own strip
-    expect(clothRequiredCm(10, 1200, 1)).toBe(Math.ceil((10 * 1200 * 254) / 10000));
-    // fractional cm rounds UP (cloth cut is cloth gone): 180 pcs, 9" ×3 → 1371.6 → 1372
-    expect(clothRequiredCm(180, 900, 3)).toBe(1372);
+    expect(clothRequiredInchC(10, 1200, 1)).toBe(12000);
+    // 180 pcs, 9" × 3 across → 60 strips × 900 = 54000 (exactly 15 yd — integers all the way)
+    expect(clothRequiredInchC(180, 900, 3)).toBe(54000);
   });
 
   it('returns 0 for empty/invalid rather than negative or NaN', () => {
-    expect(clothRequiredCm(0, 1000, 3)).toBe(0);
-    expect(clothRequiredCm(10, 0, 3)).toBe(0);
-    expect(clothRequiredCm(10, 1000, 0)).toBe(0);
+    expect(clothRequiredInchC(0, 1000, 3)).toBe(0);
+    expect(clothRequiredInchC(10, 0, 3)).toBe(0);
+    expect(clothRequiredInchC(10, 1000, 0)).toBe(0);
+  });
+
+  it('suggests how many pieces fit across the cloth width', () => {
+    expect(suggestedWidthCount(4400, 1000)).toBe(4); // 44" cloth, 10" pieces
+    expect(suggestedWidthCount(4400, 800)).toBe(5);
+    expect(suggestedWidthCount(0, 800)).toBe(0);
   });
 });

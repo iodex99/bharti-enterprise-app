@@ -59,17 +59,34 @@ export type JobDiscrepancyReason = (typeof JOB_DISCREPANCY_REASONS)[number];
 export const CHECK_STATUS = ['open', 'completed'] as const;
 export type CheckStatus = (typeof CHECK_STATUS)[number];
 
+/**
+ * Reasons offered in the single "Rejected pieces" dropdown at checking. 'missing' is one
+ * of them for the user, but internally missing pieces are a terminal write-off (they do
+ * not exist to sit in REJECTED stock) — the service splits them out (ADR-034).
+ */
 export const CHECK_REJECTION_REASONS = [
   'stitching_issue',
   'elastic_issue',
   'color_defect',
   'damage',
+  'missing',
   'other',
 ] as const;
 export type CheckRejectionReason = (typeof CHECK_REJECTION_REASONS)[number];
 
 export const PACK_STATUS = ['open', 'completed'] as const;
 export type PackStatus = (typeof PACK_STATUS)[number];
+
+/**
+ * A pack issue is either normal packing work or a BUNDLE — checked pieces the owner
+ * asked to be kept aside, labeled, to be packed later (ADR-035).
+ */
+export const PACK_KINDS = ['pack', 'bundle'] as const;
+export type PackKind = (typeof PACK_KINDS)[number];
+
+/** Sources packing can be allotted from: a checker's passed pool, an opening lot, or a bundle. */
+export const PACKING_POOL_LOT_TYPES = ['check_issue', 'opening', 'pack_issue'] as const;
+export type PackingPoolLotType = (typeof PACKING_POOL_LOT_TYPES)[number];
 
 export const PACK_SHORT_REASONS = ['damage', 'missing', 'other'] as const;
 export type PackShortReason = (typeof PACK_SHORT_REASONS)[number];

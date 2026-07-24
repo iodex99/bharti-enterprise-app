@@ -4,14 +4,19 @@ import { contractorAnalytics } from './contractors.service';
 /**
  * Report registry (spec: ~15 reports, all filterable, all Excel-exportable).
  * Each report declares typed columns shared by the on-screen table AND the xlsx
- * exporter, so screen and export can never drift.
+ * exporter, so screen and export can never drift. Every report is OFFICE-SCOPED
+ * (ADR-028): filters.officeId is set by the route from the request's office.
+ * v2: models are "size-codes" typed at cutting; cloth is measured in yards ('len'
+ * columns hold hundredths of an inch); the cutting-variance report became the
+ * cutting register (the plan IS the cutting, ADR-031).
  */
 
-export type ColumnType = 'text' | 'date' | 'pcs' | 'cm' | 'paise' | 'pct' | 'int';
+export type ColumnType = 'text' | 'date' | 'pcs' | 'len' | 'paise' | 'pct' | 'int';
 
 export type ReportColumn = { key: string; header: string; type: ColumnType };
 
 export type ReportFilters = {
+  officeId: number;
   from?: string;
   to?: string;
   modelId?: number;
@@ -27,7 +32,7 @@ export type ReportDef = {
   title: string;
   group: 'Inventory' | 'Production' | 'Contractors' | 'Quality' | 'Losses' | 'Management';
   description: string;
-  filters: Array<keyof ReportFilters>;
+  filters: Array<Exclude<keyof ReportFilters, 'officeId'>>;
   columns: ReportColumn[];
   query: (db: Db, f: ReportFilters) => Array<Record<string, unknown>>;
 };
@@ -75,6 +80,12 @@ function dimClause(
   }
 }
 
+/** Every report starts with its root table pinned to the request's office. */
+function officeClause(f: ReportFilters, where: string[], params: unknown[], column: string): void {
+  where.push(`${column} = ?`);
+  params.push(f.officeId);
+}
+
 const w = (where: string[]) => (where.length ? `WHERE ${where.join(' AND ')}` : '');
 
 export const REPORTS: ReportDef[] = [
@@ -82,25 +93,28 @@ export const REPORTS: ReportDef[] = [
     key: 'raw-stock',
     title: 'Raw Material Stock',
     group: 'Inventory',
-    description: 'Cloth on hand per batch, with vendor (raw cloth has no model until cut)',
+    description: 'Cloth on hand per batch, with vendor and width (cloth has no code until cut)',
     filters: ['colorId', 'vendorId'],
     columns: [
       { key: 'batch', header: 'Batch', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'vendor', header: 'Vendor', type: 'text' },
       { key: 'receivedDate', header: 'Received', type: 'date' },
-      { key: 'qtyCm', header: 'Available', type: 'cm' },
+      { key: 'widthIn', header: 'Width (in)', type: 'int' },
+      { key: 'lenInchC', header: 'Available', type: 'len' },
     ],
     query: (db, f) => {
       const where: string[] = ["l.stage = 'RAW'"];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'l.office_id');
       dimClause(f, where, params, { color: 'l.color_id', vendor: 'p.vendor_id' });
       if (f.vendorId) where.push("l.lot_type = 'purchase'");
       return db
         .prepare(
           `SELECT COALESCE(p.doc_no, o.doc_no) AS batch, c.name AS color,
                   v.name AS vendor, COALESCE(p.received_date, o.balance_date) AS receivedDate,
-                  SUM(l.qty) AS qtyCm
+                  COALESCE(p.width_inch_c, o.width_inch_c) / 100 AS widthIn,
+                  SUM(l.qty) AS lenInchC
            FROM stock_ledger l
            JOIN colors c ON c.id = l.color_id
            LEFT JOIN purchases p ON l.lot_type = 'purchase' AND p.id = l.lot_id
@@ -120,7 +134,7 @@ export const REPORTS: ReportDef[] = [
     description: 'Cut pieces ready for contractors',
     filters: ['modelId', 'colorId', 'sizeId'],
     columns: [
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'size', header: 'Size', type: 'text' },
       { key: 'qtyPcs', header: 'Quantity', type: 'pcs' },
@@ -134,7 +148,7 @@ export const REPORTS: ReportDef[] = [
     description: 'Packed goods ready for sale',
     filters: ['modelId', 'colorId', 'sizeId'],
     columns: [
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'size', header: 'Size', type: 'text' },
       { key: 'qtyPcs', header: 'Quantity', type: 'pcs' },
@@ -149,15 +163,16 @@ export const REPORTS: ReportDef[] = [
     filters: ['modelId', 'colorId'],
     columns: [
       { key: 'stage', header: 'Stage', type: 'text' },
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'size', header: 'Size', type: 'text' },
-      { key: 'qty', header: 'Quantity (pcs / cm)', type: 'int' },
+      { key: 'qty', header: 'Quantity (pcs / length)', type: 'int' },
       { key: 'ageDays', header: 'Age (days)', type: 'int' },
     ],
     query: (db, f) => {
       const where: string[] = [];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'l.office_id');
       dimClause(f, where, params, { model: 'l.model_id', color: 'l.color_id' });
       return db
         .prepare(
@@ -176,39 +191,38 @@ export const REPORTS: ReportDef[] = [
     },
   },
   {
-    key: 'cutting-variance',
-    title: 'Expected vs Actual Cutting',
+    key: 'cutting-register',
+    title: 'Cutting Register',
     group: 'Production',
-    description: 'Every cutting line with its variance and reason',
+    description: 'Every cutting line: code, size, pieces and the cloth it consumed',
     filters: ['from', 'to', 'modelId', 'colorId', 'sizeId'],
     columns: [
       { key: 'batch', header: 'Batch', type: 'text' },
       { key: 'cutDate', header: 'Date', type: 'date' },
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'size', header: 'Size', type: 'text' },
-      { key: 'expectedPcs', header: 'Expected', type: 'pcs' },
-      { key: 'actualPcs', header: 'Actual', type: 'pcs' },
-      { key: 'variancePcs', header: 'Variance', type: 'pcs' },
-      { key: 'variancePct', header: 'Variance %', type: 'pct' },
-      { key: 'reason', header: 'Reason', type: 'text' },
+      { key: 'qtyPcs', header: 'Pieces cut', type: 'pcs' },
+      { key: 'clothPerPc', header: 'Cloth/pc (in)', type: 'pct' },
+      { key: 'widthCount', header: 'Across width', type: 'int' },
+      { key: 'lenInchC', header: 'Cloth used', type: 'len' },
     ],
     query: (db, f) => {
-      const where: string[] = ["cb.status = 'completed'", 'cb.voided_at IS NULL'];
+      const where: string[] = ['cb.voided_at IS NULL'];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'cb.office_id');
       dateClause('cb.cut_date', f, where, params);
-      dimClause(f, where, params, { model: 'cb.model_id', color: 'cb.color_id', size: 'cl.size_id' });
+      dimClause(f, where, params, { model: 'cl.model_id', color: 'cb.color_id', size: 'cl.size_id' });
       return db
         .prepare(
           `SELECT cb.doc_no AS batch, cb.cut_date AS cutDate, m.code AS model, c.name AS color,
-                  s.code AS size, cl.expected_pcs AS expectedPcs, cl.actual_pcs AS actualPcs,
-                  cl.actual_pcs - cl.expected_pcs AS variancePcs,
-                  CASE WHEN cl.expected_pcs = 0 THEN 100.0
-                       ELSE ROUND((cl.actual_pcs - cl.expected_pcs) * 100.0 / cl.expected_pcs, 1) END AS variancePct,
-                  COALESCE(cl.variance_reason, '') AS reason
+                  s.code AS size, cl.expected_pcs AS qtyPcs,
+                  cl.cloth_per_pc_inch_c / 100.0 AS clothPerPc,
+                  cl.width_count AS widthCount,
+                  (((cl.expected_pcs + cl.width_count - 1) / cl.width_count) * cl.cloth_per_pc_inch_c) AS lenInchC
            FROM cutting_lines cl
            JOIN cutting_batches cb ON cb.id = cl.cutting_batch_id
-           JOIN models m ON m.id = cb.model_id
+           JOIN models m ON m.id = cl.model_id
            JOIN colors c ON c.id = cb.color_id
            JOIN sizes s ON s.id = cl.size_id
            ${w(where)}
@@ -221,33 +235,33 @@ export const REPORTS: ReportDef[] = [
     key: 'production-efficiency',
     title: 'Production Efficiency',
     group: 'Production',
-    description: 'Cloth used vs pieces produced per model',
+    description: 'Cloth used vs pieces produced per code',
     filters: ['from', 'to', 'modelId'],
     columns: [
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'batches', header: 'Cutting batches', type: 'int' },
-      { key: 'metersUsedCm', header: 'Cloth used', type: 'cm' },
+      { key: 'lenInchC', header: 'Cloth used', type: 'len' },
       { key: 'piecesCut', header: 'Pieces cut', type: 'pcs' },
-      { key: 'pcsPerMeter', header: 'Pieces per meter', type: 'pct' },
+      { key: 'pcsPerYard', header: 'Pieces per yard', type: 'pct' },
     ],
     query: (db, f) => {
-      const where: string[] = ["cb.status = 'completed'", 'cb.voided_at IS NULL'];
+      const where: string[] = ['cb.voided_at IS NULL'];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'cb.office_id');
       dateClause('cb.cut_date', f, where, params);
-      dimClause(f, where, params, { model: 'cb.model_id' });
+      dimClause(f, where, params, { model: 'cl.model_id' });
       return db
         .prepare(
-          `SELECT m.code AS model, COUNT(cb.id) AS batches,
-                  SUM(cb.meters_used_cm) AS metersUsedCm,
-                  SUM((SELECT COALESCE(SUM(cl.actual_pcs), 0) FROM cutting_lines cl
-                       WHERE cl.cutting_batch_id = cb.id)) AS piecesCut,
-                  ROUND(SUM((SELECT COALESCE(SUM(cl.actual_pcs), 0) FROM cutting_lines cl
-                             WHERE cl.cutting_batch_id = cb.id)) * 100.0 /
-                        NULLIF(SUM(cb.meters_used_cm), 0), 2) AS pcsPerMeter
-           FROM cutting_batches cb
-           JOIN models m ON m.id = cb.model_id
+          `SELECT m.code AS model, COUNT(DISTINCT cb.id) AS batches,
+                  SUM((((cl.expected_pcs + cl.width_count - 1) / cl.width_count) * cl.cloth_per_pc_inch_c)) AS lenInchC,
+                  SUM(cl.expected_pcs) AS piecesCut,
+                  ROUND(SUM(cl.expected_pcs) * 3600.0 /
+                        NULLIF(SUM((((cl.expected_pcs + cl.width_count - 1) / cl.width_count) * cl.cloth_per_pc_inch_c)), 0), 2) AS pcsPerYard
+           FROM cutting_lines cl
+           JOIN cutting_batches cb ON cb.id = cl.cutting_batch_id
+           JOIN models m ON m.id = cl.model_id
            ${w(where)}
-           GROUP BY cb.model_id
+           GROUP BY cl.model_id
            ORDER BY m.code`,
         )
         .all(...params) as Array<Record<string, unknown>>;
@@ -257,21 +271,22 @@ export const REPORTS: ReportDef[] = [
     key: 'contractor-issued',
     title: 'Work Issued to Contractors',
     group: 'Contractors',
-    description: 'Every job line issued in the period',
+    description: 'Every job line issued in the period, with its cost per dozen',
     filters: ['from', 'to', 'contractorId', 'modelId', 'sizeId'],
     columns: [
       { key: 'job', header: 'Job', type: 'text' },
       { key: 'issueDate', header: 'Issued', type: 'date' },
       { key: 'contractor', header: 'Contractor', type: 'text' },
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'color', header: 'Color', type: 'text' },
       { key: 'size', header: 'Size', type: 'text' },
       { key: 'qtyPcs', header: 'Issued', type: 'pcs' },
-      { key: 'ratePaise', header: 'Rate/dz', type: 'paise' },
+      { key: 'ratePaise', header: 'Cost/dz', type: 'paise' },
     ],
     query: (db, f) => {
       const where: string[] = ['j.voided_at IS NULL'];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'j.office_id');
       dateClause('j.issue_date', f, where, params);
       dimClause(f, where, params, { contractor: 'j.contractor_id', model: 'j.model_id', size: 'l.size_id' });
       return db
@@ -309,6 +324,7 @@ export const REPORTS: ReportDef[] = [
     query: (db, f) => {
       const where: string[] = ['r.voided_at IS NULL', 'j.voided_at IS NULL'];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'j.office_id');
       dateClause('r.receipt_date', f, where, params);
       dimClause(f, where, params, { contractor: 'j.contractor_id', model: 'j.model_id' });
       return db
@@ -338,7 +354,7 @@ export const REPORTS: ReportDef[] = [
       { key: 'job', header: 'Job', type: 'text' },
       { key: 'issueDate', header: 'Issued', type: 'date' },
       { key: 'contractor', header: 'Contractor', type: 'text' },
-      { key: 'model', header: 'Model', type: 'text' },
+      { key: 'model', header: 'Code', type: 'text' },
       { key: 'size', header: 'Size', type: 'text' },
       { key: 'issuedPcs', header: 'Issued', type: 'pcs' },
       { key: 'pendingPcs', header: 'Pending', type: 'pcs' },
@@ -350,6 +366,7 @@ export const REPORTS: ReportDef[] = [
         "j.status IN ('open','partially_received')",
       ];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'j.office_id');
       dimClause(f, where, params, { contractor: 'j.contractor_id', model: 'j.model_id' });
       where.push('(l.qty_issued_pcs - v.received_pcs - v.returned_pcs) > 0');
       return db
@@ -387,6 +404,7 @@ export const REPORTS: ReportDef[] = [
     query: (db, f) => {
       const where: string[] = ["d.ref_type = 'job_card_line'"];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'd.office_id');
       dateClause('DATE(d.created_at)', f, where, params);
       dimClause(f, where, params, { contractor: 'j.contractor_id' });
       return db
@@ -407,7 +425,7 @@ export const REPORTS: ReportDef[] = [
     key: 'checker-performance',
     title: 'Checker Performance',
     group: 'Quality',
-    description: 'Pass/reject/missing rates per checker',
+    description: 'Pass/reject rates per checker (missing counts as a rejection reason)',
     filters: ['from', 'to', 'staffId'],
     columns: [
       { key: 'checker', header: 'Checker', type: 'text' },
@@ -421,6 +439,7 @@ export const REPORTS: ReportDef[] = [
     query: (db, f) => {
       const where: string[] = ['ci.voided_at IS NULL'];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'ci.office_id');
       dateClause('cr.result_date', f, where, params);
       dimClause(f, where, params, { staff: 'ci.staff_id' });
       return db
@@ -429,7 +448,7 @@ export const REPORTS: ReportDef[] = [
                   SUM(cr.qty_passed + cr.qty_rejected + cr.qty_missing) AS checkedPcs,
                   SUM(cr.qty_passed) AS passedPcs, SUM(cr.qty_rejected) AS rejectedPcs,
                   SUM(cr.qty_missing) AS missingPcs,
-                  ROUND(SUM(cr.qty_rejected) * 100.0 /
+                  ROUND(SUM(cr.qty_rejected + cr.qty_missing) * 100.0 /
                         NULLIF(SUM(cr.qty_passed + cr.qty_rejected + cr.qty_missing), 0), 1) AS rejectPct
            FROM check_results cr
            JOIN check_issues ci ON ci.id = cr.check_issue_id
@@ -444,7 +463,7 @@ export const REPORTS: ReportDef[] = [
     key: 'rejection-analysis',
     title: 'Rejection Analysis',
     group: 'Quality',
-    description: 'Why pieces fail checking',
+    description: 'Why pieces fail checking (including missing)',
     filters: ['from', 'to', 'modelId'],
     columns: [
       { key: 'reason', header: 'Reason', type: 'text' },
@@ -452,31 +471,44 @@ export const REPORTS: ReportDef[] = [
       { key: 'sharePct', header: 'Share %', type: 'pct' },
     ],
     query: (db, f) => {
+      // real rejection reasons + the missing column, combined into one breakdown
       const where: string[] = [];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'ci.office_id');
       dateClause('cr.result_date', f, where, params);
       dimClause(f, where, params, { model: 'ci.model_id' });
-      return db
+      const rows = db
         .prepare(
-          `SELECT REPLACE(rr.reason, '_', ' ') AS reason, SUM(rr.qty_pcs) AS qtyPcs,
-                  ROUND(SUM(rr.qty_pcs) * 100.0 / (SELECT NULLIF(SUM(rr2.qty_pcs),0)
-                    FROM check_result_rejections rr2
-                    JOIN check_results cr2 ON cr2.id = rr2.check_result_id
-                    JOIN check_issues ci2 ON ci2.id = cr2.check_issue_id), 1) AS sharePct
+          `SELECT REPLACE(rr.reason, '_', ' ') AS reason, SUM(rr.qty_pcs) AS qtyPcs
            FROM check_result_rejections rr
            JOIN check_results cr ON cr.id = rr.check_result_id
            JOIN check_issues ci ON ci.id = cr.check_issue_id
            ${w(where)}
-           GROUP BY rr.reason ORDER BY qtyPcs DESC`,
+           GROUP BY rr.reason`,
         )
-        .all(...params) as Array<Record<string, unknown>>;
+        .all(...params) as Array<{ reason: string; qtyPcs: number }>;
+      const missing = db
+        .prepare(
+          `SELECT COALESCE(SUM(cr.qty_missing), 0) AS qtyPcs
+           FROM check_results cr
+           JOIN check_issues ci ON ci.id = cr.check_issue_id
+           ${w(where)}`,
+        )
+        .get(...params) as { qtyPcs: number };
+      if (missing.qtyPcs > 0) rows.push({ reason: 'missing', qtyPcs: missing.qtyPcs });
+      const total = rows.reduce((s, r) => s + r.qtyPcs, 0);
+      rows.sort((a, b) => b.qtyPcs - a.qtyPcs);
+      return rows.map((r) => ({
+        ...r,
+        sharePct: total > 0 ? Math.round((r.qtyPcs / total) * 1000) / 10 : 0,
+      }));
     },
   },
   {
     key: 'losses',
     title: 'Loss & Wastage (all stages)',
     group: 'Losses',
-    description: 'Every recorded loss: cutting variance, contractor shortage, checking, packing',
+    description: 'Every recorded loss: contractor shortage, checking, packing',
     filters: ['from', 'to'],
     columns: [
       { key: 'date', header: 'Date', type: 'date' },
@@ -489,6 +521,7 @@ export const REPORTS: ReportDef[] = [
     query: (db, f) => {
       const where: string[] = [];
       const params: unknown[] = [];
+      officeClause(f, where, params, 'd.office_id');
       dateClause('DATE(d.created_at)', f, where, params);
       return db
         .prepare(
@@ -519,8 +552,8 @@ export const REPORTS: ReportDef[] = [
       { key: 'jobWorkCostPaise', header: 'Job-work cost', type: 'paise' },
       { key: 'duesPaise', header: 'Dues', type: 'paise' },
     ],
-    query: (db) => {
-      return contractorAnalytics(db).map((c) => ({
+    query: (db, f) => {
+      return contractorAnalytics(db, f.officeId).map((c) => ({
         contractor: c.name,
         totalJobs: c.totalJobs,
         issuedPcs: c.issuedPcs,
@@ -535,6 +568,33 @@ export const REPORTS: ReportDef[] = [
     },
   },
   {
+    key: 'pending-dues',
+    title: 'Pending Dues',
+    group: 'Management',
+    description: 'Contractors who are owed money right now, largest first',
+    filters: [],
+    columns: [
+      { key: 'contractor', header: 'Contractor', type: 'text' },
+      { key: 'jobWorkCostPaise', header: 'Job-work cost', type: 'paise' },
+      { key: 'paidPaise', header: 'Paid', type: 'paise' },
+      { key: 'duesPaise', header: 'Pending dues', type: 'paise' },
+      { key: 'lastPaymentDate', header: 'Last payment', type: 'date' },
+      { key: 'openJobs', header: 'Open jobs', type: 'int' },
+    ],
+    query: (db, f) =>
+      contractorAnalytics(db, f.officeId)
+        .filter((c) => (c.duesPaise as number) > 0)
+        .sort((a, b) => (b.duesPaise as number) - (a.duesPaise as number))
+        .map((c) => ({
+          contractor: c.name,
+          jobWorkCostPaise: c.jobWorkCostPaise,
+          paidPaise: c.paidPaise,
+          duesPaise: c.duesPaise,
+          lastPaymentDate: c.lastPaymentDate,
+          openJobs: c.openJobs,
+        })),
+  },
+  {
     key: 'production-trends',
     title: 'Production Trends (monthly)',
     group: 'Management',
@@ -542,39 +602,45 @@ export const REPORTS: ReportDef[] = [
     filters: [],
     columns: [
       { key: 'month', header: 'Month', type: 'text' },
-      { key: 'purchasedCm', header: 'Cloth purchased', type: 'cm' },
+      { key: 'purchasedLen', header: 'Cloth purchased', type: 'len' },
       { key: 'cutPcs', header: 'Pieces cut', type: 'pcs' },
       { key: 'receivedPcs', header: 'Stitched received', type: 'pcs' },
       { key: 'packedPcs', header: 'Packed', type: 'pcs' },
       { key: 'dispatchedPcs', header: 'Dispatched', type: 'pcs' },
     ],
-    query: (db) =>
+    query: (db, f) =>
       db
         .prepare(
           `WITH months AS (
-             SELECT DISTINCT SUBSTR(purchase_date, 1, 7) AS month FROM purchases WHERE voided_at IS NULL
-             UNION SELECT DISTINCT SUBSTR(cut_date, 1, 7) FROM cutting_batches WHERE voided_at IS NULL
-             UNION SELECT DISTINCT SUBSTR(receipt_date, 1, 7) FROM job_receipts WHERE voided_at IS NULL
-             UNION SELECT DISTINCT SUBSTR(result_date, 1, 7) FROM pack_results
-             UNION SELECT DISTINCT SUBSTR(dispatch_date, 1, 7) FROM fg_dispatches WHERE voided_at IS NULL
+             SELECT DISTINCT SUBSTR(purchase_date, 1, 7) AS month FROM purchases WHERE voided_at IS NULL AND office_id = $office
+             UNION SELECT DISTINCT SUBSTR(cut_date, 1, 7) FROM cutting_batches WHERE voided_at IS NULL AND office_id = $office
+             UNION SELECT DISTINCT SUBSTR(r.receipt_date, 1, 7) FROM job_receipts r
+               JOIN job_cards j ON j.id = r.job_card_id WHERE r.voided_at IS NULL AND j.office_id = $office
+             UNION SELECT DISTINCT SUBSTR(pr.result_date, 1, 7) FROM pack_results pr
+               JOIN pack_issues pi ON pi.id = pr.pack_issue_id AND pi.office_id = $office
+             UNION SELECT DISTINCT SUBSTR(dispatch_date, 1, 7) FROM fg_dispatches WHERE voided_at IS NULL AND office_id = $office
            )
            SELECT month,
-             COALESCE((SELECT SUM(qty_cm) FROM purchases WHERE voided_at IS NULL AND SUBSTR(purchase_date,1,7) = month), 0) AS purchasedCm,
-             COALESCE((SELECT SUM(cl.actual_pcs) FROM cutting_lines cl JOIN cutting_batches cb ON cb.id = cl.cutting_batch_id
-               WHERE cb.voided_at IS NULL AND SUBSTR(cb.cut_date,1,7) = month), 0) AS cutPcs,
+             COALESCE((SELECT SUM(COALESCE(len_inch_c, 0)) FROM purchases
+               WHERE voided_at IS NULL AND office_id = $office AND SUBSTR(purchase_date,1,7) = month), 0) AS purchasedLen,
+             COALESCE((SELECT SUM(cl.expected_pcs) FROM cutting_lines cl JOIN cutting_batches cb ON cb.id = cl.cutting_batch_id
+               WHERE cb.voided_at IS NULL AND cb.office_id = $office AND SUBSTR(cb.cut_date,1,7) = month), 0) AS cutPcs,
              COALESCE((SELECT SUM(rl.qty_pcs) FROM job_receipt_lines rl JOIN job_receipts r ON r.id = rl.job_receipt_id
-               WHERE r.voided_at IS NULL AND rl.return_type = 'stitched' AND SUBSTR(r.receipt_date,1,7) = month), 0) AS receivedPcs,
-             COALESCE((SELECT SUM(qty_packed) FROM pack_results WHERE SUBSTR(result_date,1,7) = month), 0) AS packedPcs,
-             COALESCE((SELECT SUM(qty_pcs) FROM fg_dispatches WHERE voided_at IS NULL AND SUBSTR(dispatch_date,1,7) = month), 0) AS dispatchedPcs
+               JOIN job_cards j ON j.id = r.job_card_id
+               WHERE r.voided_at IS NULL AND j.office_id = $office AND rl.return_type = 'stitched' AND SUBSTR(r.receipt_date,1,7) = month), 0) AS receivedPcs,
+             COALESCE((SELECT SUM(pr.qty_packed) FROM pack_results pr JOIN pack_issues pi ON pi.id = pr.pack_issue_id
+               WHERE pi.office_id = $office AND SUBSTR(pr.result_date,1,7) = month), 0) AS packedPcs,
+             COALESCE((SELECT SUM(qty_pcs) FROM fg_dispatches WHERE voided_at IS NULL AND office_id = $office AND SUBSTR(dispatch_date,1,7) = month), 0) AS dispatchedPcs
            FROM months ORDER BY month DESC`,
         )
-        .all() as Array<Record<string, unknown>>,
+        .all({ office: f.officeId }) as Array<Record<string, unknown>>,
   },
 ];
 
 function stockReport(db: Db, f: ReportFilters, stage: string): Array<Record<string, unknown>> {
   const where: string[] = ['l.stage = ?'];
   const params: unknown[] = [stage];
+  officeClause(f, where, params, 'l.office_id');
   dimClause(f, where, params, { model: 'l.model_id', color: 'l.color_id', size: 'l.size_id' });
   return db
     .prepare(

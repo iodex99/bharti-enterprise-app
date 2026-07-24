@@ -66,12 +66,12 @@ export function runReconciliation(db: Db): { ok: boolean; checks: Reconciliation
     .get() as { genesis: number; terminal: number; onHand: number };
   const rawDrift = rawRow.genesis - rawRow.terminal - rawRow.onHand;
   checks.push({
-    name: 'Raw cloth conservation (meters)',
+    name: 'Raw cloth conservation (yards)',
     ok: rawDrift === 0,
     detail:
       rawDrift === 0
-        ? `${(rawRow.genesis / 100).toFixed(2)} m in − ${(rawRow.terminal / 100).toFixed(2)} m used = ${(rawRow.onHand / 100).toFixed(2)} m on hand.`
-        : `DRIFT of ${(rawDrift / 100).toFixed(2)} m.`,
+        ? `${(rawRow.genesis / 3600).toFixed(2)} yd in − ${(rawRow.terminal / 3600).toFixed(2)} yd used = ${(rawRow.onHand / 3600).toFixed(2)} yd on hand.`
+        : `DRIFT of ${(rawDrift / 3600).toFixed(2)} yd.`,
   });
 
   // 4. Transfer ref types must net to zero per reference.

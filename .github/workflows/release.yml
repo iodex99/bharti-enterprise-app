@@ -1,15 +1,16 @@
-name: Release (PC server — manual)
+name: Release
 
-# The shipped product is the Android app, released by android-release.yml on every push.
-# This workflow builds the optional Windows PC deployment and is MANUAL ONLY: if both ran
-# on every push they would race for version tags, and — worse — whichever finished last
-# would become `releases/latest`, which is the feed installed apps read to decide whether
-# an update exists. A PC zip has no app-manifest.json, so it would look like a broken
-# release to every device.
+# THE product is the office-PC web app again (client decision, ADR-027): a central PC
+# runs the server, operators use it from browsers. Every push to green main publishes
+# the PC release zip that the office supervisor auto-updates from (the 1.0.x line, in
+# THIS private repo — the supervisor polls with its PAT).
 #
-# It publishes the 1.0.x line; the app publishes 1.1.x.
+# The Android build (android-release.yml, 1.1.x, public bharti-releases repo) is
+# dormant: manual-only, so it can never race this workflow for releases/latest.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

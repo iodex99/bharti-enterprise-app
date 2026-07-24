@@ -5,6 +5,12 @@ Roles: **A**dmin, **O**perator, **W**=owner (read-only). `anon` = no session.
 Document-creating POSTs accept an optional `Idempotency-Key` header (replays return the
 original id with `replayed: true`).
 
+**Office scoping (ADR-028):** every document/stock/report endpoint works within ONE
+office. Operators are pinned server-side to `users.office_id`; admin/owner select the
+office per request with the `X-Office-Id` header (default 1; the client stores the choice
+in localStorage and reloads on switch). Lengths are integer hundredths-of-an-inch
+("inch_c", 1 yd = 3600 — ADR-029).
+
 ### System
 | Method | Path | Roles | Notes |
 |---|---|---|---|
@@ -42,9 +48,16 @@ original id with `replayed: true`).
 | GET/POST /api/users · PATCH /:id · POST /:id/{deactivate,reactivate,reset-password} | | A |
 | GET /api/audit?entityType&entityId&limit&offset | | A |
 
-### Masters — /api/masters/{models,colors,sizes,vendors,contractors,staff}
+### Masters — /api/masters/{colors,sizes,vendors,contractors,staff}
 GET (all roles) · POST, PUT /:id, POST /:id/{deactivate,reactivate}, DELETE /:id (A only;
-delete blocked while referenced).
+delete blocked while referenced). `models` is GONE from masters (ADR-030) — product codes
+are typed at cutting; pickers read **GET /api/products** (all roles; code + photo, sorted,
+RAW-CLOTH sentinel excluded).
+
+### Offices — /api/offices
+GET (all roles; `?includeInactive=1` for admin) · POST, PUT /:id (A only; office 1 cannot
+be deactivated). Creating users: operators REQUIRE `officeId`; changing a user's office
+revokes their sessions.
 
 ### Uploads
 POST /api/uploads (A O, multipart `image` → webp path) · GET /uploads/* (all roles).
@@ -55,12 +68,12 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 ### Transactions
 | Path | Create | Extra endpoints | Void |
 |---|---|---|---|
-| /api/purchases | A O — vendor+color+meters, NO model (decided at cutting) | PUT /:id (financial fields only) | A, blocked after cutting |
-| /api/opening-balances | A — RAW takes no model | | A, blocked after consumption |
-| /api/cutting | A O — modelId + per-line {clothPerPcInchC, widthCount}; consumption computed | PUT /:id (re-plan while 'planned'), DELETE /:id (planned only, soft), POST /:id/actuals (variance reasons enforced) | A, blocked after issue |
-| /api/jobs | A O | POST /:id/receipts (partial/excess/unstitched, optional imagePath photo), POST /:id/close (A) | A, unstarted only |
-| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs} names the received batch | GET /pending (batches waiting w/ contractor+photo), POST /:id/results (pass/reject/missing sessions) | A, before results |
-| /api/packing | A O (any active staff — no roles) | POST /:id/results (packed/short sessions) | A, before results |
+| /api/purchases | A O — vendor+color+{lenInchC, widthInchC, ratePaisePerYard}, NO code (given at cutting) | PUT /:id (financial fields only) | A, blocked after cutting |
+| /api/opening-balances | A — RAW takes widthInchC + no code; other stages take a typed `modelCode` | | A, blocked after consumption |
+| /api/cutting | A O — per-line {sizeId, code, qtyPcs, clothPerPcInchC, widthCount, imagePath?}; the entry IS the cutting (consumes RAW + creates CUT, ADR-031) | PUT /:id, DELETE /:id — while nothing is issued downstream; doc number kept | A, blocked after issue |
+| /api/jobs | A O — lines carry {modelId, colorId, sizeId, qty, ratePaisePerDozen}; returns `{cards:[…]}`, ONE card per code+color (ADR-033) | PUT /:id, DELETE /:id (receipt-less cards), POST /:id/receipts (partial/excess/unstitched; **imagePath REQUIRED**, ADR-032), POST /:id/close (A) | A, unstarted only |
+| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs} names the received batch | GET /pending (batches waiting w/ contractor+photo), POST /:id/results ({qtyPassed, rejections:[{reason, qtyPcs}]} — 'missing' is a reason, ADR-034), POST /:id/pack (allot passed pcs to a packer or keep a labeled bundle, ADR-035) | A, before results |
+| /api/packing | A O — directed at {lotType ∈ check_issue\|opening\|pack_issue(bundle), lotId}; kind pack\|bundle + label | GET ?kind=, POST /:id/results (packed/short sessions) | A, before results |
 | /api/dispatches | A | | A (ledger replay) |
 | /api/contractors/payments | A O | | A |
 
@@ -76,7 +89,9 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 | GET /api/stock/summary · /raw · /:stage | live inventory (all roles) |
 | GET /api/jobs?status&contractorId · /api/jobs/:id/receipts | job list with per-line settlement |
 | GET /api/contractors/analytics | performance + dues |
-| GET /api/reports · /api/reports/:key?filters&format=xlsx | 15-report registry; xlsx export |
+| GET /api/contractors/dues | pending dues per contractor (ADR-036) |
+| GET /api/products | product codes for pickers (typed at cutting) |
+| GET /api/reports · /api/reports/:key?filters&format=xlsx | 16-report registry; xlsx export |
 | GET /api/reports/full?from&to&format=html|xlsx | Complete Business Report (styled HTML / multi-sheet workbook) |
 | GET /api/trace/fg-lots · /fg/:packIssueId · /purchase/:purchaseId | traceability trees |
 | GET /api/dashboard · /api/dashboard/alerts | owner dashboard + alert feed |

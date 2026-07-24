@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, useParams } from 'react-router';
 import clsx from 'clsx';
-import { formatCm, formatPieces, label as stageLabel, STAGES } from '@shared';
+import { formatInchC, formatLen, formatPieces, label as stageLabel, STAGES } from '@shared';
 import { api } from '../../api/client';
 import { DataTable, type Column } from '../../components/DataTable';
 
@@ -27,7 +27,8 @@ type RawLot = {
   purchaseDate: string | null;
   vendorName: string | null;
   openingDocNo: string | null;
-  qtyCm: number;
+  widthInchC: number | null;
+  qtyInchC: number;
 };
 
 /** Inventory at every stage — the six layers + rejected (spec: Inventory Layers). */
@@ -68,7 +69,7 @@ export default function StockPage() {
                 {stageLabel(s)}
               </p>
               <p className="text-base font-bold text-gray-900">
-                {row ? (s === 'RAW' ? formatCm(row.qty) : formatPieces(row.qty)) : '…'}
+                {row ? (s === 'RAW' ? formatLen(row.qty) : formatPieces(row.qty)) : '…'}
               </p>
             </NavLink>
           );
@@ -98,15 +99,21 @@ function RawStock() {
           value: (r) => r.purchaseDocNo ?? r.openingDocNo ?? '',
           render: (r) => r.purchaseDocNo ?? `${r.openingDocNo} (opening)`,
         },
-        // raw cloth has no model — it is decided at cutting
+        // raw cloth has no code — it is given at cutting
         { key: 'colorName', header: 'Color', className: 'font-medium' },
         { key: 'vendorName', header: 'Vendor', render: (r) => r.vendorName ?? '—' },
         {
-          key: 'qtyCm',
+          key: 'widthInchC',
+          header: 'Width',
+          render: (r) => (r.widthInchC ? formatInchC(r.widthInchC) : '—'),
+          value: (r) => r.widthInchC ?? 0,
+        },
+        {
+          key: 'qtyInchC',
           header: 'Available',
           className: 'font-semibold',
-          render: (r) => formatCm(r.qtyCm),
-          value: (r) => r.qtyCm,
+          render: (r) => formatLen(r.qtyInchC),
+          value: (r) => r.qtyInchC,
         },
       ]}
       rows={rows}
@@ -134,7 +141,7 @@ function StageStock({ stage }: { stage: string }) {
   const columns: Column<Row>[] = [
     {
       key: 'item',
-      header: 'Model / Color',
+      header: 'Code / Color',
       value: (r) => `${r.modelCode} ${r.colorName}`,
       render: (r) => (
         <span>
@@ -166,7 +173,7 @@ function StageStock({ stage }: { stage: string }) {
       rows={rows}
       loading={isLoading}
       facets={[
-        { key: 'model', label: 'Model', value: (r) => r.modelCode },
+        { key: 'model', label: 'Code', value: (r) => r.modelCode },
         { key: 'color', label: 'Color', value: (r) => r.colorName },
         { key: 'size', label: 'Size', value: (r) => r.sizeCode },
       ]}

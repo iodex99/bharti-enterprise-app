@@ -9,10 +9,32 @@ type UserRow = {
   username: string;
   displayName: string;
   role: 'admin' | 'operator' | 'owner';
+  officeId: number | null;
+  officeName: string | null;
   isActive: boolean;
   mustChangePassword: boolean;
   createdAt: string;
 };
+
+function OfficePicker({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+  const { data } = useQuery({
+    queryKey: ['offices'],
+    queryFn: () => api.get<{ items: Array<{ id: number; name: string }> }>('/api/offices'),
+    staleTime: 60_000,
+  });
+  return (
+    <Select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="" disabled>
+        — office —
+      </option>
+      {data?.items.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.name}
+        </option>
+      ))}
+    </Select>
+  );
+}
 
 const ROLE_TONE = { admin: 'violet', operator: 'blue', owner: 'green' } as const;
 
@@ -66,6 +88,7 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={ROLE_TONE[u.role]}>{u.role}</Badge>
+                    {u.officeName && <Badge tone="gray">🏢 {u.officeName}</Badge>}
                   </td>
                   <td className="px-4 py-3">
                     {u.isActive ? (
@@ -122,11 +145,19 @@ function CreateUserModal({
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState('operator');
+  const [officeId, setOfficeId] = useState<number | null>(1);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const create = useMutation({
-    mutationFn: () => api.post('/api/users', { username, displayName, role, password }),
+    mutationFn: () =>
+      api.post('/api/users', {
+        username,
+        displayName,
+        role,
+        officeId: role === 'operator' ? officeId : null,
+        password,
+      }),
     onSuccess: () => {
       onDone();
       onClose();
@@ -159,6 +190,11 @@ function CreateUserModal({
             <option value="admin">Admin — full control</option>
           </Select>
         </Field>
+        {role === 'operator' && (
+          <Field label="Office" hint="Operators work in exactly one office">
+            <OfficePicker value={officeId} onChange={setOfficeId} />
+          </Field>
+        )}
         <Field label="Temporary password" hint="They must change it at first sign-in (min 8 chars)">
           <TextInput value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
         </Field>
@@ -182,18 +218,25 @@ function EditUserModal({
 }) {
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState('operator');
+  const [officeId, setOfficeId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [loadedFor, setLoadedFor] = useState<number | null>(null);
 
   if (user && loadedFor !== user.id) {
     setDisplayName(user.displayName);
     setRole(user.role);
+    setOfficeId(user.officeId ?? 1);
     setLoadedFor(user.id);
     setError('');
   }
 
   const save = useMutation({
-    mutationFn: () => api.patch(`/api/users/${user!.id}`, { displayName, role }),
+    mutationFn: () =>
+      api.patch(`/api/users/${user!.id}`, {
+        displayName,
+        role,
+        officeId: role === 'operator' ? officeId : null,
+      }),
     onSuccess: () => {
       onDone();
       onClose();
@@ -220,6 +263,11 @@ function EditUserModal({
             <option value="admin">Admin</option>
           </Select>
         </Field>
+        {role === 'operator' && (
+          <Field label="Office">
+            <OfficePicker value={officeId} onChange={setOfficeId} />
+          </Field>
+        )}
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending} className="w-full">
           {save.isPending ? 'Saving…' : 'Save'}

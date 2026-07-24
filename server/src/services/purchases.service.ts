@@ -4,16 +4,29 @@ import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
 import { LedgerError, postMovements } from './ledger.service';
+import type { Office } from './offices.service';
 
-/** total = meters × rate; qty_cm/100 gives meters. Server-computed, authoritative. */
-export function purchaseTotalPaise(qtyCm: number, ratePaisePerMeter: number): number {
-  return Math.round((qtyCm * ratePaisePerMeter) / 100);
+/**
+ * Module 1: raw-cloth purchases (v2, ADR-028/029).
+ * Cloth is bought as vendor + color + LENGTH IN YARDS + WIDTH IN INCHES (both stored as
+ * integer hundredths of an inch); the code is only given at cutting. Each purchase
+ * belongs to the office it was recorded in and creates that office's RAW lot.
+ */
+
+/** total = yards × rate/yard; len_inch_c / 3600 gives yards. Server-computed. */
+export function purchaseTotalPaise(lenInchC: number, ratePaisePerYard: number): number {
+  return Math.round((lenInchC * ratePaisePerYard) / 3600);
+}
+
+/** Legacy NOT NULL column — kept written (≈cm) so old constraints hold; never read. */
+function legacyCm(lenInchC: number): number {
+  return Math.max(1, Math.round((lenInchC * 254) / 10000));
 }
 
 /**
- * The sentinel model that fills NOT NULL model columns for raw cloth — the real model is
- * only decided at cutting. Inserted by migration 002; inactive so it never appears in
- * dropdowns or new-document validation.
+ * The sentinel model that fills NOT NULL model columns for raw cloth — the real code is
+ * only given at cutting. Inserted by migration 002; inactive so it never appears in
+ * pickers or new-document validation.
  */
 export function rawClothModelId(db: Db): number {
   const row = db.prepare('SELECT id FROM models WHERE code = ?').get(RAW_CLOTH_MODEL_CODE) as
@@ -38,6 +51,7 @@ export function assertActive(db: Db, table: string, id: number, label: string): 
 
 export function createPurchase(
   db: Db,
+  office: Office,
   input: PurchaseInput,
   userId: number,
   ip: string | null,
@@ -55,23 +69,27 @@ export function createPurchase(
   let id = 0;
   let docNo = '';
   const tx = db.transaction(() => {
-    docNo = nextDocNo(db, 'purchase');
+    docNo = nextDocNo(db, 'purchase', office);
     const info = db
       .prepare(
-        `INSERT INTO purchases (doc_no, purchase_date, received_date, vendor_id, model_id,
-          color_id, qty_cm, rate_paise_per_meter, total_paise, image_path, notes, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO purchases (doc_no, office_id, purchase_date, received_date, vendor_id,
+          model_id, color_id, len_inch_c, width_inch_c, rate_paise_per_yard,
+          qty_cm, rate_paise_per_meter, total_paise, image_path, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
       )
       .run(
         docNo,
+        office.id,
         input.purchaseDate,
         input.receivedDate,
         input.vendorId,
         rawModel,
         input.colorId,
-        input.qtyCm,
-        input.ratePaisePerMeter,
-        purchaseTotalPaise(input.qtyCm, input.ratePaisePerMeter),
+        input.lenInchC,
+        input.widthInchC,
+        input.ratePaisePerYard,
+        legacyCm(input.lenInchC),
+        purchaseTotalPaise(input.lenInchC, input.ratePaisePerYard),
         input.imagePath ?? null,
         input.notes,
         userId,
@@ -82,12 +100,13 @@ export function createPurchase(
       [
         {
           stage: 'RAW',
+          officeId: office.id,
           modelId: rawModel,
           colorId: input.colorId,
           sizeId: null,
           lotType: 'purchase',
           lotId: id,
-          qty: input.qtyCm,
+          qty: input.lenInchC,
           refType: 'purchase',
           refId: id,
         },
@@ -99,7 +118,7 @@ export function createPurchase(
       action: 'create',
       entityType: 'purchase',
       entityId: id,
-      new: { docNo, ...input },
+      new: { docNo, officeId: office.id, ...input },
       ip,
     });
     onCreated?.(id);
@@ -110,23 +129,24 @@ export function createPurchase(
 
 export function editPurchase(
   db: Db,
+  office: Office,
   id: number,
   input: PurchaseEditInput,
   userId: number,
   ip: string | null,
 ): ServiceResult {
   const existing = db
-    .prepare('SELECT * FROM purchases WHERE id = ? AND voided_at IS NULL')
-    .get(id) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM purchases WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(id, office.id) as Record<string, unknown> | undefined;
   if (!existing) return { ok: false, code: 404, error: 'Purchase not found.' };
 
   const tx = db.transaction(() => {
     db.prepare(
-      `UPDATE purchases SET rate_paise_per_meter = ?, total_paise = ?, image_path = ?, notes = ?
+      `UPDATE purchases SET rate_paise_per_yard = ?, total_paise = ?, image_path = ?, notes = ?
        WHERE id = ?`,
     ).run(
-      input.ratePaisePerMeter,
-      purchaseTotalPaise(existing.qty_cm as number, input.ratePaisePerMeter),
+      input.ratePaisePerYard,
+      purchaseTotalPaise(existing.len_inch_c as number, input.ratePaisePerYard),
       input.imagePath ?? null,
       input.notes,
       id,
@@ -137,7 +157,7 @@ export function editPurchase(
       entityType: 'purchase',
       entityId: id,
       old: {
-        ratePaisePerMeter: existing.rate_paise_per_meter,
+        ratePaisePerYard: existing.rate_paise_per_yard,
         imagePath: existing.image_path,
         notes: existing.notes,
       },
@@ -151,14 +171,15 @@ export function editPurchase(
 
 export function voidPurchase(
   db: Db,
+  office: Office,
   id: number,
   reason: string,
   userId: number,
   ip: string | null,
 ): ServiceResult {
   const existing = db
-    .prepare('SELECT * FROM purchases WHERE id = ?')
-    .get(id) as Record<string, unknown> | undefined;
+    .prepare('SELECT * FROM purchases WHERE id = ? AND office_id = ?')
+    .get(id, office.id) as Record<string, unknown> | undefined;
   if (!existing) return { ok: false, code: 404, error: 'Purchase not found.' };
   if (existing.voided_at) return { ok: false, code: 409, error: 'Purchase is already voided.' };
 
@@ -169,7 +190,7 @@ export function voidPurchase(
        WHERE stage = 'RAW' AND lot_type = 'purchase' AND lot_id = ?`,
     )
     .get(id) as { bal: number };
-  if (bal !== (existing.qty_cm as number)) {
+  if (bal !== (existing.len_inch_c as number)) {
     const consumer = db
       .prepare(
         `SELECT cb.doc_no FROM cutting_batches cb
@@ -193,12 +214,13 @@ export function voidPurchase(
         [
           {
             stage: 'RAW',
+            officeId: office.id,
             modelId: existing.model_id as number,
             colorId: existing.color_id as number,
             sizeId: null,
             lotType: 'purchase',
             lotId: id,
-            qty: -(existing.qty_cm as number),
+            qty: -(existing.len_inch_c as number),
             refType: 'adjustment_out',
             refId: id,
           },
@@ -234,9 +256,13 @@ export type PurchaseListFilters = {
   includeVoided?: boolean;
 };
 
-export function listPurchases(db: Db, f: PurchaseListFilters): Array<Record<string, unknown>> {
-  const where: string[] = [];
-  const params: unknown[] = [];
+export function listPurchases(
+  db: Db,
+  officeId: number,
+  f: PurchaseListFilters,
+): Array<Record<string, unknown>> {
+  const where: string[] = ['p.office_id = ?'];
+  const params: unknown[] = [officeId];
   if (!f.includeVoided) where.push('p.voided_at IS NULL');
   if (f.vendorId) {
     where.push('p.vendor_id = ?');
@@ -254,22 +280,23 @@ export function listPurchases(db: Db, f: PurchaseListFilters): Array<Record<stri
     where.push('p.purchase_date <= ?');
     params.push(f.to);
   }
-  // no model here — raw cloth has no model until it is cut (RAW-CLOTH sentinel hidden)
+  // no code here — raw cloth has no product code until it is cut
   return db
     .prepare(
       `SELECT p.id, p.doc_no AS docNo, p.purchase_date AS purchaseDate,
               p.received_date AS receivedDate,
               p.vendor_id AS vendorId, v.name AS vendorName,
               p.color_id AS colorId, c.name AS colorName,
-              p.qty_cm AS qtyCm, p.rate_paise_per_meter AS ratePaisePerMeter,
+              p.len_inch_c AS lenInchC, p.width_inch_c AS widthInchC,
+              p.rate_paise_per_yard AS ratePaisePerYard,
               p.total_paise AS totalPaise, p.image_path AS imagePath, p.notes,
               p.voided_at AS voidedAt, p.void_reason AS voidReason,
               (SELECT COALESCE(SUM(l.qty), 0) FROM stock_ledger l
-               WHERE l.stage = 'RAW' AND l.lot_type = 'purchase' AND l.lot_id = p.id) AS remainingCm
+               WHERE l.stage = 'RAW' AND l.lot_type = 'purchase' AND l.lot_id = p.id) AS remainingInchC
        FROM purchases p
        JOIN vendors v ON v.id = p.vendor_id
        JOIN colors c ON c.id = p.color_id
-       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       WHERE ${where.join(' AND ')}
        ORDER BY p.id DESC`,
     )
     .all(...params) as Array<Record<string, unknown>>;

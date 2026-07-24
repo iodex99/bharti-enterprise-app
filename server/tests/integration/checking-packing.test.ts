@@ -12,9 +12,10 @@ let admin: string;
 let operator: string;
 let owner: string;
 let receiptLineId: number;
+let modelM1 = 0;
 
-// cutting: 120 pcs × 10" ×3 across = 40 strips × 25.4 cm = exactly 1016 cm consumed
-const CUT_CM = 1016;
+// cutting: 120 pcs × 10" ×3 across = 40 strips × 1000 = 40000 inch_c consumed
+const CUT_LEN = 40000;
 
 const stageTotal = (stage: string) =>
   (
@@ -29,7 +30,6 @@ beforeAll(async () => {
   operator = await loginAs(ctx.app, 'operator', 'Operator@123');
   owner = await loginAs(ctx.app, 'owner', 'Owner@123');
   ctx.db.exec(`
-    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1);
     INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
     INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
@@ -38,48 +38,47 @@ beforeAll(async () => {
       (1, 'Pooja', 'checker', 1), (2, 'Ravi', 'packer', 1), (3, 'Kavita', 'both', 1);
   `);
 
-  // purchase (no model — decided at cutting) → cut 120 pcs → job → receive all 120
-  // stitched (with a photo) into the pending-checking pool
+  // purchase (no code — given at cutting) → cut 120 pcs → job → receive all 120
+  // stitched (with the REQUIRED photo) into the pending-checking pool
   const purchase = await request(ctx.app).post('/api/purchases').set('Cookie', operator).send({
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
     colorId: 1,
-    qtyCm: 10000,
-    ratePaisePerMeter: 4000,
+    lenInchC: 180000, // 50 yd
+    widthInchC: 4400,
+    ratePaisePerYard: 4000,
     notes: '',
   });
-  const plan = await request(ctx.app)
+  const cutRes = await request(ctx.app)
     .post('/api/cutting')
     .set('Cookie', operator)
     .send({
       cutDate: '2026-07-02',
       rawLotType: 'purchase',
       rawLotId: purchase.body.id,
-      modelId: 1,
-      lines: [{ sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 }],
+      notes: '',
+      lines: [{ sizeId: 1, code: 'M1', qtyPcs: 120, clothPerPcInchC: 1000, widthCount: 3 }],
     });
-  await request(ctx.app)
-    .post(`/api/cutting/${plan.body.id}/actuals`)
-    .set('Cookie', operator)
-    .send({ lines: [{ sizeId: 1, actualPcs: 120 }] });
+  if (cutRes.status !== 201) throw new Error(`fixture cutting failed: ${cutRes.text}`);
+  modelM1 = (ctx.db.prepare("SELECT id FROM models WHERE code = 'M1'").get() as { id: number }).id;
   const job = await request(ctx.app)
     .post('/api/jobs')
     .set('Cookie', operator)
     .send({
       issueDate: '2026-07-03',
       contractorId: 1,
-      modelId: 1,
-      colorId: 1,
-      lines: [{ sizeId: 1, qtyIssuedPcs: 120, unitEntered: 'dozens', ratePaisePerDozen: 3000 }],
+      notes: '',
+      lines: [{ modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 120, unitEntered: 'dozens', ratePaisePerDozen: 3000 }],
     });
+  const jobCardId = job.body.cards[0].id as number;
   const lineId = (
-    ctx.db.prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?').get(job.body.id) as {
+    ctx.db.prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?').get(jobCardId) as {
       id: number;
     }
   ).id;
   const receipt = await request(ctx.app)
-    .post(`/api/jobs/${job.body.id}/receipts`)
+    .post(`/api/jobs/${jobCardId}/receipts`)
     .set('Cookie', operator)
     .send({
       receiptDate: '2026-07-05',
@@ -157,16 +156,14 @@ describe('checking', () => {
     expect(badLot.body.error).toMatch(/not found/i);
   });
 
-  it('incremental results: pass/reject/missing with reason breakdown', async () => {
-    // session 1: 60 passed, 6 rejected (4 stitching + 2 elastic), 0 missing
+  it('incremental results: pass + ONE rejected breakdown (missing is a reason)', async () => {
+    // session 1: 60 passed, 6 rejected (4 stitching + 2 elastic)
     const s1 = await request(ctx.app)
       .post(`/api/checking/${checkId}/results`)
       .set('Cookie', operator)
       .send({
         resultDate: '2026-07-07',
         qtyPassed: 60,
-        qtyRejected: 6,
-        qtyMissing: 0,
         rejections: [
           { reason: 'stitching_issue', qtyPcs: 4 },
           { reason: 'elastic_issue', qtyPcs: 2 },
@@ -176,32 +173,24 @@ describe('checking', () => {
     expect(s1.status).toBe(201);
     expect(s1.body.status).toBe('open'); // 54 still with checker
 
-    // breakdown must add up
-    const badBreakdown = await request(ctx.app)
-      .post(`/api/checking/${checkId}/results`)
-      .set('Cookie', operator)
-      .send({
-        resultDate: '2026-07-07',
-        qtyPassed: 0,
-        qtyRejected: 5,
-        qtyMissing: 0,
-        rejections: [{ reason: 'damage', qtyPcs: 3 }],
-      });
-    expect(badBreakdown.status).toBe(400);
-    expect(badBreakdown.body.error).toMatch(/add up/i);
-
     // cannot exceed what the checker holds
     const tooMuch = await request(ctx.app)
       .post(`/api/checking/${checkId}/results`)
       .set('Cookie', operator)
-      .send({ resultDate: '2026-07-07', qtyPassed: 60, qtyRejected: 0, qtyMissing: 0 });
+      .send({ resultDate: '2026-07-07', qtyPassed: 60, rejections: [] });
     expect(tooMuch.status).toBe(409);
 
-    // session 2 completes: 52 passed, 0 rejected, 2 missing
+    // session 2 completes: 52 passed, 2 MISSING — entered as a rejection reason, but
+    // written off internally (missing pieces cannot sit in REJECTED stock)
     const s2 = await request(ctx.app)
       .post(`/api/checking/${checkId}/results`)
       .set('Cookie', operator)
-      .send({ resultDate: '2026-07-08', qtyPassed: 52, qtyRejected: 0, qtyMissing: 2, notes: 'lost in transit' });
+      .send({
+        resultDate: '2026-07-08',
+        qtyPassed: 52,
+        rejections: [{ reason: 'missing', qtyPcs: 2 }],
+        notes: 'lost in transit',
+      });
     expect(s2.status).toBe(201);
     expect(s2.body.status).toBe('completed');
 
@@ -233,42 +222,94 @@ describe('checking', () => {
 
 describe('packing → finished goods → dispatch', () => {
   let packId: number;
+  let bundleId: number;
 
-  it('issues passed goods to a packer (any staff can pack — no fixed roles)', async () => {
-    // staff 1 has legacy role 'checker' — but anyone can pack now
-    const res = await request(ctx.app).post('/api/packing').set('Cookie', operator).send({
-      issueDate: '2026-07-09',
-      staffId: 1,
-      modelId: 1,
-      colorId: 1,
-      sizeId: 1,
-      qtyPcs: 112,
-      notes: '',
-    });
+  it('allots packing FROM the checking row: directed, bundles supported', async () => {
+    const checkId = (
+      ctx.db.prepare("SELECT id FROM check_issues WHERE doc_no = 'CHK-0001'").get() as { id: number }
+    ).id;
+    // keep 24 pcs aside as a labeled bundle first (ADR-035 #12)
+    const bundle = await request(ctx.app)
+      .post(`/api/checking/${checkId}/pack`)
+      .set('Cookie', operator)
+      .send({ issueDate: '2026-07-09', staffId: 2, qtyPcs: 24, kind: 'bundle', label: 'Festival reserve', notes: '' });
+    expect(bundle.status).toBe(201);
+    bundleId = bundle.body.id as number;
+
+    // a bundle without a name is refused
+    const noLabel = await request(ctx.app)
+      .post(`/api/checking/${checkId}/pack`)
+      .set('Cookie', operator)
+      .send({ issueDate: '2026-07-09', staffId: 2, qtyPcs: 4, kind: 'bundle', label: '', notes: '' });
+    expect(noLabel.status).toBe(400);
+
+    // the rest goes to normal packing (staff 1 — legacy 'checker' role doesn't restrict)
+    const res = await request(ctx.app)
+      .post(`/api/checking/${checkId}/pack`)
+      .set('Cookie', operator)
+      .send({ issueDate: '2026-07-09', staffId: 1, qtyPcs: 88, kind: 'pack', label: '', notes: '' });
     expect(res.status).toBe(201);
-    expect(res.body.docNo).toBe('PCK-0001');
     packId = res.body.id as number;
+
+    // over-allotment from the same check issue is refused (0 left in its pool)
+    const over = await request(ctx.app)
+      .post(`/api/checking/${checkId}/pack`)
+      .set('Cookie', operator)
+      .send({ issueDate: '2026-07-09', staffId: 1, qtyPcs: 5, kind: 'pack', label: '', notes: '' });
+    expect(over.status).toBe(409);
 
     // deactivated staff are still refused
     ctx.db.prepare('UPDATE staff SET is_active = 0 WHERE id = 3').run();
-    const inactive = await request(ctx.app).post('/api/packing').set('Cookie', operator).send({
-      issueDate: '2026-07-09',
-      staffId: 3,
-      modelId: 1,
-      colorId: 1,
-      sizeId: 1,
-      qtyPcs: 1,
-    });
+    const inactive = await request(ctx.app)
+      .post(`/api/checking/${checkId}/pack`)
+      .set('Cookie', operator)
+      .send({ issueDate: '2026-07-09', staffId: 3, qtyPcs: 1, kind: 'pack', label: '', notes: '' });
     expect(inactive.status).toBe(400);
     expect(inactive.body.error).toMatch(/deactivated/i);
     ctx.db.prepare('UPDATE staff SET is_active = 1 WHERE id = 3').run();
+
+    // bundles are listed distinctly, holding their pieces
+    const bundles = await request(ctx.app).get('/api/packing?kind=bundle').set('Cookie', owner);
+    expect(bundles.body.items).toHaveLength(1);
+    expect(bundles.body.items[0].label).toBe('Festival reserve');
+    expect(bundles.body.items[0].heldPcs).toBe(24);
+  });
+
+  it('packing from a BUNDLE later works and keeps the trace allocations', async () => {
+    // move 12 pcs from the bundle to another packer (the rare different-person case)
+    const fromBundle = await request(ctx.app).post('/api/packing').set('Cookie', operator).send({
+      issueDate: '2026-07-10',
+      staffId: 3,
+      lotType: 'pack_issue',
+      lotId: bundleId,
+      qtyPcs: 12,
+      kind: 'pack',
+      label: '',
+      notes: '',
+    });
+    expect(fromBundle.status).toBe(201);
+
+    // trace continuity: the new issue's allocations point at the ORIGINAL check issue
+    const allocs = ctx.db
+      .prepare('SELECT packing_lot_type FROM pack_allocations WHERE pack_issue_id = ?')
+      .all(fromBundle.body.id) as Array<{ packing_lot_type: string }>;
+    expect(allocs.length).toBeGreaterThan(0);
+    expect(allocs.every((a) => a.packing_lot_type === 'check_issue')).toBe(true);
+
+    // pack those 12 to FG so the conservation numbers below stay whole
+    const done = await request(ctx.app)
+      .post(`/api/packing/${fromBundle.body.id}/results`)
+      .set('Cookie', operator)
+      .send({ resultDate: '2026-07-10', qtyPacked: 12, qtyShort: 0 });
+    expect(done.status).toBe(201);
+    expect(done.body.status).toBe('completed');
   });
 
   it('incremental pack results: packed to FG, short with reason', async () => {
     const s1 = await request(ctx.app)
       .post(`/api/packing/${packId}/results`)
       .set('Cookie', operator)
-      .send({ resultDate: '2026-07-10', qtyPacked: 100, qtyShort: 0 });
+      .send({ resultDate: '2026-07-10', qtyPacked: 76, qtyShort: 0 });
     expect(s1.status).toBe(201);
     expect(s1.body.status).toBe('open');
 
@@ -285,17 +326,18 @@ describe('packing → finished goods → dispatch', () => {
     expect(s2.status).toBe(201);
     expect(s2.body.status).toBe('completed');
 
-    expect(stageTotal('FG')).toBe(110);
-    expect(stageTotal('PACKING')).toBe(0);
+    // 76 + 10 from this issue + 12 from the bundle = 98 in FG; 12 still bundled
+    expect(stageTotal('FG')).toBe(98);
+    expect(stageTotal('PACKING')).toBe(12);
 
     const fg = await request(ctx.app).get('/api/stock/FG').set('Cookie', owner);
-    expect(fg.body.items[0].qty).toBe(110);
+    expect(fg.body.items[0].qty).toBe(98);
   });
 
   it('dispatch is admin-only, reduces FG, void restores it', async () => {
     const asOperator = await request(ctx.app).post('/api/dispatches').set('Cookie', operator).send({
       dispatchDate: '2026-07-11',
-      modelId: 1,
+      modelId: modelM1,
       colorId: 1,
       sizeId: 1,
       qtyPcs: 24,
@@ -304,18 +346,18 @@ describe('packing → finished goods → dispatch', () => {
 
     const res = await request(ctx.app).post('/api/dispatches').set('Cookie', admin).send({
       dispatchDate: '2026-07-11',
-      modelId: 1,
+      modelId: modelM1,
       colorId: 1,
       sizeId: 1,
       qtyPcs: 24,
       notes: 'sold to Delhi shop',
     });
     expect(res.status).toBe(201);
-    expect(stageTotal('FG')).toBe(86);
+    expect(stageTotal('FG')).toBe(74);
 
     const tooMany = await request(ctx.app).post('/api/dispatches').set('Cookie', admin).send({
       dispatchDate: '2026-07-11',
-      modelId: 1,
+      modelId: modelM1,
       colorId: 1,
       sizeId: 1,
       qtyPcs: 500,
@@ -327,7 +369,7 @@ describe('packing → finished goods → dispatch', () => {
       .set('Cookie', admin)
       .send({ reason: 'customer cancelled' });
     expect(voided.status).toBe(200);
-    expect(stageTotal('FG')).toBe(110);
+    expect(stageTotal('FG')).toBe(98);
   });
 
   it('dashboard KPIs and alerts reflect the fixture ledger exactly', async () => {
@@ -336,10 +378,10 @@ describe('packing → finished goods → dispatch', () => {
     const { kpis } = res.body as {
       kpis: Record<string, number>;
     };
-    expect(kpis.rawCm).toBe(10000 - CUT_CM);
+    expect(kpis.rawLen).toBe(180000 - CUT_LEN);
     expect(kpis.cutPcs).toBe(0);
     expect(kpis.wipPcs).toBe(0);
-    expect(kpis.fgPcs).toBe(110);
+    expect(kpis.fgPcs).toBe(98);
     expect(kpis.rejectedPcs).toBe(6);
     expect(kpis.openJobs).toBe(0);
     expect(kpis.completedJobs).toBe(1);
@@ -394,12 +436,12 @@ describe('packing → finished goods → dispatch', () => {
     expect(stageTotal('CUT')).toBe(0);
     expect(stageTotal('WIP')).toBe(0);
     expect(stageTotal('CHECKING')).toBe(0);
-    expect(stageTotal('PACKING')).toBe(0);
-    expect(stageTotal('FG')).toBe(110);
+    expect(stageTotal('FG')).toBe(98);
+    expect(stageTotal('PACKING')).toBe(12); // the bundle still held aside
     expect(stageTotal('REJECTED')).toBe(6);
-    // 110 + 6 = 116 = 120 - 4 ✓ zero drift
+    // 98 + 12 + 6 = 116 = 120 - 4 ✓ zero drift
 
-    // RAW conservation separately (cm units)
+    // RAW conservation separately (length units)
     const rawIn = (
       ctx.db
         .prepare(
@@ -415,6 +457,6 @@ describe('packing → finished goods → dispatch', () => {
         .get() as { q: number }
     ).q;
     expect(rawIn - rawOut).toBe(stageTotal('RAW'));
-    expect(stageTotal('RAW')).toBe(10000 - CUT_CM); // bought − computed cutting consumption
+    expect(stageTotal('RAW')).toBe(180000 - CUT_LEN); // bought − computed cutting consumption
   });
 });

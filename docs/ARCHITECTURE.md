@@ -1,39 +1,20 @@
 # Architecture
 
-## Two hosts, one system
+## The product (ADR-027): a central-PC web app, multi-office
 
-The product ships as an **Android app that runs the whole system on a single device** —
-no server, no office PC, no network needed. The business code is not duplicated to do
-this: the very same route and service files run in both places.
+The system runs on **one office computer** (Node/Express + SQLite); operators and the
+owner reach it from browsers — on the LAN or remotely via a tunnel. **Multi-office
+(ADR-028)** is one database with an `office_id` on every document and ledger row: the
+`resolveOffice` middleware pins operators to their office (`users.office_id`) and lets
+admin/owner pick one per request (`X-Office-Id` header, chosen from the top bar; the
+client stores it and reloads on switch). Documents of offices after the first embed the
+office code in their numbers (`BR-RM-0001`); masters and users are shared.
 
-```
-                    shared/src            server/src (routes + services + ledger)
-                        |                              |
-        +---------------+------------------------------+---------------+
-        |                                                              |
-  NODE HOST (development, tests, optional PC)          ANDROID APP (what the client uses)
-  express + better-sqlite3 + sharp                     Web Worker + SQLite-WASM/OPFS
-  HTTP on :8787                                        postMessage, no network
-```
-
-On Android, `express`, `multer`, `cookie-parser`, `better-sqlite3` and the Node builtins
-resolve to small shims in `client/src/local/shims/` (wired up by `vite build --mode app`),
-and the server is compiled into a Web Worker. The page reaches it by patching `fetch` for
-`/api` and `/uploads`, so every page, hook and query in the client is untouched.
-
-| | Node host | Android app |
-|---|---|---|
-| Transport | HTTP (Express) | `postMessage` to a worker (`local/bridge.ts`) |
-| Database | better-sqlite3, WAL | SQLite-WASM on OPFS (`local/db/sqlite-wasm.ts`) |
-| Photos | `upload_files` table | same table (ADR-024) |
-| Images | sharp | OffscreenCanvas (`local/image-processor.ts`) |
-| Updates | supervisor + release zip | web-bundle swap (`local/updater.ts`) |
-| Backups | files in `data/backups` | export the database + Android share sheet |
-| Demo mode | second data directory | second database in the same store |
-
-Operations that are about the *device* rather than the data — updates, backups, restore,
-demo mode — are served on the UI thread by `local/native-ops.ts` under the same URLs the
-Express host uses (`routes/system.node.routes.ts`), so the screens are identical.
+> **Dormant Android runtime.** The system previously shipped as an on-device Android app
+> (ADR-021…026); that runtime (`client/src/local/`, shims, `android/`,
+> `android-release.yml`) stays in the tree and working, but nothing ships it —
+> the Android workflow is manual-dispatch only. The notes below the stack table describe
+> it for whenever it is wanted again.
 
 ## Stack
 
@@ -85,7 +66,8 @@ data/              app.db, backups/  ← gitignored, survives updates (Node host
 
 ## Core invariants
 
-1. **Units are integers**: pieces (1dz=12), cm, paise. `shared/src/units.ts` is the only
+1. **Units are integers**: pieces (1dz=12), hundredths-of-an-inch for cloth
+   ("inch_c", 1 yd = 3600 — ADR-029), paise. `shared/src/units.ts` is the only
    conversion path; floats never reach SQL.
 2. **Single stock ledger** (`stock_ledger`): signed rows; balance = SUM. Seven stages:
    RAW/CUT/WIP/CHECKING/PACKING/FG/REJECTED. Inventory changes ONLY through

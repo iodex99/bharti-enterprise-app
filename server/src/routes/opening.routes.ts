@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { openingBalanceSchema, voidSchema } from '@shared';
 import { getDb } from '../db/connection';
 import { requireRole } from '../middleware/auth';
+import { officeOf } from '../middleware/office';
 import { idParamGuard } from '../middleware/params';
 import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
@@ -16,12 +17,12 @@ export function openingRoutes(): Router {
   router.param('id', idParamGuard);
   router.use(requireRole('admin'));
 
-  router.get('/', (_req, res) => {
-    res.json({ items: listOpeningBalances(getDb()) });
+  router.get('/', (req, res) => {
+    res.json({ items: listOpeningBalances(getDb(), officeOf(req).id) });
   });
 
   router.post('/', idempotencyGuard('opening_balance'), validateBody(openingBalanceSchema), (req, res) => {
-    const result = createOpeningBalance(getDb(), req.body, req.user!.id, req.ip ?? null);
+    const result = createOpeningBalance(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null);
     if (!result.ok) {
       res.status(result.code).json({ error: result.error });
       return;
@@ -33,6 +34,7 @@ export function openingRoutes(): Router {
   router.post('/:id/void', validateBody(voidSchema), (req, res) => {
     const result = voidOpeningBalance(
       getDb(),
+      officeOf(req),
       Number(req.params.id),
       (req.body as { reason: string }).reason,
       req.user!.id,

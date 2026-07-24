@@ -15,8 +15,6 @@ export function useMasterOptions(master: string) {
 
 export function optionLabel(master: string, o: MasterOption): string {
   switch (master) {
-    case 'models':
-      return `${o.code as string} — ${o.name as string}`;
     case 'sizes':
       return o.code as string;
     default:

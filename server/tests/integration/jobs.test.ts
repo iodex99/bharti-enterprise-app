@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { loginAs, makeTestContext, type TestContext } from '../helpers';
 
+const PHOTO = '/uploads/2026-07/aaaaaaaaaaaaaaaa.webp'; // receipts REQUIRE a photo (ADR-032)
+
 /**
  * Module 5/6 flows. Fixture: 2 cutting batches yield XS=240pcs total (120 + 120)
  * so FIFO allocation across lots is exercised, plus S1=120pcs.
@@ -10,6 +12,7 @@ let ctx: TestContext;
 let admin: string;
 let operator: string;
 let owner: string;
+let modelM1 = 0;
 
 const wipBalance = (lineId: number) =>
   (
@@ -33,47 +36,40 @@ beforeAll(async () => {
   operator = await loginAs(ctx.app, 'operator', 'Operator@123');
   owner = await loginAs(ctx.app, 'owner', 'Owner@123');
   ctx.db.exec(`
-    INSERT INTO models (id, code, name, created_by) VALUES (1, 'M1', 'Model 1', 1);
     INSERT INTO colors (id, name, created_by) VALUES (1, 'Black', 1);
     INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1), (2, 'S1', 2, 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
     INSERT INTO contractors (id, name, default_rate_paise_per_dozen, created_by)
       VALUES (1, 'Meena', 3000, 1), (2, 'Rafiq', 2800, 1);
   `);
-  // purchase + two cutting batches (model chosen at cutting; consumption computed)
+  // purchase + two cutting batches (code typed at cutting; the plan IS the cutting)
   const purchase = await request(ctx.app).post('/api/purchases').set('Cookie', operator).send({
     purchaseDate: '2026-07-01',
     receivedDate: '2026-07-01',
     vendorId: 1,
     colorId: 1,
-    qtyCm: 50000,
-    ratePaisePerMeter: 4000,
+    lenInchC: 720000, // 200 yd
+    widthInchC: 4400,
+    ratePaisePerYard: 4000,
     notes: '',
   });
   for (const _ of [1, 2]) {
-    const plan = await request(ctx.app)
+    const cutRes = await request(ctx.app)
       .post('/api/cutting')
       .set('Cookie', operator)
       .send({
         cutDate: '2026-07-02',
         rawLotType: 'purchase',
         rawLotId: purchase.body.id,
-        modelId: 1,
+        notes: '',
         lines: [
-          { sizeId: 1, expectedPcs: 120, clothPerPcInchC: 1000, widthCount: 3 },
-          { sizeId: 2, expectedPcs: 60, clothPerPcInchC: 1200, widthCount: 2 },
+          { sizeId: 1, code: 'M1', qtyPcs: 120, clothPerPcInchC: 1000, widthCount: 3 },
+          { sizeId: 2, code: 'M1', qtyPcs: 60, clothPerPcInchC: 1200, widthCount: 2 },
         ],
       });
-    await request(ctx.app)
-      .post(`/api/cutting/${plan.body.id}/actuals`)
-      .set('Cookie', operator)
-      .send({
-        lines: [
-          { sizeId: 1, actualPcs: 120 },
-          { sizeId: 2, actualPcs: 60 },
-        ],
-      });
+    if (cutRes.status !== 201) throw new Error(`fixture cutting failed: ${cutRes.text}`);
   }
+  modelM1 = (ctx.db.prepare("SELECT id FROM models WHERE code = 'M1'").get() as { id: number }).id;
 });
 afterAll(() => ctx.cleanup());
 
@@ -88,14 +84,15 @@ describe('job cards', () => {
       .send({
         issueDate: '2026-07-03',
         contractorId: 1,
-        modelId: 1,
-        colorId: 1,
         notes: '',
-        lines: [{ sizeId: 1, qtyIssuedPcs: 180, unitEntered: 'dozens', ratePaisePerDozen: 3000 }], // 15 dz spans both batches
+        lines: [
+          { modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 180, unitEntered: 'dozens', ratePaisePerDozen: 3000 },
+        ], // 15 dz spans both batches
       });
     expect(res.status).toBe(201);
-    expect(res.body.docNo).toBe('JOB-0001');
-    jobId = res.body.id as number;
+    expect(res.body.cards).toHaveLength(1);
+    expect(res.body.cards[0].docNo).toBe('JOB-0001');
+    jobId = res.body.cards[0].id as number;
 
     const list = await request(ctx.app).get('/api/jobs').set('Cookie', owner);
     const job = list.body.items.find((j: { id: number }) => j.id === jobId);
@@ -122,9 +119,7 @@ describe('job cards', () => {
       .send({
         issueDate: '2026-07-03',
         contractorId: 1,
-        modelId: 1,
-        colorId: 1,
-        lines: [{ sizeId: 1, qtyIssuedPcs: 100, unitEntered: 'pieces', ratePaisePerDozen: 3000 }],
+        lines: [{ modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 100, unitEntered: 'pieces', ratePaisePerDozen: 3000 }],
       });
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/available 60/);
@@ -137,6 +132,7 @@ describe('job cards', () => {
         .set('Cookie', operator)
         .send({
           receiptDate: '2026-07-05',
+          imagePath: PHOTO,
           lines: [{ jobCardLineId: lineXS.id, qtyPcs: dz * 12, returnType: 'stitched' }],
         });
 
@@ -167,21 +163,20 @@ describe('job cards', () => {
       .send({
         issueDate: '2026-07-06',
         contractorId: 2,
-        modelId: 1,
-        colorId: 1,
-        lines: [{ sizeId: 1, qtyIssuedPcs: 24, unitEntered: 'dozens', ratePaisePerDozen: 2800 }],
+        lines: [{ modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 24, unitEntered: 'dozens', ratePaisePerDozen: 2800 }],
       });
     const lineId = (
       ctx.db
         .prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?')
-        .get(job.body.id) as { id: number }
+        .get(job.body.cards[0].id) as { id: number }
     ).id;
 
     const noReason = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/receipts`)
+      .post(`/api/jobs/${job.body.cards[0].id}/receipts`)
       .set('Cookie', operator)
       .send({
         receiptDate: '2026-07-08',
+        imagePath: PHOTO,
         lines: [{ jobCardLineId: lineId, qtyPcs: 30, returnType: 'stitched' }],
       });
     expect(noReason.status).toBe(409);
@@ -189,10 +184,11 @@ describe('job cards', () => {
 
     const before = stageTotal('CHECKING');
     const withReason = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/receipts`)
+      .post(`/api/jobs/${job.body.cards[0].id}/receipts`)
       .set('Cookie', operator)
       .send({
         receiptDate: '2026-07-08',
+        imagePath: PHOTO,
         lines: [
           {
             jobCardLineId: lineId,
@@ -221,14 +217,12 @@ describe('job cards', () => {
       .send({
         issueDate: '2026-07-07',
         contractorId: 1,
-        modelId: 1,
-        colorId: 1,
-        lines: [{ sizeId: 2, qtyIssuedPcs: 60, unitEntered: 'dozens', ratePaisePerDozen: 3000 }], // 5 dz S1
+        lines: [{ modelId: modelM1, colorId: 1, sizeId: 2, qtyIssuedPcs: 60, unitEntered: 'dozens', ratePaisePerDozen: 3000 }], // 5 dz S1
       });
     const lineId = (
       ctx.db
         .prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?')
-        .get(job.body.id) as { id: number }
+        .get(job.body.cards[0].id) as { id: number }
     ).id;
     const cutBefore = (
       (await request(ctx.app).get('/api/stock/CUT').set('Cookie', owner)).body.items.find(
@@ -238,10 +232,11 @@ describe('job cards', () => {
 
     // 3 dz stitched + 2 dz returned unstitched = fully settled
     const receipt = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/receipts`)
+      .post(`/api/jobs/${job.body.cards[0].id}/receipts`)
       .set('Cookie', operator)
       .send({
         receiptDate: '2026-07-09',
+        imagePath: PHOTO,
         lines: [
           { jobCardLineId: lineId, qtyPcs: 36, returnType: 'stitched' },
           { jobCardLineId: lineId, qtyPcs: 24, returnType: 'unstitched_return' },
@@ -260,7 +255,7 @@ describe('job cards', () => {
 
     // job cost counts only stitched pieces: 3dz × ₹30 = ₹90
     const list = await request(ctx.app).get('/api/jobs').set('Cookie', owner);
-    const j = list.body.items.find((x: { id: number }) => x.id === job.body.id);
+    const j = list.body.items.find((x: { id: number }) => x.id === job.body.cards[0].id);
     expect(j.jobCostPaise).toBe(9000);
   });
 
@@ -271,31 +266,30 @@ describe('job cards', () => {
       .send({
         issueDate: '2026-07-08',
         contractorId: 2,
-        modelId: 1,
-        colorId: 1,
-        lines: [{ sizeId: 2, qtyIssuedPcs: 36, unitEntered: 'dozens', ratePaisePerDozen: 2800 }],
+        lines: [{ modelId: modelM1, colorId: 1, sizeId: 2, qtyIssuedPcs: 36, unitEntered: 'dozens', ratePaisePerDozen: 2800 }],
       });
     const lineId = (
       ctx.db
         .prepare('SELECT id FROM job_card_lines WHERE job_card_id = ?')
-        .get(job.body.id) as { id: number }
+        .get(job.body.cards[0].id) as { id: number }
     ).id;
     await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/receipts`)
+      .post(`/api/jobs/${job.body.cards[0].id}/receipts`)
       .set('Cookie', operator)
       .send({
         receiptDate: '2026-07-10',
+        imagePath: PHOTO,
         lines: [{ jobCardLineId: lineId, qtyPcs: 30, returnType: 'stitched' }],
       });
 
     const opClose = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/close`)
+      .post(`/api/jobs/${job.body.cards[0].id}/close`)
       .set('Cookie', operator)
       .send({ reason: 'missing_pieces', note: 'contractor lost them' });
     expect(opClose.status).toBe(403);
 
     const adminClose = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/close`)
+      .post(`/api/jobs/${job.body.cards[0].id}/close`)
       .set('Cookie', admin)
       .send({ reason: 'missing_pieces', note: 'contractor lost 6 pcs' });
     expect(adminClose.status).toBe(200);
@@ -303,15 +297,16 @@ describe('job cards', () => {
     expect(wipBalance(lineId)).toBe(0);
 
     const list = await request(ctx.app).get('/api/jobs').set('Cookie', owner);
-    const j = list.body.items.find((x: { id: number }) => x.id === job.body.id);
+    const j = list.body.items.find((x: { id: number }) => x.id === job.body.cards[0].id);
     expect(j.status).toBe('closed_with_discrepancy');
 
     // no more receipts after closing
     const late = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/receipts`)
+      .post(`/api/jobs/${job.body.cards[0].id}/receipts`)
       .set('Cookie', operator)
       .send({
         receiptDate: '2026-07-11',
+        imagePath: PHOTO,
         lines: [{ jobCardLineId: lineId, qtyPcs: 6, returnType: 'stitched' }],
       });
     expect(late.status).toBe(409);
@@ -325,14 +320,12 @@ describe('job cards', () => {
       .send({
         issueDate: '2026-07-09',
         contractorId: 1,
-        modelId: 1,
-        colorId: 1,
-        lines: [{ sizeId: 1, qtyIssuedPcs: 12, unitEntered: 'dozens', ratePaisePerDozen: 3000 }],
+        lines: [{ modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 12, unitEntered: 'dozens', ratePaisePerDozen: 3000 }],
       });
     expect(stageTotal('CUT')).toBe(cutBefore - 12);
 
     const voided = await request(ctx.app)
-      .post(`/api/jobs/${job.body.id}/void`)
+      .post(`/api/jobs/${job.body.cards[0].id}/void`)
       .set('Cookie', admin)
       .send({ reason: 'wrong contractor picked' });
     expect(voided.status).toBe(200);

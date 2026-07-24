@@ -1,13 +1,17 @@
 /**
  * Unit handling rules (see docs/ARCHITECTURE.md):
  * - Stitched-stage quantities are stored as integer PIECES (1 dozen = 12 pieces).
- * - Raw cloth is stored as integer CENTIMETERS.
+ * - Cloth length AND width are stored as integer HUNDREDTHS OF AN INCH ("inch_c").
+ *   The business buys and measures cloth in YARDS (1 yard = 36 inches), so 1.25 yd
+ *   = 4500 inch_c exactly — yards with two decimals always fit integers.
  * - Money is stored as integer PAISE.
  * Floats never enter the database; these helpers are the only conversion path.
  */
 
 export const PIECES_PER_DOZEN = 12;
-export const CM_PER_METER = 100;
+export const INCHES_PER_YARD = 36;
+/** hundredths of an inch per yard: 36 in × 100 */
+export const INCH_C_PER_YARD = INCHES_PER_YARD * 100;
 
 const EPSILON = 1e-6;
 
@@ -16,6 +20,10 @@ function assertInteger(value: number, label: string): void {
     throw new Error(`${label} must resolve to a whole number, got ${value}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// pieces / dozens
+// ---------------------------------------------------------------------------
 
 /** Convert a dozens + pieces entry ("2 dz 6 pc") to total pieces. */
 export function dzPcToPieces(dozens: number, pieces = 0): number {
@@ -58,23 +66,49 @@ export function formatPieces(totalPieces: number): string {
   return `${sign}${dz}dz ${pc}pc`;
 }
 
-/** Meters (possibly decimal, max 2dp) to integer centimeters. */
-export function metersToCm(meters: number): number {
-  const cm = meters * CM_PER_METER;
-  assertInteger(cm, 'length in cm');
-  return Math.round(cm);
+// ---------------------------------------------------------------------------
+// cloth length & width: yards ↔ hundredths of an inch
+// ---------------------------------------------------------------------------
+
+/** Yards (max 2dp, e.g. 125.5) to integer hundredths of an inch. 1.25 yd -> 4500. */
+export function yardsToInchC(yards: number): number {
+  const c = yards * INCH_C_PER_YARD;
+  assertInteger(c, 'length in hundredths of an inch');
+  return Math.round(c);
 }
 
-export function cmToMeters(cm: number): number {
-  return cm / CM_PER_METER;
+export function inchCToYards(inchC: number): number {
+  return inchC / INCH_C_PER_YARD;
 }
 
-/** Format centimeters as meters for display: 12550 -> "125.5 m". */
-export function formatCm(cm: number): string {
-  const meters = cm / CM_PER_METER;
-  const str = Number.isInteger(meters) ? meters.toString() : meters.toFixed(2).replace(/0$/, '');
-  return `${str} m`;
+/** Inches (max 2dp, e.g. 10.25 or a 44" width) to integer hundredths of an inch. */
+export function inchesToInchC(inches: number): number {
+  const c = inches * 100;
+  assertInteger(c, 'length in hundredths of an inch');
+  return Math.round(c);
 }
+
+export function inchCToInches(inchC: number): number {
+  return inchC / 100;
+}
+
+/** Format a cloth LENGTH for display: 451800 -> "125.5 yd". */
+export function formatLen(inchC: number): string {
+  const yards = inchC / INCH_C_PER_YARD;
+  const str = Number.isInteger(yards) ? yards.toString() : yards.toFixed(2).replace(/0$/, '');
+  return `${str} yd`;
+}
+
+/** Format a per-piece length or cloth WIDTH: 1025 -> `10.25"`, 4400 -> `44"`. */
+export function formatInchC(inchC: number): string {
+  const inches = inchC / 100;
+  const str = Number.isInteger(inches) ? inches.toString() : inches.toFixed(2).replace(/0$/, '');
+  return `${str}"`;
+}
+
+// ---------------------------------------------------------------------------
+// money
+// ---------------------------------------------------------------------------
 
 /** Rupees (possibly decimal, max 2dp) to integer paise. */
 export function rupeesToPaise(rupees: number): number {
@@ -105,38 +139,18 @@ export function variancePct(expected: number, actual: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Cutting geometry: cloth length per piece is measured in INCHES on the table
-// (stored as integer HUNDREDTHS of an inch), and the cloth width fits several
-// pieces side by side ("width count"). 1 inch = 2.54 cm exactly.
+// Cutting geometry — pure integers, no unit crossing.
+// A piece takes `clothPerPcInchC` of LENGTH, and `widthCount` pieces are cut side by
+// side across the cloth width. The cloth needed is whole strips.
 // ---------------------------------------------------------------------------
 
-export const INCH_CM_X100 = 254; // cm per inch, times 100
-
-/** Inches (max 2dp, e.g. 10.25) to integer hundredths of an inch. */
-export function inchesToInchC(inches: number): number {
-  const c = inches * 100;
-  assertInteger(c, 'length in hundredths of an inch');
-  return Math.round(c);
-}
-
-export function inchCToInches(inchC: number): number {
-  return inchC / 100;
-}
-
-/** Format hundredths of an inch: 1025 -> `10.25"`. */
-export function formatInchC(inchC: number): string {
-  const inches = inchC / 100;
-  const str = Number.isInteger(inches) ? inches.toString() : inches.toFixed(2).replace(/0$/, '');
-  return `${str}"`;
-}
-
 /**
- * Cloth consumed by one cutting line, in integer cm (rounded UP — cloth cut is cloth
- * gone). `widthCount` pieces sit side by side across the cloth width, so the length
- * needed is ceil(pcs / widthCount) strips of `clothPerPcInchC` each.
- * e.g. 120 pcs, 10" per piece, 3 across → 40 strips × 10" = 400" = 1016 cm.
+ * Cloth consumed by one cutting line, in integer hundredths of an inch of length:
+ * ceil(pcs / widthCount) strips × length per piece. Rounded UP to whole strips —
+ * a started strip is used cloth.
+ * e.g. 120 pcs, 10" per piece, 3 across → 40 strips × 1000 = 40000 inch_c (≈11.11 yd).
  */
-export function clothRequiredCm(
+export function clothRequiredInchC(
   expectedPcs: number,
   clothPerPcInchC: number,
   widthCount: number,
@@ -146,5 +160,14 @@ export function clothRequiredCm(
   assertInteger(widthCount, 'width count');
   if (expectedPcs <= 0 || clothPerPcInchC <= 0 || widthCount <= 0) return 0;
   const strips = Math.ceil(expectedPcs / widthCount);
-  return Math.ceil((strips * clothPerPcInchC * INCH_CM_X100) / 100 / 100);
+  return strips * clothPerPcInchC;
+}
+
+/**
+ * How many pieces fit side by side across the cloth, from the cloth's width and the
+ * width one piece needs — a SUGGESTION for the cutting form (the cutter can override).
+ */
+export function suggestedWidthCount(clothWidthInchC: number, pieceWidthInchC: number): number {
+  if (clothWidthInchC <= 0 || pieceWidthInchC <= 0) return 0;
+  return Math.floor(clothWidthInchC / pieceWidthInchC);
 }

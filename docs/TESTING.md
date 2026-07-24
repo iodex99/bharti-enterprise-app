@@ -36,7 +36,7 @@ Playwright browsers: `npx playwright install chromium` once per machine.
 - CI (`ci.yml`) runs typecheck + lint + unit/integration on ubuntu AND windows, then
   builds and runs E2E on ubuntu. Release only publishes from green main.
 
-## Coverage map (final)
+## Coverage map (v2 — multi-office, yards, codes-at-cutting)
 
 **Browser-runtime unit tests:** the hand-written shims are checked against the real Node
 modules — SHA-256 for every input shape and chunking pattern (a padding bug at 55-byte
@@ -81,9 +81,13 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
 - discrepancies: list joins source docs (unresolved first), admin-only resolve
   (acknowledgement — ledger row count proven unchanged), audit row, 409 double-resolve,
   alert links point at /discrepancies
-- FULL-CHAIN CONSERVATION: genesis − terminal = on-hand, drift 0 (pieces) + RAW (cm)
+- FULL-CHAIN CONSERVATION: genesis − terminal = on-hand, drift 0 (pieces) + RAW (inch_c)
 - dashboard numbers vs fixture ledger; alerts feed
-- reports: all 15 run + column shape, filters narrow, losses completeness, xlsx
+- offices: office 1 from migration, per-office doc numbers + stock split, operator
+  pinning (403 without an office), header selection for admin/owner, session revocation
+  on office change
+- reports: all 16 run + column shape (office-scoped), filters narrow, losses
+  completeness, xlsx
   round-trip parse (title/headers/values); trace to-vendor + forward; 404s
 - system: reconciliation green + corrupted-row detection, settings whitelist + audit,
   daily-backup catch-up state machine (too-early/ran/idempotent/failure-retry/boot),

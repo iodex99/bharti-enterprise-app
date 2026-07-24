@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatBusinessDate, formatCm, formatPieces, label as stageLabel, STAGES, todayIST } from '@shared';
+import { formatBusinessDate, formatLen, formatPieces, label as stageLabel, STAGES, todayIST } from '@shared';
 import { api, ApiError } from '../../api/client';
 import { DataTable } from '../../components/DataTable';
 import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
-import { DzPcInput, MetersInput } from '../../components/inputs';
+import { DzPcInput, InchesInput, YardsInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { VoidModal } from '../purchases/PurchasesPage';
 
@@ -81,7 +81,7 @@ export default function OpeningBalancesPage() {
               r.voidedAt ? (
                 <Badge tone="red">voided</Badge>
               ) : r.stage === 'RAW' ? (
-                formatCm(r.qty)
+                formatLen(r.qty)
               ) : (
                 formatPieces(r.qty)
               ),
@@ -123,11 +123,12 @@ function NewOpeningModal({
 }) {
   const [balanceDate, setBalanceDate] = useState(todayIST());
   const [stage, setStage] = useState<string>('RAW');
-  const [modelId, setModelId] = useState<number | null>(null);
+  const [modelCode, setModelCode] = useState('');
   const [colorId, setColorId] = useState<number | null>(null);
   const [sizeId, setSizeId] = useState<number | null>(null);
   const [contractorId, setContractorId] = useState<number | null>(null);
   const [qty, setQty] = useState<number | null>(null);
+  const [widthInchC, setWidthInchC] = useState<number | null>(null);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
@@ -136,11 +137,12 @@ function NewOpeningModal({
       api.post('/api/opening-balances', {
         balanceDate,
         stage,
-        modelId: stage === 'RAW' ? null : modelId, // raw cloth has no model yet
+        modelCode: stage === 'RAW' ? null : modelCode.trim().toUpperCase(), // no code on raw cloth
         colorId,
         sizeId: stage === 'RAW' ? null : sizeId,
         contractorId: stage === 'WIP' ? contractorId : null,
         qty,
+        widthInchC: stage === 'RAW' ? widthInchC : null,
         note,
       }),
     onSuccess: () => {
@@ -172,11 +174,11 @@ function NewOpeningModal({
           </Select>
         </Field>
         {stage !== 'RAW' && (
-          <Field label="Model">
-            <MasterSelect master="models" value={modelId} onChange={setModelId} />
+          <Field label="Code number" hint="Typed like at cutting — new codes are created automatically">
+            <TextInput value={modelCode} onChange={(e) => setModelCode(e.target.value)} placeholder="e.g. 315" />
           </Field>
         )}
-        <Field label="Color" hint={stage === 'RAW' ? 'Raw cloth gets its model at cutting' : undefined}>
+        <Field label="Color" hint={stage === 'RAW' ? 'Raw cloth gets its code at cutting' : undefined}>
           <MasterSelect master="colors" value={colorId} onChange={setColorId} />
         </Field>
         {stage !== 'RAW' && (
@@ -189,13 +191,18 @@ function NewOpeningModal({
             <MasterSelect master="contractors" value={contractorId} onChange={setContractorId} />
           </Field>
         )}
-        <Field label={stage === 'RAW' ? 'Quantity (meters)' : 'Quantity'}>
+        <Field label={stage === 'RAW' ? 'Length (yards)' : 'Quantity'}>
           {stage === 'RAW' ? (
-            <MetersInput cm={qty} onChange={setQty} />
+            <YardsInput inchC={qty} onChange={setQty} />
           ) : (
             <DzPcInput pieces={qty} onChange={setQty} />
           )}
         </Field>
+        {stage === 'RAW' && (
+          <Field label="Cloth width (inches)">
+            <InchesInput inchC={widthInchC} onChange={setWidthInchC} placeholder="e.g. 44" />
+          </Field>
+        )}
         <Field label="Note">
           <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. from register page 42" />
         </Field>
