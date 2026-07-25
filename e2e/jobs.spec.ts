@@ -45,7 +45,7 @@ test('issue goods, partial receipts with photo, auto-complete, contractor analyt
   const lotSelect = cutDialog.getByLabel('Cloth batch');
   const lotLabel = await lotSelect.locator('option', { hasText: color }).first().textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await cutDialog.getByLabel('Size').selectOption({ label: 'S2' });
+  await cutDialog.getByLabel('Size').selectOption({ label: 'PIPE' });
   await cutDialog.getByLabel('Code 1').fill(code);
   await cutDialog.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await cutDialog.getByLabel('Cloth per piece 1').fill('10');
@@ -64,7 +64,7 @@ test('issue goods, partial receipts with photo, auto-complete, contractor analyt
   await expect(jobDialog.getByText(/Default cost ₹28.00\/dz/)).toBeVisible(); // cost set at issue
   await jobDialog.getByLabel('Code 1').selectOption({ label: code });
   await jobDialog.getByLabel('Color 1').selectOption({ label: color });
-  await jobDialog.getByLabel('Size 1').selectOption({ label: 'S2' });
+  await jobDialog.getByLabel('Size 1').selectOption({ label: 'PIPE' });
   await jobDialog.getByRole('textbox', { name: 'Dozens' }).fill('10');
   await jobDialog.getByRole('button', { name: 'Issue goods' }).click();
   // creation is confirmed with the new card's number
@@ -111,6 +111,20 @@ test('issue goods, partial receipts with photo, auto-complete, contractor analyt
   await page.goto('/contractors');
   const rafiqRow = page.getByRole('row', { name: /Rafiq Tailors/ });
   await expect(rafiqRow.getByText(/(10|20)dz/).first()).toBeVisible();
+
+  // the job-work cost lands on Pending Dues, and a PART payment is recorded right there
+  await page.goto('/dues');
+  const dueRow = page.getByRole('row', { name: /Rafiq Tailors/ }).first();
+  await expect(dueRow).toBeVisible();
+  await dueRow.getByRole('button', { name: 'Record payment' }).click();
+  const payDialog = page.getByRole('dialog', { name: /Record payment — Rafiq Tailors/ });
+  await expect(payDialog.getByText(/Pending dues:/)).toBeVisible();
+  await payDialog.getByLabel('Payment date').fill('2026-07-20');
+  await payDialog.getByLabel('Amount').fill('50'); // part payment — the rest stays due
+  await expect(payDialog.getByText(/after this payment: .* still due/)).toBeVisible();
+  await payDialog.getByRole('button', { name: 'Record payment' }).click();
+  // paid so far shows on the row; the balance stays pending
+  await expect(dueRow.getByText(/₹(50|100)\.00/).first()).toBeVisible();
 });
 
 test('owner sees jobs and contractor dues read-only', async ({ page }) => {

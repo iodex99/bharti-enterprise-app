@@ -52,7 +52,8 @@ in localStorage and reloads on switch). Lengths are integer hundredths-of-an-inc
 GET (all roles) · POST, PUT /:id, POST /:id/{deactivate,reactivate}, DELETE /:id (A only;
 delete blocked while referenced). `models` is GONE from masters (ADR-030) — product codes
 are typed at cutting; pickers read **GET /api/products** (all roles; code + photo, sorted,
-RAW-CLOTH sentinel excluded).
+RAW-CLOTH sentinel excluded). Contractors and staff carry `imagePath` (their payment QR
+code); staff carry `defaultRatePaisePerDozen` (checking/packing pay, ADR-037).
 
 ### Offices — /api/offices
 GET (all roles; `?includeInactive=1` for admin) · POST, PUT /:id (A only; office 1 cannot
@@ -72,7 +73,7 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 | /api/opening-balances | A — RAW takes widthInchC + no code; other stages take a typed `modelCode` | | A, blocked after consumption |
 | /api/cutting | A O — per-line {sizeId, code, qtyPcs, clothPerPcInchC, widthCount, imagePath?}; the entry IS the cutting (consumes RAW + creates CUT, ADR-031) | PUT /:id, DELETE /:id — while nothing is issued downstream; doc number kept | A, blocked after issue |
 | /api/jobs | A O — lines carry {modelId, colorId, sizeId, qty, ratePaisePerDozen}; returns `{cards:[…]}`, ONE card per code+color (ADR-033) | PUT /:id, DELETE /:id (receipt-less cards), POST /:id/receipts (partial/excess/unstitched; **imagePath REQUIRED**, ADR-032), POST /:id/close (A) | A, unstarted only |
-| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs} names the received batch | GET /pending (batches waiting w/ contractor+photo), POST /:id/results ({qtyPassed, rejections:[{reason, qtyPcs}]} — 'missing' is a reason, ADR-034), POST /:id/pack (allot passed pcs to a packer or keep a labeled bundle, ADR-035) | A, before results |
+| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs, ratePaisePerDozen?} names the received batch (rate defaults from the staff master) | GET /pending (batches waiting w/ contractor+photo), POST /:id/results ({qtyPassed, rejections:[{reason, qtyPcs}]} — 'missing' is a reason, ADR-034), POST /:id/pack (allot passed pcs to a packer or keep a labeled bundle, ADR-035) | A, before results |
 | /api/packing | A O — directed at {lotType ∈ check_issue\|opening\|pack_issue(bundle), lotId}; kind pack\|bundle + label | GET ?kind=, POST /:id/results (packed/short sessions) | A, before results |
 | /api/dispatches | A | | A (ledger replay) |
 | /api/contractors/payments | A O | | A |
@@ -90,8 +91,9 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 | GET /api/jobs?status&contractorId · /api/jobs/:id/receipts | job list with per-line settlement |
 | GET /api/contractors/analytics | performance + dues |
 | GET /api/contractors/dues | pending dues per contractor (ADR-036) |
+| GET /api/staff/dues · /analytics · GET/POST /api/staff/payments · POST /payments/:id/void | checker/packer earnings, dues and dated partial payments (ADR-037) |
 | GET /api/products | product codes for pickers (typed at cutting) |
-| GET /api/reports · /api/reports/:key?filters&format=xlsx | 16-report registry; xlsx export |
+| GET /api/reports · /api/reports/:key?filters&format=xlsx | 17-report registry; xlsx export |
 | GET /api/reports/full?from&to&format=html|xlsx | Complete Business Report (styled HTML / multi-sheet workbook) |
 | GET /api/trace/fg-lots · /fg/:packIssueId · /purchase/:purchaseId | traceability trees |
 | GET /api/dashboard · /api/dashboard/alerts | owner dashboard + alert feed |

@@ -14,6 +14,7 @@ import { stockRoutes } from './routes/stock.routes';
 import { openingRoutes } from './routes/opening.routes';
 import { cuttingRoutes } from './routes/cutting.routes';
 import { contractorsRoutes, jobsRoutes } from './routes/jobs.routes';
+import { staffRoutes } from './routes/staff.routes';
 import { checkingRoutes, dispatchesRoutes, packingRoutes } from './routes/checking.routes';
 import { discrepanciesRoutes } from './routes/discrepancies.routes';
 import { reportsRoutes, traceRoutes } from './routes/reports.routes';
@@ -64,6 +65,7 @@ export function mountApiRoutes(app: express.Express, options: CoreAppOptions = {
   app.use('/api/cutting', cuttingRoutes());
   app.use('/api/jobs', jobsRoutes());
   app.use('/api/contractors', contractorsRoutes());
+  app.use('/api/staff', staffRoutes());
   app.use('/api/checking', checkingRoutes());
   app.use('/api/packing', packingRoutes());
   app.use('/api/dispatches', dispatchesRoutes());

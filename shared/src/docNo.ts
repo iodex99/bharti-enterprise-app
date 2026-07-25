@@ -9,6 +9,7 @@ export const DOC_PREFIXES = {
   dispatch: 'DSP',
   opening: 'OPB',
   payment: 'PAY',
+  staff_payment: 'SPAY',
 } as const;
 
 export type DocFamily = keyof typeof DOC_PREFIXES;

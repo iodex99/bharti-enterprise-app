@@ -64,13 +64,12 @@ const seedAll = db.transaction(() => {
   const insertSize = db.prepare(
     'INSERT INTO sizes (code, description, sort_order, created_by) VALUES (?, ?, ?, 1)',
   );
+  // the client's default sizes
   for (const [i, [code, desc]] of (
     [
-      ['XS', 'Extra small'],
-      ['S1', 'Small type 1'],
-      ['S2', 'Small type 2'],
-      ['L1', 'Large type 1'],
-      ['XL', 'Extra large'],
+      ['HR', 'Hair band regular'],
+      ['PIPE', 'Pipe scrunchie'],
+      ['JUMBO', 'Jumbo scrunchie'],
     ] as const
   ).entries()) {
     insertSize.run(code, desc, i + 1);
@@ -92,17 +91,17 @@ const seedAll = db.transaction(() => {
   insertContractor.run('Sunita Job Work', 'Sunita Kumari', '9856789012', 'Uttam Nagar, Delhi', 3200);
 
   const insertStaff = db.prepare(
-    'INSERT INTO staff (name, mobile, role, created_by) VALUES (?, ?, ?, 1)',
+    'INSERT INTO staff (name, mobile, role, default_rate_paise_per_dozen, created_by) VALUES (?, ?, ?, ?, 1)',
   );
-  insertStaff.run('Pooja', '9867890123', 'checker');
-  insertStaff.run('Ravi', '9878901234', 'packer');
-  insertStaff.run('Kavita', '9889012345', 'both');
+  insertStaff.run('Pooja', '9867890123', 'checker', 300);
+  insertStaff.run('Ravi', '9878901234', 'packer', 250);
+  insertStaff.run('Kavita', '9889012345', 'both', 300);
 
   // This is a configured, ready-to-use business — past the first-run setup wizard.
   db.prepare("INSERT INTO settings (key, value, updated_by) VALUES ('setup_complete', '1', 1)").run();
 });
 
 seedAll();
-console.log('[seed] done: 5 users, 6 colors, 5 sizes, 2 vendors, 3 contractors, 3 staff');
+console.log('[seed] done: 5 users, 6 colors, 3 sizes (HR/PIPE/JUMBO), 2 vendors, 3 contractors, 3 staff');
 console.log('[seed] sign in with admin / Admin@123');
 closeDb();

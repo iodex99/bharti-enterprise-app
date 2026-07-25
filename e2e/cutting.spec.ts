@@ -41,7 +41,7 @@ test('full cutting flow: purchase cloth, cut with a typed code, edit, delete', a
   const lotSelect = dialog.getByLabel('Cloth batch');
   const lotLabel = await lotSelect.locator('option', { hasText: color }).first().textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await dialog.getByLabel('Size').selectOption({ label: 'XS' });
+  await dialog.getByLabel('Size').selectOption({ label: 'HR' });
   await dialog.getByLabel('Code 1').fill(code);
   await dialog.getByRole('textbox', { name: 'Dozens' }).fill('10'); // 120 pcs
   await dialog.getByLabel('Cloth per piece 1').fill('10'); // 10" per piece
@@ -53,7 +53,7 @@ test('full cutting flow: purchase cloth, cut with a typed code, edit, delete', a
 
   // the entry is final immediately — no "record actuals" step exists any more
   await expect(page.getByRole('cell', { name: /CUT-\d+/ }).first()).toBeVisible();
-  const row = page.getByRole('row', { name: new RegExp(`${code}-XS`) }).first();
+  const row = page.getByRole('row', { name: new RegExp(`${code}-HR`) }).first();
   await expect(row.getByText('editable')).toBeVisible();
   await expect(row.getByRole('button', { name: 'Record actuals' })).toHaveCount(0);
   await expect(row.getByText('10dz')).toBeVisible();
@@ -74,11 +74,11 @@ test('full cutting flow: purchase cloth, cut with a typed code, edit, delete', a
 
   // 5. an un-issued entry can be DELETED — the cloth returns to the roll
   await page.goto('/cutting');
-  const delRow = page.getByRole('row', { name: new RegExp(`${code}-XS`) }).first();
+  const delRow = page.getByRole('row', { name: new RegExp(`${code}-HR`) }).first();
   await delRow.getByRole('button', { name: 'Delete' }).click();
   await page.getByRole('button', { name: 'Delete cutting entry' }).click();
   // the entry leaves the working list (it stays in history as deleted)
-  await expect(page.getByRole('row', { name: new RegExp(`${code}-XS`) })).toHaveCount(0);
+  await expect(page.getByRole('row', { name: new RegExp(`${code}-HR`) })).toHaveCount(0);
 
   // the purchase got its cloth back (80 yd remaining again)
   await page.goto('/purchases');

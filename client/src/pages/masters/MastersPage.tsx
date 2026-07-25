@@ -75,7 +75,7 @@ const DEFS: Record<string, MasterDef> = {
       { key: 'sortOrder', header: 'Order', className: 'w-20 text-gray-400' },
     ],
     fields: [
-      { kind: 'text', name: 'code', label: 'Size code', hint: 'e.g. XS, S1, L1', required: true },
+      { kind: 'text', name: 'code', label: 'Size code', hint: 'e.g. HR, PIPE, JUMBO', required: true },
       { kind: 'text', name: 'description', label: 'Description' },
       { kind: 'number', name: 'sortOrder', label: 'Sort order', hint: 'Lower shows first' },
     ],
@@ -114,6 +114,7 @@ const DEFS: Record<string, MasterDef> = {
         header: 'Rate / dozen',
         render: (r) => formatPaise(Number(r.defaultRatePaisePerDozen ?? 0)),
       },
+      { key: 'imagePath', header: 'Payment QR', render: (r) => <QrLink path={r.imagePath as string | null} /> },
     ],
     fields: [
       { kind: 'text', name: 'name', label: 'Contractor name', required: true },
@@ -121,9 +122,10 @@ const DEFS: Record<string, MasterDef> = {
       { kind: 'text', name: 'mobile', label: 'Mobile number' },
       { kind: 'textarea', name: 'address', label: 'Address' },
       { kind: 'money', name: 'defaultRatePaisePerDozen', label: 'Default rate per dozen' },
+      { kind: 'image', name: 'imagePath', label: 'Payment QR code (shown when paying them)' },
       { kind: 'textarea', name: 'notes', label: 'Notes' },
     ],
-    empty: { name: '', contactPerson: '', mobile: '', address: '', defaultRatePaisePerDozen: 0, notes: '' },
+    empty: { name: '', contactPerson: '', mobile: '', address: '', defaultRatePaisePerDozen: 0, imagePath: null, notes: '' },
   },
   staff: {
     title: 'Checkers & Packers',
@@ -133,16 +135,33 @@ const DEFS: Record<string, MasterDef> = {
     columns: [
       { key: 'name', header: 'Name', className: 'font-medium' },
       { key: 'mobile', header: 'Mobile' },
+      {
+        key: 'defaultRatePaisePerDozen',
+        header: 'Rate / dozen',
+        render: (r) => formatPaise(Number(r.defaultRatePaisePerDozen ?? 0)),
+      },
+      { key: 'imagePath', header: 'Payment QR', render: (r) => <QrLink path={r.imagePath as string | null} /> },
       { key: 'notes', header: 'Notes', className: 'text-gray-500' },
     ],
     fields: [
       { kind: 'text', name: 'name', label: 'Name', required: true },
       { kind: 'text', name: 'mobile', label: 'Mobile number' },
+      { kind: 'money', name: 'defaultRatePaisePerDozen', label: 'Rate per dozen (checking / packing pay)' },
+      { kind: 'image', name: 'imagePath', label: 'Payment QR code (shown when paying them)' },
       { kind: 'textarea', name: 'notes', label: 'Notes' },
     ],
-    empty: { name: '', mobile: '', notes: '' },
+    empty: { name: '', mobile: '', defaultRatePaisePerDozen: 0, imagePath: null, notes: '' },
   },
 };
+
+function QrLink({ path }: { path: string | null }) {
+  if (!path) return <span className="text-gray-300">—</span>;
+  return (
+    <a href={path} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">
+      🔳 view
+    </a>
+  );
+}
 
 export default function MastersPage() {
   const { master = '' } = useParams();

@@ -26,7 +26,8 @@ beforeAll(async () => {
     INSERT INTO sizes (id, code, sort_order, created_by) VALUES (1, 'XS', 1, 1);
     INSERT INTO vendors (id, name, created_by) VALUES (1, 'V1', 1);
     INSERT INTO contractors (id, name, default_rate_paise_per_dozen, created_by) VALUES (1, 'Meena', 3000, 1);
-    INSERT INTO staff (id, name, role, created_by) VALUES (1, 'Pooja', 'checker', 1), (2, 'Ravi', 'packer', 1);
+    INSERT INTO staff (id, name, role, default_rate_paise_per_dozen, created_by)
+      VALUES (1, 'Pooja', 'checker', 300, 1), (2, 'Ravi', 'packer', 250, 1);
   `);
 
   const post = (url: string, body: unknown, cookie = operator) =>

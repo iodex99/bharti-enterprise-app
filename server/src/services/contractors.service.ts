@@ -16,6 +16,7 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
     .prepare(
       `SELECT ct.id, ct.name, ct.mobile, ct.is_active AS isActive,
               ct.default_rate_paise_per_dozen AS defaultRatePaisePerDozen,
+              ct.image_path AS imagePath,
               COUNT(DISTINCT j.id) AS totalJobs,
               COUNT(DISTINCT CASE WHEN j.status IN ('open','partially_received') THEN j.id END) AS openJobs,
               COUNT(DISTINCT CASE WHEN j.status = 'closed_with_discrepancy' THEN j.id END) AS discrepancyJobs,
@@ -112,6 +113,7 @@ export function listPendingDues(db: Db, officeId: number): {
     contractorId: r.id,
     name: r.name,
     mobile: r.mobile,
+    imagePath: r.imagePath,
     jobWorkCostPaise: r.jobWorkCostPaise,
     paidPaise: r.paidPaise,
     duesPaise: r.duesPaise,

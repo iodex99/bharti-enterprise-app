@@ -2,7 +2,7 @@ import type { DispatchInput, PackIssueInput, PackResultInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
-import { staffUsable } from './checking.service';
+import { staffDefaultRate, staffUsable } from './checking.service';
 import { nextDocNo } from './docNo.service';
 import {
   availableLots,
@@ -159,11 +159,13 @@ export function createPackIssue(
   try {
     const tx = db.transaction(() => {
       docNo = nextDocNo(db, 'pack', office);
+      // the packer's pay per dozen is snapshotted here, like contractor rates on jobs
+      const rate = input.ratePaisePerDozen ?? staffDefaultRate(db, input.staffId);
       const info = db
         .prepare(
           `INSERT INTO pack_issues (doc_no, office_id, issue_date, staff_id, model_id, color_id, size_id,
-            qty_pcs, kind, label, notes, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            qty_pcs, kind, label, rate_paise_per_dozen, notes, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           docNo,
@@ -176,6 +178,7 @@ export function createPackIssue(
           input.qtyPcs,
           input.kind,
           input.label,
+          rate,
           input.notes,
           userId,
         );
@@ -459,7 +462,8 @@ export function listPackIssues(
   const issues = db
     .prepare(
       `SELECT pi.id, pi.doc_no AS docNo, pi.issue_date AS issueDate, pi.status, pi.notes,
-              pi.qty_pcs AS qtyPcs, pi.kind, pi.label, pi.voided_at AS voidedAt,
+              pi.qty_pcs AS qtyPcs, pi.kind, pi.label, pi.rate_paise_per_dozen AS ratePaisePerDozen,
+              pi.voided_at AS voidedAt,
               pi.staff_id AS staffId, st.name AS staffName,
               pi.model_id AS modelId, m.code AS code, m.image_path AS codeImagePath,
               m.code || '-' || s.code AS sizeCodeLabel,

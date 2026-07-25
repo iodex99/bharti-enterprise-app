@@ -54,3 +54,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Checking: single rejected box, 'missing' as a dropdown reason | ✅ | v2 (ADR-034) |
 | Packing from the checking row (checker packs by default); labeled bundles kept aside | ✅ | v2 (ADR-035) |
 | Pending dues view + report | ✅ | v2 (ADR-036) |
+| Checker/packer rates per dozen + earnings + dues | ✅ | v3 (ADR-037) |
+| Payment QR codes on contractor + staff masters (shown when paying) | ✅ | v3 (ADR-037) |
+| Record payments on the Dues page (partial, dated; contractors AND staff) | ✅ | v3 (ADR-037) |
+| Client's default sizes HR / PIPE / JUMBO in seed + demo | ✅ | v3 |

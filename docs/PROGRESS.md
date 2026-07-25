@@ -111,6 +111,11 @@
   kind='bundle' with a label, packed later by anyone; allocations carried forward so
   trace reaches the vendor.
 - **Pending dues (ADR-036)**: /dues page + GET /api/contractors/dues + report.
+- **Staff pay (ADR-037, migration 005)**: checkers/packers carry a per-dozen rate
+  (staff master) snapshotted onto check/pack issues; earnings accrue from results;
+  staff_payments (SPAY-, office-scoped, voidable) settle them; Pending Dues settles
+  contractors AND staff with dated partial payments; contractor/staff masters carry a
+  payment-QR photo shown when paying. Client's default sizes: HR / PIPE / JUMBO.
 
 Tests: 27 files / 329 unit+integration green; E2E rewritten for v2 (incl. offices.spec,
 photo-required receipts, pack-from-checking + bundle flow). Demo data (populateDemo) is

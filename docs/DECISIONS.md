@@ -142,3 +142,11 @@ One line per locked decision; expand only when the reasoning is non-obvious.
 - **ADR-036** **Pending dues** is a first-class view (`GET /api/contractors/dues`, the
   Dues page, and a report): job-work cost (received × rate set at issue) minus payments,
   per contractor.
+- **ADR-037** Checkers/packers are **paid per dozen like contractors**: the usual rate
+  lives on the staff master, is snapshotted onto every check/pack issue (editable per
+  batch), and earnings accrue from RESULTS — every checked piece (passed, rejected or
+  missing was all work done) and every packed piece. `staff_payments` mirrors
+  contractor_payments (dated partial payments, SPAY numbers, admin void). The Pending
+  Dues page settles BOTH contractors and staff, and both masters carry a payment-QR
+  photo shown when recording a payment. The client's real sizes (HR, PIPE, JUMBO) are
+  the seeded defaults.

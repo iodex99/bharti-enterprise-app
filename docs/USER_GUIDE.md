@@ -131,16 +131,24 @@ already selected — change the person only if someone else will pack. Two choic
 **Production → Dispatches.** Records finished goods leaving for sale so FG stock stays
 true.
 
-## Contractors, payments and pending dues
+## Money: contractors, checkers/packers, and pending dues
 
 **Production → Contractors** shows every contractor's scorecard: how much they've been
 given, returned, lost (shortage), extra (excess), their discrepancy %, average turnaround
-days, the job-work cost earned and dues. Record payments here (cash/UPI/bank/cheque).
+days, the job-work cost earned and dues.
 
-**Production → Pending Dues 💰** is the quick money view: for each contractor, the
-job-work cost so far (received goods × the rate set at issue), what has been paid, **what
-is still owed**, the last payment date and how many jobs are still open. The same view is
-available as a report for Excel/print.
+**Checkers and packers are paid per dozen too.** Set each person's usual rate in
+**Masters → Checkers & Packers**; when a batch is allotted for checking or packing, that
+rate fills in (change it for one batch if something different was agreed). Their pay
+builds up from the results they record — every piece checked and every piece packed.
+
+**Production → Pending Dues 💰** is the money page: contractors on top,
+checkers/packers below, each showing what they earned, what has been paid, **what is
+still owed** and the last payment date. Press **Record payment** on any row to pay —
+**part-payments with their date are the normal case**; the rest stays pending. The
+payment window shows that person's **QR code** (upload it once on their master page,
+under "Payment QR code") so paying by UPI is scan-and-done. The same views exist as
+reports for Excel/print.
 
 ## Discrepancies (review & close the loop)
 
@@ -217,6 +225,8 @@ Every change is recorded in **Administration → Audit Log** — who, when, and 
   prefix. Deactivating an office hides it from switching and blocks its operators.
 - **Users** — create accounts, set roles, pick an operator's office, deactivate
   instantly, reset passwords.
+- **Masters → Contractors / Checkers & Packers** — set rates per dozen and upload each
+  person's payment QR code.
 - **Opening Balances** — one-time entry of existing register stock at go-live, per
   office (RAW takes yards + width; stitched stages take a typed code number).
 - **System Health** — inventory self-checks (all should always be ✅) and the

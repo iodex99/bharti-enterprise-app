@@ -12,7 +12,7 @@ import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
 import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
-import { DzPcInput } from '../../components/inputs';
+import { DzPcInput, MoneyInput } from '../../components/inputs';
 import { useMasterOptions } from '../../api/masters';
 import { VoidModal } from '../purchases/PurchasesPage';
 
@@ -431,8 +431,12 @@ function IssueModal({
   const [issueDate, setIssueDate] = useState(todayIST());
   const [staffId, setStaffId] = useState<number | null>(null);
   const [qtyPcs, setQty] = useState<number | null>(batch.qtyPcs);
+  const [rate, setRate] = useState<number | null>(null);
   const [error, setError] = useState('');
   const { data: staff } = useMasterOptions('staff');
+
+  const staffRate = (id: number | null): number =>
+    (staff?.find((s) => s.id === id)?.defaultRatePaisePerDozen as number | undefined) ?? 0;
 
   const save = useMutation({
     mutationFn: () =>
@@ -442,6 +446,7 @@ function IssueModal({
         lotType: batch.lotType,
         lotId: batch.lotId,
         qtyPcs,
+        ratePaisePerDozen: rate ?? 0,
         notes: '',
       }),
     onSuccess: () => {
@@ -477,7 +482,14 @@ function IssueModal({
           <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
         </Field>
         <Field label="Checker" hint="Any staff member can check or pack">
-          <Select value={staffId ?? ''} onChange={(e) => setStaffId(e.target.value ? Number(e.target.value) : null)}>
+          <Select
+            value={staffId ?? ''}
+            onChange={(e) => {
+              const next = e.target.value ? Number(e.target.value) : null;
+              setStaffId(next);
+              setRate(staffRate(next)); // their usual pay fills in, editable per batch
+            }}
+          >
             <option value="" disabled>
               — select checker —
             </option>
@@ -490,6 +502,9 @@ function IssueModal({
         </Field>
         <Field label="Quantity" hint="Defaults to the whole batch — reduce to split it">
           <DzPcInput pieces={qtyPcs} onChange={setQty} />
+        </Field>
+        <Field label="Checking pay per dozen" hint="Filled from the checker's usual rate — change it for this batch if needed">
+          <MoneyInput key={staffId ?? 'none'} paise={rate} onChange={setRate} placeholder="e.g. 3.00" />
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending || !staffId || !qtyPcs} className="w-full">
@@ -644,8 +659,15 @@ function PackModal({
   const [qtyPcs, setQty] = useState<number | null>(issue.packablePcs);
   const [kind, setKind] = useState<'pack' | 'bundle'>('pack');
   const [bundleLabel, setBundleLabel] = useState('');
-  const [error, setError] = useState('');
+  const [rateOverride, setRateOverride] = useState<number | null>(null);
+  const [rateTouched, setRateTouched] = useState(false);
   const { data: staff } = useMasterOptions('staff');
+  const [error, setError] = useState('');
+
+  const staffRate = (id: number | null): number =>
+    (staff?.find((s) => s.id === id)?.defaultRatePaisePerDozen as number | undefined) ?? 0;
+  // the packer's usual rate fills in (the checker is pre-selected); editable per job
+  const rate = rateTouched ? rateOverride : staffRate(staffId);
 
   const save = useMutation({
     mutationFn: () =>
@@ -655,6 +677,7 @@ function PackModal({
         qtyPcs,
         kind,
         label: bundleLabel,
+        ratePaisePerDozen: rate ?? 0,
         notes: '',
       }),
     onSuccess: () => {
@@ -687,7 +710,13 @@ function PackModal({
             <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
           </Field>
           <Field label="Packer">
-            <Select value={staffId ?? ''} onChange={(e) => setStaffId(e.target.value ? Number(e.target.value) : null)}>
+            <Select
+              value={staffId ?? ''}
+              onChange={(e) => {
+                setStaffId(e.target.value ? Number(e.target.value) : null);
+                setRateTouched(false); // a new packer brings their own usual rate
+              }}
+            >
               {staff?.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name as string}
@@ -699,6 +728,17 @@ function PackModal({
         </div>
         <Field label="Quantity">
           <DzPcInput pieces={qtyPcs} onChange={setQty} />
+        </Field>
+        <Field label="Packing pay per dozen" hint="Filled from the packer's usual rate — change it for this work if needed">
+          <MoneyInput
+            key={`${staffId ?? 'none'}-${staff ? 'loaded' : 'loading'}`}
+            paise={rate}
+            onChange={(p) => {
+              setRateOverride(p);
+              setRateTouched(true);
+            }}
+            placeholder="e.g. 2.00"
+          />
         </Field>
         <Field label="What happens to these pieces?">
           <Select value={kind} onChange={(e) => setKind(e.target.value as 'pack' | 'bundle')}>

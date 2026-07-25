@@ -71,6 +71,8 @@ export const contractorSchema = z.object({
   mobile,
   address: optionalText(300),
   defaultRatePaisePerDozen: z.number().int().min(0).max(100_000_00).default(0),
+  /** the contractor's payment QR code, shown when recording a payment */
+  imagePath: z.string().max(300).nullish(),
   notes: optionalText(500),
 });
 
@@ -79,6 +81,10 @@ export const staffSchema = z.object({
   mobile,
   // Any staff member can check OR pack — no fixed role. Kept optional for legacy rows.
   role: z.enum(STAFF_ROLES).default('both'),
+  /** what this checker/packer is usually paid per dozen (snapshotted at issue) */
+  defaultRatePaisePerDozen: z.number().int().min(0).max(100_000_00).default(0),
+  /** the staff member's payment QR code, shown when recording a payment */
+  imagePath: z.string().max(300).nullish(),
   notes: optionalText(500),
 });
 
@@ -288,6 +294,12 @@ export const paymentSchema = z.object({
 });
 export type PaymentInput = z.infer<typeof paymentSchema>;
 
+/** A payment to a checker/packer — partial amounts with their date, like contractors. */
+export const staffPaymentSchema = paymentSchema.omit({ contractorId: true }).extend({
+  staffId: id,
+});
+export type StaffPaymentInput = z.infer<typeof staffPaymentSchema>;
+
 export const checkIssueSchema = z.object({
   issueDate: businessDate,
   staffId: id,
@@ -295,6 +307,8 @@ export const checkIssueSchema = z.object({
   lotType: z.enum(CHECKING_POOL_LOT_TYPES),
   lotId: id,
   qtyPcs: z.number().int().positive().max(10_000_000),
+  /** the checker's pay per dozen for this batch; omitted → the staff member's default */
+  ratePaisePerDozen: z.number().int().min(0).max(100_000_00).nullish(),
   notes: optionalText(300),
 });
 export type CheckIssueInput = z.infer<typeof checkIssueSchema>;
@@ -338,6 +352,8 @@ export const packIssueSchema = z.object({
   kind: z.enum(PACK_KINDS).default('pack'),
   /** bundle label, e.g. "Diwali order reserve" — how the owner refers to it later */
   label: optionalText(100),
+  /** the packer's pay per dozen for this work; omitted → the staff member's default */
+  ratePaisePerDozen: z.number().int().min(0).max(100_000_00).nullish(),
   notes: optionalText(300),
 });
 export type PackIssueInput = z.infer<typeof packIssueSchema>;

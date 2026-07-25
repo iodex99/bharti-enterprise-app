@@ -32,6 +32,14 @@ export function staffUsable(db: Db, staffId: number, label: string): string | nu
   return null;
 }
 
+/** The rate this checker/packer is usually paid per dozen — the snapshot fallback. */
+export function staffDefaultRate(db: Db, staffId: number): number {
+  const row = db
+    .prepare('SELECT default_rate_paise_per_dozen AS rate FROM staff WHERE id = ?')
+    .get(staffId) as { rate: number } | undefined;
+  return row?.rate ?? 0;
+}
+
 type PoolLotInfo = {
   modelId: number;
   colorId: number;
@@ -138,10 +146,12 @@ export function createCheckIssue(
   try {
     const tx = db.transaction(() => {
       docNo = nextDocNo(db, 'check', office);
+      // the checker's pay per dozen is snapshotted here, like contractor rates on jobs
+      const rate = input.ratePaisePerDozen ?? staffDefaultRate(db, input.staffId);
       const info = db
         .prepare(
-          `INSERT INTO check_issues (doc_no, office_id, issue_date, staff_id, model_id, color_id, size_id, qty_pcs, notes, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO check_issues (doc_no, office_id, issue_date, staff_id, model_id, color_id, size_id, qty_pcs, rate_paise_per_dozen, notes, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           docNo,
@@ -152,6 +162,7 @@ export function createCheckIssue(
           lot.colorId,
           lot.sizeId,
           input.qtyPcs,
+          rate,
           input.notes,
           userId,
         );
@@ -438,7 +449,8 @@ export function listCheckIssues(db: Db, officeId: number): Array<Record<string, 
   const issues = db
     .prepare(
       `SELECT ci.id, ci.doc_no AS docNo, ci.issue_date AS issueDate, ci.status, ci.notes,
-              ci.qty_pcs AS qtyPcs, ci.voided_at AS voidedAt,
+              ci.qty_pcs AS qtyPcs, ci.rate_paise_per_dozen AS ratePaisePerDozen,
+              ci.voided_at AS voidedAt,
               ci.staff_id AS staffId, st.name AS staffName,
               ci.model_id AS modelId, m.code AS code, m.image_path AS codeImagePath,
               m.code || '-' || s.code AS sizeCodeLabel,

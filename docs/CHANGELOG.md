@@ -5,6 +5,20 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-25 — **Checker/packer pay, payment QR codes, dues settled in place, and the
+  client's real sizes** (ADR-037, migration 005):
+  - Checkers & Packers carry a **rate per dozen** on their master; it fills in (editable)
+    when a batch is allotted for checking or packing, and their pay accrues from the
+    recorded results.
+  - **Pending Dues now settles everyone**: contractors AND checkers/packers, each row
+    with a **Record payment** button — part-payments with their date are the normal
+    case; the balance stays pending. Payments can be voided by the admin.
+  - Contractor and staff masters take a **payment QR code photo**, shown in the dues
+    rows and inside the payment dialog.
+  - New `staff-dues` report; `/api/staff` routes (dues/analytics/payments).
+  - Seed + demo data rebuilt around the client's default sizes **HR, PIPE, JUMBO**,
+    with staff rates, QR images and part-paid staff dues in the demo story.
+
 - 2026-07-24 — **Fix: entering demo mode now migrates an existing demo database first.**
   A demo db built by an older app version is missing the newer tables; swapping onto it
   un-migrated made every request fail (found when the E2E server reused a pre-v2 demo db

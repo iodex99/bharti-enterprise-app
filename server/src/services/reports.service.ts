@@ -1,5 +1,6 @@
 import type { Db } from '../db/connection';
 import { contractorAnalytics } from './contractors.service';
+import { staffAnalytics } from './staffpay.service';
 
 /**
  * Report registry (spec: ~15 reports, all filterable, all Excel-exportable).
@@ -592,6 +593,35 @@ export const REPORTS: ReportDef[] = [
           duesPaise: c.duesPaise,
           lastPaymentDate: c.lastPaymentDate,
           openJobs: c.openJobs,
+        })),
+  },
+  {
+    key: 'staff-dues',
+    title: 'Checker & Packer Dues',
+    group: 'Management',
+    description: 'Per-dozen pay owed to checkers/packers (earned − paid)',
+    filters: [],
+    columns: [
+      { key: 'name', header: 'Name', type: 'text' },
+      { key: 'checkedPcs', header: 'Checked', type: 'pcs' },
+      { key: 'packedPcs', header: 'Packed', type: 'pcs' },
+      { key: 'earnedPaise', header: 'Earned', type: 'paise' },
+      { key: 'paidPaise', header: 'Paid', type: 'paise' },
+      { key: 'duesPaise', header: 'Pending dues', type: 'paise' },
+      { key: 'lastPaymentDate', header: 'Last payment', type: 'date' },
+    ],
+    query: (db, f) =>
+      staffAnalytics(db, f.officeId)
+        .filter((s) => (s.earnedPaise as number) > 0 || (s.paidPaise as number) > 0)
+        .sort((a, b) => (b.duesPaise as number) - (a.duesPaise as number))
+        .map((s) => ({
+          name: s.name,
+          checkedPcs: s.checkedPcs,
+          packedPcs: s.packedPcs,
+          earnedPaise: s.earnedPaise,
+          paidPaise: s.paidPaise,
+          duesPaise: s.duesPaise,
+          lastPaymentDate: s.lastPaymentDate,
         })),
   },
   {

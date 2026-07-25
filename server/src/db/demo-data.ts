@@ -17,6 +17,7 @@ import { createOpeningBalance } from '../services/opening.service';
 import { createCuttingPlan } from '../services/cutting.service';
 import { closeJobWithDiscrepancy, createJobIssue, createReceipt } from '../services/jobs.service';
 import { createPayment } from '../services/contractors.service';
+import { createStaffPayment } from '../services/staffpay.service';
 import { createCheckIssue, recordCheckResult } from '../services/checking.service';
 import { createDispatch, createPackIssue, recordPackResult } from '../services/packing.service';
 import { resolveDiscrepancy } from '../services/discrepancies.service';
@@ -68,7 +69,9 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     contractor: db.prepare(
       'INSERT INTO contractors (name, contact_person, mobile, address, default_rate_paise_per_dozen, created_by) VALUES (?, ?, ?, ?, ?, 1)',
     ),
-    staff: db.prepare("INSERT INTO staff (name, mobile, role, created_by) VALUES (?, ?, 'both', 1)"),
+    staff: db.prepare(
+      "INSERT INTO staff (name, mobile, role, default_rate_paise_per_dozen, created_by) VALUES (?, ?, 'both', ?, 1)",
+    ),
   };
 
   for (const [name, code] of [
@@ -87,14 +90,12 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
 
   (
     [
-      ['XS', 'Extra small'],
-      ['S1', 'Small type 1'],
-      ['S2', 'Small type 2'],
-      ['L1', 'Large type 1'],
-      ['XL', 'Extra large'],
+      ['HR', 'Hair band regular'],
+      ['PIPE', 'Pipe scrunchie'],
+      ['JUMBO', 'Jumbo scrunchie'],
     ] as const
   ).forEach(([code, desc], i) => ins.size.run(code, desc, i + 1));
-  const SIZE = { XS: 1, S1: 2, S2: 3, L1: 4, XL: 5 };
+  const SIZE = { HR: 1, PIPE: 2, JUMBO: 3 };
 
   ins.vendor.run('Sharma Textiles', 'Rakesh Sharma', '9812345678', 'Chandni Chowk, Delhi', '07AAACS1234A1Z5');
   ins.vendor.run('Gupta Fabrics', 'Anil Gupta', '9823456789', 'Ring Road, Surat', '24AAACG5678B1Z3');
@@ -107,10 +108,11 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   ins.contractor.run('Farah Stitching Unit', 'Farah Khan', '9867001122', 'Okhla, Delhi', 2900);
   const CT = { MEENA: 1, RAFIQ: 2, SUNITA: 3, FARAH: 4 };
 
-  ins.staff.run('Pooja', '9867890123');
-  ins.staff.run('Ravi', '9878901234');
-  ins.staff.run('Kavita', '9889012345');
-  ins.staff.run('Deepa', '9890123456');
+  // checkers/packers are paid per dozen too — their usual rate lives on the master
+  ins.staff.run('Pooja', '9867890123', 300);
+  ins.staff.run('Ravi', '9878901234', 250);
+  ins.staff.run('Kavita', '9889012345', 300);
+  ins.staff.run('Deepa', '9890123456', 275);
   const STAFF = { POOJA: 1, RAVI: 2, KAVITA: 3, DEEPA: 4 };
 
   // demo photo (a real webp) used wherever a photo is referenced
@@ -121,6 +123,12 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     ).run(path, 'image/webp', TINY_WEBP.byteLength, TINY_WEBP);
     return path;
   };
+
+  // payment QR codes on the people who get paid (shown when recording a payment)
+  const setQr = db.prepare('UPDATE contractors SET image_path = ? WHERE id = ?');
+  for (const id of Object.values(CT)) setQr.run(photo(`qrct${id}`), id);
+  const setStaffQr = db.prepare('UPDATE staff SET image_path = ? WHERE id = ?');
+  for (const id of Object.values(STAFF)) setStaffQr.run(photo(`qrst${id}`), id);
 
   // ---- opening balances (head office) ---------------------------------------
   must(
@@ -138,7 +146,7 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     createOpeningBalance(
       db,
       HO,
-      { balanceDate: daysAgo(90), stage: 'CUT', modelCode: '210', colorId: COLOR.PINK, sizeId: SIZE.S1, qty: 96, note: 'old cut stock', contractorId: null, widthInchC: null },
+      { balanceDate: daysAgo(90), stage: 'CUT', modelCode: '210', colorId: COLOR.PINK, sizeId: SIZE.PIPE, qty: 96, note: 'old cut stock', contractorId: null, widthInchC: null },
       ADMIN,
       null,
     ),
@@ -148,7 +156,7 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     createOpeningBalance(
       db,
       HO,
-      { balanceDate: daysAgo(90), stage: 'FG', modelCode: '330', colorId: COLOR.WHITE, sizeId: SIZE.S2, qty: 240, note: 'packed stock from before', contractorId: null, widthInchC: null },
+      { balanceDate: daysAgo(90), stage: 'FG', modelCode: '330', colorId: COLOR.WHITE, sizeId: SIZE.JUMBO, qty: 240, note: 'packed stock from before', contractorId: null, widthInchC: null },
       ADMIN,
       null,
     ),
@@ -190,11 +198,9 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
 
   // cutting geometry per size: cloth per piece (hundredths of an inch) + pieces across width
   const GEO: Record<number, { inchC: number; width: number }> = {
-    [SIZE.XS]: { inchC: 800, width: 5 }, // 8" pieces, 5 across a 44" cloth
-    [SIZE.S1]: { inchC: 900, width: 4 },
-    [SIZE.S2]: { inchC: 1000, width: 4 },
-    [SIZE.L1]: { inchC: 1200, width: 3 },
-    [SIZE.XL]: { inchC: 1400, width: 3 },
+    [SIZE.HR]: { inchC: 800, width: 5 }, // 8" pieces, 5 across a 44" cloth
+    [SIZE.PIPE]: { inchC: 1000, width: 4 },
+    [SIZE.JUMBO]: { inchC: 1400, width: 3 },
   };
 
   /** The plan IS the cutting: each line carries its CODE (+ photo on first use). */
@@ -414,57 +420,57 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   // Month 1 — code 315 velvet black: a clean, fully-finished chain
   const p1 = purchase(HO, 85, VENDOR.SHARMA, COLOR.BLACK, 220, 44, 4100, 'first velvet lot');
   cut(HO, 80, p1, [
-    { sizeId: SIZE.XS, code: '315', qtyPcs: 120, withPhoto: true },
-    { sizeId: SIZE.S1, code: '315', qtyPcs: 180 },
+    { sizeId: SIZE.HR, code: '315', qtyPcs: 120, withPhoto: true },
+    { sizeId: SIZE.PIPE, code: '315', qtyPcs: 180 },
   ]);
   const i1 = issue(HO, 78, CT.MEENA, [
-    { code: '315', colorId: COLOR.BLACK, sizeId: SIZE.XS, qtyPcs: 120, rate: 3000 },
-    { code: '315', colorId: COLOR.BLACK, sizeId: SIZE.S1, qtyPcs: 180, rate: 3000 },
+    { code: '315', colorId: COLOR.BLACK, sizeId: SIZE.HR, qtyPcs: 120, rate: 3000 },
+    { code: '315', colorId: COLOR.BLACK, sizeId: SIZE.PIPE, qtyPcs: 180, rate: 3000 },
   ]);
   const j1 = i1.cardFor('315', COLOR.BLACK).id;
   receive(HO, 72, j1, [
-    { lineId: i1.lineId(j1, SIZE.XS), qtyPcs: 60 },
-    { lineId: i1.lineId(j1, SIZE.S1), qtyPcs: 96 },
+    { lineId: i1.lineId(j1, SIZE.HR), qtyPcs: 60 },
+    { lineId: i1.lineId(j1, SIZE.PIPE), qtyPcs: 96 },
   ]);
   receive(HO, 66, j1, [
-    { lineId: i1.lineId(j1, SIZE.XS), qtyPcs: 60 },
-    { lineId: i1.lineId(j1, SIZE.S1), qtyPcs: 84 },
+    { lineId: i1.lineId(j1, SIZE.HR), qtyPcs: 60 },
+    { lineId: i1.lineId(j1, SIZE.PIPE), qtyPcs: 84 },
   ]);
-  // XS batches: 60 + 60 (114 pass, 4 reject incl. 2 missing)
-  const c1 = check(HO, 62, STAFF.POOJA, j1, SIZE.XS, 60, [
+  // HR batches: 60 + 60 (114 pass, 4 reject incl. 2 missing)
+  const c1 = check(HO, 62, STAFF.POOJA, j1, SIZE.HR, 60, [
     { days: 60, passed: 58, rejected: [{ reason: 'stitching_issue', qtyPcs: 2 }] },
   ]);
-  const c2 = check(HO, 61, STAFF.POOJA, j1, SIZE.XS, 60, [
+  const c2 = check(HO, 61, STAFF.POOJA, j1, SIZE.HR, 60, [
     { days: 60, passed: 56, rejected: [{ reason: 'stitching_issue', qtyPcs: 2 }, { reason: 'missing', qtyPcs: 2 }] },
   ]);
-  // S1 batches: 96 then 84 (174 pass, 6 reject)
-  const c3 = check(HO, 62, STAFF.KAVITA, j1, SIZE.S1, 96, [
+  // PIPE batches: 96 then 84 (174 pass, 6 reject)
+  const c3 = check(HO, 62, STAFF.KAVITA, j1, SIZE.PIPE, 96, [
     { days: 59, passed: 90, rejected: [{ reason: 'elastic_issue', qtyPcs: 6 }] },
   ]);
-  const c4 = check(HO, 60, STAFF.KAVITA, j1, SIZE.S1, 84, [{ days: 57, passed: 84 }]);
+  const c4 = check(HO, 60, STAFF.KAVITA, j1, SIZE.PIPE, 84, [{ days: 57, passed: 84 }]);
   // packing straight from checking — Pooja packs her own checked goods
   pack(HO, 55, STAFF.POOJA, c1, 58, [{ days: 53, packed: 58 }]);
   pack(HO, 55, STAFF.POOJA, c2, 56, [{ days: 53, packed: 56 }]);
   pack(HO, 55, STAFF.KAVITA, c3, 90, [{ days: 52, packed: 84, short: 6, shortReason: 'damage' }]);
   pack(HO, 54, STAFF.KAVITA, c4, 84, [{ days: 52, packed: 84 }]);
   must(
-    createDispatch(db, HO, { dispatchDate: daysAgo(45), modelId: modelIdOf('315'), colorId: COLOR.BLACK, sizeId: SIZE.XS, qtyPcs: 96, notes: 'Karol Bagh shop order' }, ADMIN, null),
+    createDispatch(db, HO, { dispatchDate: daysAgo(45), modelId: modelIdOf('315'), colorId: COLOR.BLACK, sizeId: SIZE.HR, qtyPcs: 96, notes: 'Karol Bagh shop order' }, ADMIN, null),
     'dispatch 1',
   );
 
   // Month 1 — code 410 satin maroon: excess receipt story
   const p2 = purchase(HO, 75, VENDOR.GUPTA, COLOR.MAROON, 160, 44, 4800);
-  cut(HO, 70, p2, [{ sizeId: SIZE.S2, code: '410', qtyPcs: 228, withPhoto: true }]);
+  cut(HO, 70, p2, [{ sizeId: SIZE.PIPE, code: '410', qtyPcs: 228, withPhoto: true }]);
   const i2 = issue(HO, 68, CT.RAFIQ, [
-    { code: '410', colorId: COLOR.MAROON, sizeId: SIZE.S2, qtyPcs: 228, rate: 2800 },
+    { code: '410', colorId: COLOR.MAROON, sizeId: SIZE.PIPE, qtyPcs: 228, rate: 2800 },
   ]);
   const j2 = i2.cards[0]!.id;
-  receive(HO, 60, j2, [{ lineId: i2.lineId(j2, SIZE.S2), qtyPcs: 120 }]);
-  receive(HO, 54, j2, [{ lineId: i2.lineId(j2, SIZE.S2), qtyPcs: 114, discrepancyReason: 'other' }]);
-  const c5 = check(HO, 50, STAFF.DEEPA, j2, SIZE.S2, 120, [
+  receive(HO, 60, j2, [{ lineId: i2.lineId(j2, SIZE.PIPE), qtyPcs: 120 }]);
+  receive(HO, 54, j2, [{ lineId: i2.lineId(j2, SIZE.PIPE), qtyPcs: 114, discrepancyReason: 'other' }]);
+  const c5 = check(HO, 50, STAFF.DEEPA, j2, SIZE.PIPE, 120, [
     { days: 48, passed: 116, rejected: [{ reason: 'color_defect', qtyPcs: 4 }] },
   ]);
-  const c6 = check(HO, 49, STAFF.DEEPA, j2, SIZE.S2, 114, [
+  const c6 = check(HO, 49, STAFF.DEEPA, j2, SIZE.PIPE, 114, [
     { days: 48, passed: 106, rejected: [{ reason: 'color_defect', qtyPcs: 6 }, { reason: 'missing', qtyPcs: 2 }] },
   ]);
   pack(HO, 46, STAFF.DEEPA, c5, 116, [{ days: 44, packed: 116 }]);
@@ -473,42 +479,42 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   // …and the rest is packed normally
   pack(HO, 45, STAFF.DEEPA, c6, 82, [{ days: 44, packed: 82 }]);
   must(
-    createDispatch(db, HO, { dispatchDate: daysAgo(40), modelId: modelIdOf('410'), colorId: COLOR.MAROON, sizeId: SIZE.S2, qtyPcs: 180, notes: 'Sadar Bazar wholesale' }, ADMIN, null),
+    createDispatch(db, HO, { dispatchDate: daysAgo(40), modelId: modelIdOf('410'), colorId: COLOR.MAROON, sizeId: SIZE.PIPE, qtyPcs: 180, notes: 'Sadar Bazar wholesale' }, ADMIN, null),
     'dispatch 2',
   );
 
   // Month 2 — code 128 cotton navy: unstitched return + shortage close
   const p3 = purchase(HO, 55, VENDOR.KRISHNA, COLOR.NAVY, 190, 40, 3500);
-  cut(HO, 50, p3, [{ sizeId: SIZE.L1, code: '128', qtyPcs: 236 }]);
+  cut(HO, 50, p3, [{ sizeId: SIZE.JUMBO, code: '128', qtyPcs: 236 }]);
   const i3 = issue(HO, 48, CT.SUNITA, [
-    { code: '128', colorId: COLOR.NAVY, sizeId: SIZE.L1, qtyPcs: 236, rate: 3200 },
+    { code: '128', colorId: COLOR.NAVY, sizeId: SIZE.JUMBO, qtyPcs: 236, rate: 3200 },
   ]);
   const j3 = i3.cards[0]!.id;
-  receive(HO, 42, j3, [{ lineId: i3.lineId(j3, SIZE.L1), qtyPcs: 180 }]);
-  receive(HO, 38, j3, [{ lineId: i3.lineId(j3, SIZE.L1), qtyPcs: 24, returnType: 'unstitched_return' }]);
+  receive(HO, 42, j3, [{ lineId: i3.lineId(j3, SIZE.JUMBO), qtyPcs: 180 }]);
+  receive(HO, 38, j3, [{ lineId: i3.lineId(j3, SIZE.JUMBO), qtyPcs: 24, returnType: 'unstitched_return' }]);
   must(
     closeJobWithDiscrepancy(db, HO, j3, { reason: 'missing_pieces', note: 'Sunita could not account for 32 pcs' }, ADMIN, null),
     'close j3 short',
   );
-  const c7 = check(HO, 35, STAFF.POOJA, j3, SIZE.L1, 180, [
+  const c7 = check(HO, 35, STAFF.POOJA, j3, SIZE.JUMBO, 180, [
     { days: 33, passed: 176, rejected: [{ reason: 'damage', qtyPcs: 4 }] },
   ]);
   pack(HO, 30, STAFF.POOJA, c7, 176, [{ days: 28, packed: 176 }]);
 
   // Month 2 — a COMBINED issue across two codes/colors → separate cards (ADR-033)
   const p4 = purchase(HO, 40, VENDOR.SHARMA, COLOR.EMERALD, 130, 44, 4200);
-  cut(HO, 34, p4, [{ sizeId: SIZE.S1, code: '315', qtyPcs: 192 }]);
+  cut(HO, 34, p4, [{ sizeId: SIZE.PIPE, code: '315', qtyPcs: 192 }]);
   const p4b = purchase(HO, 39, VENDOR.GUPTA, COLOR.PINK, 120, 44, 5000, 'satin for 210');
-  cut(HO, 33, p4b, [{ sizeId: SIZE.S1, code: '210', qtyPcs: 120, withPhoto: true }]);
+  cut(HO, 33, p4b, [{ sizeId: SIZE.PIPE, code: '210', qtyPcs: 120, withPhoto: true }]);
   const i4 = issue(HO, 32, CT.MEENA, [
-    { code: '315', colorId: COLOR.EMERALD, sizeId: SIZE.S1, qtyPcs: 192, rate: 3000 },
-    { code: '210', colorId: COLOR.PINK, sizeId: SIZE.S1, qtyPcs: 96, rate: 3100 },
+    { code: '315', colorId: COLOR.EMERALD, sizeId: SIZE.PIPE, qtyPcs: 192, rate: 3000 },
+    { code: '210', colorId: COLOR.PINK, sizeId: SIZE.PIPE, qtyPcs: 96, rate: 3100 },
   ]);
   const j4a = i4.cardFor('315', COLOR.EMERALD).id;
   const j4b = i4.cardFor('210', COLOR.PINK).id;
-  receive(HO, 24, j4a, [{ lineId: i4.lineId(j4a, SIZE.S1), qtyPcs: 192 }]);
-  receive(HO, 23, j4b, [{ lineId: i4.lineId(j4b, SIZE.S1), qtyPcs: 48 }]);
-  const c8 = check(HO, 20, STAFF.DEEPA, j4a, SIZE.S1, 192, [{ days: 18, passed: 120 }]);
+  receive(HO, 24, j4a, [{ lineId: i4.lineId(j4a, SIZE.PIPE), qtyPcs: 192 }]);
+  receive(HO, 23, j4b, [{ lineId: i4.lineId(j4b, SIZE.PIPE), qtyPcs: 48 }]);
+  const c8 = check(HO, 20, STAFF.DEEPA, j4a, SIZE.PIPE, 192, [{ days: 18, passed: 120 }]);
   // Deepa still holds 72 unchecked; her 120 passed are not yet allotted to packing —
   // the checking page shows the "Pack" button live on this row
   void c8;
@@ -516,25 +522,25 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   // Month 3 — code 522 organza lavender: received but nobody has checked yet
   const p5 = purchase(HO, 25, VENDOR.GUPTA, COLOR.LAVENDER, 95, 44, 5600, 'festival order fabric');
   cut(HO, 20, p5, [
-    { sizeId: SIZE.XL, code: '522', qtyPcs: 132, withPhoto: true },
-    { sizeId: SIZE.L1, code: '522', qtyPcs: 44 },
+    { sizeId: SIZE.JUMBO, code: '522', qtyPcs: 132, withPhoto: true },
+    { sizeId: SIZE.HR, code: '522', qtyPcs: 44 },
   ]);
   const i5 = issue(HO, 18, CT.FARAH, [
-    { code: '522', colorId: COLOR.LAVENDER, sizeId: SIZE.XL, qtyPcs: 132, rate: 2900 },
+    { code: '522', colorId: COLOR.LAVENDER, sizeId: SIZE.JUMBO, qtyPcs: 132, rate: 2900 },
   ]);
   const j5 = i5.cards[0]!.id;
-  receive(HO, 10, j5, [{ lineId: i5.lineId(j5, SIZE.XL), qtyPcs: 60 }]);
+  receive(HO, 10, j5, [{ lineId: i5.lineId(j5, SIZE.JUMBO), qtyPcs: 60 }]);
 
   // a DELAYED job for the alert panel: issued 24 days ago, nothing back yet
   const p6 = purchase(HO, 30, VENDOR.KRISHNA, COLOR.MUSTARD, 110, 40, 3600);
-  cut(HO, 27, p6, [{ sizeId: SIZE.S2, code: '128', qtyPcs: 168 }]);
-  issue(HO, 24, CT.RAFIQ, [{ code: '128', colorId: COLOR.MUSTARD, sizeId: SIZE.S2, qtyPcs: 168, rate: 2800 }]);
+  cut(HO, 27, p6, [{ sizeId: SIZE.PIPE, code: '128', qtyPcs: 168 }]);
+  issue(HO, 24, CT.RAFIQ, [{ code: '128', colorId: COLOR.MUSTARD, sizeId: SIZE.PIPE, qtyPcs: 168, rate: 2800 }]);
 
   // fresh activity this week: new purchases + a cutting that can still be edited/deleted
   const p7 = purchase(HO, 4, VENDOR.SHARMA, COLOR.PINK, 170, 44, 5000, 'summer collection');
   cut(HO, 1, p7, [
-    { sizeId: SIZE.XS, code: '410', qtyPcs: 120 },
-    { sizeId: SIZE.S1, code: '410', qtyPcs: 144 },
+    { sizeId: SIZE.HR, code: '410', qtyPcs: 120 },
+    { sizeId: SIZE.PIPE, code: '410', qtyPcs: 144 },
   ]);
   purchase(HO, 2, VENDOR.GUPTA, COLOR.WHITE, 150, 44, 4300, 'wedding season stock');
 
@@ -549,14 +555,19 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   must(createPayment(db, HO, { contractorId: CT.RAFIQ, paymentDate: daysAgo(30), amountPaise: 30000, mode: 'bank_transfer', reference: 'NEFT-88123', notes: '' }, OPERATOR, null), 'pay3');
   must(createPayment(db, HO, { contractorId: CT.SUNITA, paymentDate: daysAgo(20), amountPaise: 25000, mode: 'cash', reference: '', notes: '' }, OPERATOR, null), 'pay4');
 
+  // checker/packer pay: their per-dozen earnings accrued through the checks/packs above;
+  // part-payments here so the Dues page shows both settled and outstanding people
+  must(createStaffPayment(db, HO, { staffId: STAFF.POOJA, paymentDate: daysAgo(25), amountPaise: 8000, mode: 'upi', reference: 'UPI-9921', notes: '' }, OPERATOR, null), 'spay1');
+  must(createStaffPayment(db, HO, { staffId: STAFF.KAVITA, paymentDate: daysAgo(15), amountPaise: 5000, mode: 'cash', reference: '', notes: 'part payment' }, OPERATOR, null), 'spay2');
+
   // ---- BRANCH OFFICE: a small, separate operation (BR- document numbers) -----
   const bp1 = purchase(BR, 12, VENDOR.GUPTA, COLOR.BLACK, 80, 44, 4200, 'branch stock');
-  cut(BR, 8, bp1, [{ sizeId: SIZE.S1, code: 'B-101', qtyPcs: 96, withPhoto: true }]);
+  cut(BR, 8, bp1, [{ sizeId: SIZE.PIPE, code: 'B-101', qtyPcs: 96, withPhoto: true }]);
   const bi1 = issue(BR, 6, CT.FARAH, [
-    { code: 'B-101', colorId: COLOR.BLACK, sizeId: SIZE.S1, qtyPcs: 96, rate: 2900 },
+    { code: 'B-101', colorId: COLOR.BLACK, sizeId: SIZE.PIPE, qtyPcs: 96, rate: 2900 },
   ]);
   const bj1 = bi1.cards[0]!.id;
-  receive(BR, 2, bj1, [{ lineId: bi1.lineId(bj1, SIZE.S1), qtyPcs: 48 }]);
+  receive(BR, 2, bj1, [{ lineId: bi1.lineId(bj1, SIZE.PIPE), qtyPcs: 48 }]);
   purchase(BR, 3, VENDOR.SHARMA, COLOR.NAVY, 60, 40, 3900);
 
   // resolve the two oldest discrepancies so a demo shows both review states

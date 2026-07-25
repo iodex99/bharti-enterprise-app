@@ -51,7 +51,7 @@ test('purchase → cutting → job work → checking → packing (+bundle) → f
   const lotSelect = cutDialog.getByLabel('Cloth batch');
   const lotLabel = await lotSelect.locator('option', { hasText: color }).first().textContent();
   await lotSelect.selectOption({ label: lotLabel! });
-  await cutDialog.getByLabel('Size').selectOption({ label: 'XL' });
+  await cutDialog.getByLabel('Size').selectOption({ label: 'JUMBO' });
   await cutDialog.getByLabel('Code 1').fill(code);
   await cutDialog.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await cutDialog.getByLabel('Cloth per piece 1').fill('14');
@@ -69,7 +69,7 @@ test('purchase → cutting → job work → checking → packing (+bundle) → f
   await jobDialog.getByLabel('Contractor').selectOption({ label: 'Sunita Job Work' });
   await jobDialog.getByLabel('Code 1').selectOption({ label: code });
   await jobDialog.getByLabel('Color 1').selectOption({ label: color });
-  await jobDialog.getByLabel('Size 1').selectOption({ label: 'XL' });
+  await jobDialog.getByLabel('Size 1').selectOption({ label: 'JUMBO' });
   await jobDialog.getByRole('textbox', { name: 'Dozens' }).fill('5');
   await jobDialog.getByRole('button', { name: 'Issue goods' }).click();
   await expect(page.getByText(/Job card JOB-\d+ created/)).toBeVisible();
