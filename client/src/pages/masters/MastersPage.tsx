@@ -15,7 +15,7 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable, type Column } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
+import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
 import { ImageInput, MoneyInput } from '../../components/inputs';
 
 type BaseRow = { id: number; isActive: boolean; createdAt: string } & Record<string, unknown>;
@@ -156,11 +156,7 @@ const DEFS: Record<string, MasterDef> = {
 
 function QrLink({ path }: { path: string | null }) {
   if (!path) return <span className="text-gray-300">—</span>;
-  return (
-    <a href={path} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">
-      🔳 view
-    </a>
-  );
+  return <ThumbLink href={path} icon="🔳" label="view" title="Payment QR code" />;
 }
 
 export default function MastersPage() {

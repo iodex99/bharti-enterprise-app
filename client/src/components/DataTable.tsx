@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
-import { EmptyState, Select, Spinner, TextInput } from './ui';
+import { EmptyState, Select, Spinner, TextInput, useIsCompact } from './ui';
 
 export type Column<T> = {
   key: string;
@@ -59,6 +59,7 @@ export function DataTable<T extends { id: number | string }>({
   const [to, setTo] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const compact = useIsCompact();
 
   const facetOptions = useMemo(() => {
     const out: Record<string, string[]> = {};
@@ -183,6 +184,33 @@ export function DataTable<T extends { id: number | string }>({
             </div>
           </>
         )}
+        {/* Cards have no column headings to click, so phones get a sort picker —
+            otherwise sorting would simply be missing on the device operators use. */}
+        {compact && (
+          <div className="w-full">
+            <Select
+              aria-label="Sort by"
+              value={sortKey ? `${sortKey}:${sortDir}` : ''}
+              onChange={(e) => {
+                const [key, dir] = e.target.value.split(':');
+                setSortKey(key || null);
+                setSortDir(dir === 'desc' ? 'desc' : 'asc');
+              }}
+            >
+              <option value="">Sort: as listed</option>
+              {columns
+                .filter((c) => c.sortable !== false && c.header)
+                .flatMap((c) => [
+                  <option key={`${c.key}:asc`} value={`${c.key}:asc`}>
+                    {c.header} ↑
+                  </option>,
+                  <option key={`${c.key}:desc`} value={`${c.key}:desc`}>
+                    {c.header} ↓
+                  </option>,
+                ])}
+            </Select>
+          </div>
+        )}
         {hasFilters && (q || from || to || Object.values(facetValues).some(Boolean)) && (
           <button
             className="pb-2 text-xs font-medium text-violet-600 hover:underline"
@@ -210,7 +238,56 @@ export function DataTable<T extends { id: number | string }>({
         </div>
       )}
       {!loading && rows && rows.length === 0 && <EmptyState title={emptyTitle} hint={emptyHint} />}
-      {!loading && rows && rows.length > 0 && (
+
+      {/*
+        Phones get CARDS, not a table. A 9-column table on a 360px screen pushes the
+        quantity and the action button off-screen, where an operator never finds them —
+        so below `sm` every row becomes a stacked label/value card with its buttons.
+        Exactly ONE of the two is rendered: a CSS-hidden copy would still be in the DOM,
+        doubling every text match for screen readers and tests alike.
+      */}
+      {!loading && rows && rows.length > 0 && compact && (
+        // role table/row/cell so a card behaves exactly like its table row
+        <div className="space-y-2" role="table">
+          {filtered.map((row) => (
+            <div key={row.id} role="row" className="rounded-2xl border border-gray-200 bg-white p-3">
+              <dl className="space-y-1.5">
+                {columns.map((c) => {
+                  const content = c.render ? c.render(row) : String(columnValue(c, row) ?? '');
+                  if (content === '' || content == null) return null;
+                  return (
+                    <div key={c.key} className="flex items-baseline justify-between gap-3">
+                      {c.header && (
+                        <dt className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          {c.header}
+                        </dt>
+                      )}
+                      <dd role="cell" className={clsx('min-w-0 text-right text-sm', c.className)}>
+                        {content}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+              {actions && (
+                <div
+                  role="cell"
+                  className="mt-2 flex flex-wrap justify-end gap-1 border-t border-gray-100 pt-2"
+                >
+                  {actions(row)}
+                </div>
+              )}
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
+              No matches for the current filters
+            </p>
+          )}
+        </div>
+      )}
+
+      {!loading && rows && rows.length > 0 && !compact && (
         <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="sticky top-0 bg-white">
@@ -222,7 +299,9 @@ export function DataTable<T extends { id: number | string }>({
                     ) : (
                       <button
                         className={clsx(
-                          'inline-flex items-center gap-1 uppercase tracking-wide hover:text-gray-700',
+                          // -my-2 py-2 grows the tap area into the cell padding without
+                          // moving anything — header text alone is a 16px target on a phone
+                          '-my-2 inline-flex items-center gap-1 py-2 uppercase tracking-wide hover:text-gray-700',
                           sortKey === c.key && 'text-violet-700',
                         )}
                         onClick={() => toggleSort(c)}

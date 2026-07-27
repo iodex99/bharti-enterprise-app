@@ -325,17 +325,16 @@ export function recordCheckResult(
           refId: resultId,
         },
       );
-      db.prepare(
+      // ONE ROW PER REASON. Lumping "4 damage + 10 colour defect" into a single row
+      // labelled with the first reason made the Discrepancies page — and every
+      // reason-based follow-up with the contractor — read 14 pcs of the wrong fault.
+      const insertDiscrepancy = db.prepare(
         `INSERT INTO discrepancies (stage, office_id, ref_type, ref_id, qty_pcs, reason, note, created_by)
          VALUES ('CHECKING', ?, 'check_result', ?, ?, ?, ?, ?)`,
-      ).run(
-        office.id,
-        resultId,
-        -qtyRejected,
-        realRejections[0]?.reason ?? 'other',
-        input.notes,
-        userId,
       );
+      for (const rejection of realRejections) {
+        insertDiscrepancy.run(office.id, resultId, -rejection.qtyPcs, rejection.reason, input.notes, userId);
+      }
     }
     if (qtyMissing > 0) {
       movements.push({

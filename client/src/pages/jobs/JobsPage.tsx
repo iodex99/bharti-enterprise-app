@@ -11,7 +11,7 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
+import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
 import { DzPcInput, ImageInput, MoneyInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { useMasterOptions } from '../../api/masters';
@@ -113,18 +113,7 @@ export default function JobsPage() {
               <span>
                 <span className="font-medium">{r.modelCode}</span>{' '}
                 <span className="text-gray-500">{r.colorName}</span>
-                {r.modelImagePath && (
-                  <a
-                    href={r.modelImagePath}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="ml-1 text-violet-600"
-                    onClick={(e) => e.stopPropagation()}
-                    title="Product photo"
-                  >
-                    📷
-                  </a>
-                )}
+                {r.modelImagePath && <ThumbLink href={r.modelImagePath} title="Product photo" />}
               </span>
             ),
           },
@@ -690,11 +679,7 @@ function JobDetailModal({
                   {r.sizeCode} · {formatPieces(r.qtyPcs)}
                 </span>
                 {r.returnType === 'unstitched_return' && <Badge tone="amber">unstitched return</Badge>}
-                {r.imagePath && (
-                  <a href={r.imagePath} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">
-                    📷 photo
-                  </a>
-                )}
+                {r.imagePath && <ThumbLink href={r.imagePath} label="photo" title="Photo of the returned goods" />}
               </li>
             ))}
           </ul>

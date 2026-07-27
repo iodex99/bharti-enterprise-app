@@ -11,7 +11,7 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
+import { Badge, Button, ErrorText, Field, MiniTable, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
 import { DzPcInput, MoneyInput } from '../../components/inputs';
 import { useMasterOptions } from '../../api/masters';
 import { VoidModal } from '../purchases/PurchasesPage';
@@ -137,57 +137,54 @@ export default function CheckingPage() {
           <p className="text-sm text-gray-400">Nothing waiting — every received batch is with a checker.</p>
         )}
         {pending && pending.items.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                  <th className="px-3 py-2">Received</th>
-                  <th className="px-3 py-2">From</th>
-                  <th className="px-3 py-2">Receipt</th>
-                  <th className="px-3 py-2">Size-code</th>
-                  <th className="px-3 py-2">Waiting</th>
-                  <th className="px-3 py-2">Photo</th>
-                  {canWrite && <th className="px-3 py-2 text-right">Action</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {pending.items.map((b) => (
-                  <tr key={`${b.lotType}-${b.lotId}`} className="border-b border-gray-100 last:border-0">
-                    <td className="px-3 py-2 text-gray-500">
-                      {b.receiptDate ? formatBusinessDate(b.receiptDate) : '—'}
-                    </td>
-                    <td className="px-3 py-2 font-medium">{b.contractorName ?? 'Opening stock'}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-gray-500">
-                      {b.receiptDocNo ?? b.openingDocNo ?? '—'}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="font-medium">{b.sizeCodeLabel}</span>{' '}
-                      <span className="text-gray-500">{b.colorName}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="font-semibold text-red-700">{formatPieces(b.qtyPcs)}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      {b.imagePath ? (
-                        <a href={b.imagePath} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">
-                          📷 view
-                        </a>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
-                    </td>
-                    {canWrite && (
-                      <td className="px-3 py-2 text-right">
-                        <Button variant="ghost" className="text-violet-700" onClick={() => setIssueFor(b)}>
-                          Issue to checker
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <MiniTable
+            rows={pending.items}
+            keyOf={(b) => `${b.lotType}-${b.lotId}`}
+            columns={[
+              {
+                header: 'Received',
+                className: 'text-gray-500',
+                render: (b) => (b.receiptDate ? formatBusinessDate(b.receiptDate) : '—'),
+              },
+              { header: 'From', className: 'font-medium', render: (b) => b.contractorName ?? 'Opening stock' },
+              {
+                header: 'Receipt',
+                className: 'font-mono text-xs text-gray-500',
+                render: (b) => b.receiptDocNo ?? b.openingDocNo ?? '—',
+              },
+              {
+                header: 'Size-code',
+                render: (b) => (
+                  <span>
+                    <span className="font-medium">{b.sizeCodeLabel}</span>{' '}
+                    <span className="text-gray-500">{b.colorName}</span>
+                  </span>
+                ),
+              },
+              {
+                header: 'Waiting',
+                render: (b) => <span className="font-semibold text-red-700">{formatPieces(b.qtyPcs)}</span>,
+              },
+              {
+                header: 'Photo',
+                render: (b) =>
+                  b.imagePath ? (
+                    <ThumbLink href={b.imagePath} label="view" title="Photo of the returned goods" />
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  ),
+              },
+            ]}
+            actions={
+              canWrite
+                ? (b) => (
+                    <Button variant="ghost" className="text-violet-700" onClick={() => setIssueFor(b)}>
+                      Issue to checker
+                    </Button>
+                  )
+                : undefined
+            }
+          />
         )}
       </section>
 
@@ -205,11 +202,7 @@ export default function CheckingPage() {
                 <span>
                   {r.contractorName}{' '}
                   {r.receiptDocNo && <span className="font-mono text-xs text-gray-400">({r.receiptDocNo})</span>}{' '}
-                  {r.receiptImagePath && (
-                    <a href={r.receiptImagePath} target="_blank" rel="noreferrer" title="Receipt photo">
-                      📷
-                    </a>
-                  )}
+                  {r.receiptImagePath && <ThumbLink href={r.receiptImagePath} title="Photo of the returned goods" />}
                 </span>
               ) : (
                 <span className="text-gray-300">—</span>
@@ -223,11 +216,7 @@ export default function CheckingPage() {
               <span>
                 <span className="font-medium">{r.sizeCodeLabel}</span>{' '}
                 <span className="text-gray-500">{r.colorName}</span>
-                {r.codeImagePath && (
-                  <a href={r.codeImagePath} target="_blank" rel="noreferrer" className="ml-1" title="Product photo">
-                    📷
-                  </a>
-                )}
+                {r.codeImagePath && <ThumbLink href={r.codeImagePath} title="Product photo" />}
               </span>
             ),
           },
@@ -298,42 +287,34 @@ export default function CheckingPage() {
           {packWork.length > 0 && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
               <h2 className="mb-2 text-sm font-bold text-gray-900">📦 Packing in progress</h2>
-              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-                <table className="w-full min-w-[560px] text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                      <th className="px-3 py-2">Doc</th>
-                      <th className="px-3 py-2">Packer</th>
-                      <th className="px-3 py-2">Size-code</th>
-                      <th className="px-3 py-2">With packer</th>
-                      <th className="px-3 py-2">Packed</th>
-                      {canWrite && <th className="px-3 py-2 text-right">Action</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {packWork.map((p) => (
-                      <tr key={p.id} className="border-b border-gray-100 last:border-0">
-                        <td className="px-3 py-2 font-mono text-xs">{p.docNo}</td>
-                        <td className="px-3 py-2 font-medium">{p.staffName}</td>
-                        <td className="px-3 py-2">
-                          {p.sizeCodeLabel} <span className="text-gray-500">{p.colorName}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge tone="blue">{formatPieces(p.heldPcs)}</Badge>
-                        </td>
-                        <td className="px-3 py-2 text-emerald-700">{formatPieces(p.packedPcs)}</td>
-                        {canWrite && (
-                          <td className="px-3 py-2 text-right">
-                            <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(p)}>
-                              Record packing
-                            </Button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <MiniTable
+                rows={packWork}
+                keyOf={(p) => p.id}
+                minWidth={560}
+                columns={[
+                  { header: 'Doc', className: 'font-mono text-xs', render: (p) => p.docNo },
+                  { header: 'Packer', className: 'font-medium', render: (p) => p.staffName },
+                  {
+                    header: 'Size-code',
+                    render: (p) => (
+                      <span>
+                        {p.sizeCodeLabel} <span className="text-gray-500">{p.colorName}</span>
+                      </span>
+                    ),
+                  },
+                  { header: 'With packer', render: (p) => <Badge tone="blue">{formatPieces(p.heldPcs)}</Badge> },
+                  { header: 'Packed', className: 'text-emerald-700', render: (p) => formatPieces(p.packedPcs) },
+                ]}
+                actions={
+                  canWrite
+                    ? (p) => (
+                        <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(p)}>
+                          Record packing
+                        </Button>
+                      )
+                    : undefined
+                }
+              />
             </div>
           )}
 
@@ -343,43 +324,41 @@ export default function CheckingPage() {
               <p className="mb-2 text-xs text-gray-500">
                 Checked goods the owner asked to reserve — pack them whenever needed.
               </p>
-              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-                <table className="w-full min-w-[560px] text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                      <th className="px-3 py-2">Bundle</th>
-                      <th className="px-3 py-2">With</th>
-                      <th className="px-3 py-2">Size-code</th>
-                      <th className="px-3 py-2">Kept aside</th>
-                      {canWrite && <th className="px-3 py-2 text-right">Action</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bundles.map((b) => (
-                      <tr key={b.id} className="border-b border-gray-100 last:border-0">
-                        <td className="px-3 py-2">
-                          <span className="font-medium">{b.label || b.docNo}</span>{' '}
-                          <span className="font-mono text-xs text-gray-400">{b.docNo}</span>
-                        </td>
-                        <td className="px-3 py-2">{b.staffName}</td>
-                        <td className="px-3 py-2">
-                          {b.sizeCodeLabel} <span className="text-gray-500">{b.colorName}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge tone="blue">{formatPieces(b.heldPcs)}</Badge>
-                        </td>
-                        {canWrite && (
-                          <td className="px-3 py-2 text-right">
-                            <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(b)}>
-                              Pack from bundle
-                            </Button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <MiniTable
+                rows={bundles}
+                keyOf={(b) => b.id}
+                minWidth={560}
+                columns={[
+                  {
+                    header: 'Bundle',
+                    render: (b) => (
+                      <span>
+                        <span className="font-medium">{b.label || b.docNo}</span>{' '}
+                        <span className="font-mono text-xs text-gray-400">{b.docNo}</span>
+                      </span>
+                    ),
+                  },
+                  { header: 'With', render: (b) => b.staffName },
+                  {
+                    header: 'Size-code',
+                    render: (b) => (
+                      <span>
+                        {b.sizeCodeLabel} <span className="text-gray-500">{b.colorName}</span>
+                      </span>
+                    ),
+                  },
+                  { header: 'Kept aside', render: (b) => <Badge tone="blue">{formatPieces(b.heldPcs)}</Badge> },
+                ]}
+                actions={
+                  canWrite
+                    ? (b) => (
+                        <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(b)}>
+                          Pack from bundle
+                        </Button>
+                      )
+                    : undefined
+                }
+              />
             </div>
           )}
         </section>
@@ -472,9 +451,7 @@ function IssueModal({
           {batch.imagePath && (
             <>
               {' '}
-              <a href={batch.imagePath} target="_blank" rel="noreferrer" className="text-violet-700 underline">
-                📷 photo
-              </a>
+              <ThumbLink href={batch.imagePath} label="photo" title="Photo of the returned goods" />
             </>
           )}
         </div>

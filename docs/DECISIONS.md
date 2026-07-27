@@ -150,3 +150,27 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   Dues page settles BOTH contractors and staff, and both masters carry a payment-QR
   photo shown when recording a payment. The client's real sizes (HR, PIPE, JUMBO) are
   the seeded defaults.
+- **ADR-038** **Phones get cards, not tables.** Operators work on phones, where a wide
+  table pushes the quantity and the action button off-screen — an operator simply never
+  finds them. Below the `sm` breakpoint every list (`DataTable` and the `MiniTable` used
+  by Checking & Packing) renders one stacked label/value card per row with its buttons
+  underneath; the table returns on tablets and laptops. Photo/QR links are never bare
+  emoji: `ThumbLink` gives each a 36px hit area. Exactly ONE layout is in the DOM
+  (`useIsCompact`, a `useSyncExternalStore` over matchMedia) — a CSS-hidden copy still
+  doubles every text match for screen readers and tests. Cards carry `role=table/row/cell`
+  so a card IS its table row to anything reading the page. Phones get a "Sort by" picker
+  since there are no column headings to click.
+- **ADR-039** **A payment may only be booked in an office where that person actually
+  worked.** Earnings and payments are both office-scoped, so a payment recorded in the
+  wrong office settles nothing: the money leaves and the dues stay on the other office's
+  page forever. Both payment services now refuse it by name ("Meena has no job work in
+  Branch Office"). Advances are still allowed where the work is.
+- **ADR-040** **Checkers are paid for pieces they inspected — passed + rejected, never
+  missing.** Missing pieces never reached the checker, and paying for them would reward
+  declaring goods missing, which also writes stock off. Job-work cost and staff pay both
+  round ONCE per line/issue over the total, so the job card, the dues page, the dashboard
+  and the reports always show the same number.
+- **ADR-041** **A settled job card takes nothing more.** The excess-receipt path exists
+  for a contractor handing back more than *pending*, not for reopening a completed card;
+  without the guard, choosing the wrong card conjured stock and billed the contractor for
+  it. Further goods need a new job card.

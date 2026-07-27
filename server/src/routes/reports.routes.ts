@@ -94,12 +94,13 @@ export function traceRoutes(): Router {
   router.param('purchaseId', idParamGuard);
   router.use(requireAuth);
 
-  router.get('/fg-lots', (_req, res) => {
-    res.json({ items: listFgLots(getDb()) });
+  // office-scoped like every other read (ADR-028): a trace never crosses offices
+  router.get('/fg-lots', (req, res) => {
+    res.json({ items: listFgLots(getDb(), officeOf(req).id) });
   });
 
   router.get('/fg/:packIssueId', (req, res) => {
-    const tree = traceFgLot(getDb(), Number(req.params.packIssueId));
+    const tree = traceFgLot(getDb(), Number(req.params.packIssueId), officeOf(req).id);
     if (!tree) {
       res.status(404).json({ error: 'Finished-goods batch not found.' });
       return;
@@ -108,7 +109,7 @@ export function traceRoutes(): Router {
   });
 
   router.get('/purchase/:purchaseId', (req, res) => {
-    const tree = tracePurchaseForward(getDb(), Number(req.params.purchaseId));
+    const tree = tracePurchaseForward(getDb(), Number(req.params.purchaseId), officeOf(req).id);
     if (!tree) {
       res.status(404).json({ error: 'Purchase not found.' });
       return;

@@ -19,6 +19,7 @@ import { checkingRoutes, dispatchesRoutes, packingRoutes } from './routes/checki
 import { discrepanciesRoutes } from './routes/discrepancies.routes';
 import { reportsRoutes, traceRoutes } from './routes/reports.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
+import { LedgerError } from './services/ledger.service';
 
 /**
  * Runtime-neutral assembly of the API.
@@ -91,6 +92,13 @@ export function mountErrorHandler(app: express.Express): void {
         res.status(400).json({
           error: 'A referenced record does not exist or the values break a data rule.',
         });
+        return;
+      }
+      // A ledger rule said no ("60 pcs have already moved on"). It also carries status
+      // 400, so it MUST be answered before the body-parser branch below — otherwise the
+      // user is told their request was malformed instead of what actually stopped them.
+      if (err instanceof LedgerError) {
+        res.status(err.status).json({ error: err.message });
         return;
       }
       // body-parser errors (malformed JSON, oversized payloads) carry their own 4xx status

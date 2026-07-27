@@ -8,9 +8,12 @@ import type { ServiceResult } from './purchases.service';
 
 /**
  * Checkers & packers get paid per dozen too. Earnings accrue from RESULTS at the rate
- * snapshotted on each issue (checking: every piece with a recorded verdict — passed,
- * rejected or missing was all work done; packing: packed pieces). Dues = earnings −
- * payments, exactly like contractors; payments are partial and dated.
+ * snapshotted on each issue: checking pays for pieces actually inspected (passed +
+ * rejected), packing pays for pieces packed. Dues = earnings − payments, exactly like
+ * contractors; payments are partial and dated.
+ *
+ * MISSING pieces are deliberately NOT paid: they never reached the checker, and paying
+ * for them would reward declaring goods missing — which also writes stock off.
  */
 
 export function staffAnalytics(db: Db, officeId: number): Array<Record<string, unknown>> {
@@ -25,19 +28,27 @@ export function staffAnalytics(db: Db, officeId: number): Array<Record<string, u
     )
     .all() as Array<Record<string, unknown>>;
 
+  // rounded once per check issue over everything inspected on it, so the figure here
+  // matches what the checking page shows for that batch
   const checkStmt = db.prepare(
-    `SELECT COALESCE(SUM(r.qty_passed + r.qty_rejected + r.qty_missing), 0) AS pcs,
-            COALESCE(SUM(CAST(ROUND((r.qty_passed + r.qty_rejected + r.qty_missing) * ci.rate_paise_per_dozen / 12.0) AS INTEGER)), 0) AS earned
-     FROM check_results r
-     JOIN check_issues ci ON ci.id = r.check_issue_id AND ci.voided_at IS NULL
-     WHERE ci.staff_id = ? AND ci.office_id = ?`,
+    `SELECT COALESCE(SUM(pcs), 0) AS pcs, COALESCE(SUM(earned), 0) AS earned FROM (
+       SELECT SUM(r.qty_passed + r.qty_rejected) AS pcs,
+              CAST(ROUND(SUM(r.qty_passed + r.qty_rejected) * ci.rate_paise_per_dozen / 12.0) AS INTEGER) AS earned
+       FROM check_results r
+       JOIN check_issues ci ON ci.id = r.check_issue_id AND ci.voided_at IS NULL
+       WHERE ci.staff_id = ? AND ci.office_id = ?
+       GROUP BY ci.id
+     )`,
   );
   const packStmt = db.prepare(
-    `SELECT COALESCE(SUM(pr.qty_packed), 0) AS pcs,
-            COALESCE(SUM(CAST(ROUND(pr.qty_packed * pi.rate_paise_per_dozen / 12.0) AS INTEGER)), 0) AS earned
-     FROM pack_results pr
-     JOIN pack_issues pi ON pi.id = pr.pack_issue_id AND pi.voided_at IS NULL
-     WHERE pi.staff_id = ? AND pi.office_id = ?`,
+    `SELECT COALESCE(SUM(pcs), 0) AS pcs, COALESCE(SUM(earned), 0) AS earned FROM (
+       SELECT SUM(pr.qty_packed) AS pcs,
+              CAST(ROUND(SUM(pr.qty_packed) * pi.rate_paise_per_dozen / 12.0) AS INTEGER) AS earned
+       FROM pack_results pr
+       JOIN pack_issues pi ON pi.id = pr.pack_issue_id AND pi.voided_at IS NULL
+       WHERE pi.staff_id = ? AND pi.office_id = ?
+       GROUP BY pi.id
+     )`,
   );
   const paidStmt = db.prepare(
     `SELECT COALESCE(SUM(amount_paise), 0) AS paid, MAX(payment_date) AS lastDate
@@ -89,9 +100,27 @@ export function createStaffPayment(
   onCreated?: (id: number) => void,
 ): ServiceResult<{ id: number; docNo: string }> {
   const staff = db
-    .prepare('SELECT id FROM staff WHERE id = ? AND deleted_at IS NULL')
-    .get(input.staffId);
+    .prepare('SELECT id, name FROM staff WHERE id = ? AND deleted_at IS NULL')
+    .get(input.staffId) as { id: number; name: string } | undefined;
   if (!staff) return { ok: false, code: 400, error: 'Staff member not found.' };
+
+  // Earnings are per office, so a payment booked in the wrong office settles nothing:
+  // the money leaves, and the dues it was meant to clear stay on the other office's
+  // page forever. Refuse rather than record a payment that can never balance.
+  const workedHere = db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM check_issues WHERE staff_id = ? AND office_id = ?) +
+         (SELECT COUNT(*) FROM pack_issues  WHERE staff_id = ? AND office_id = ?) AS n`,
+    )
+    .get(input.staffId, office.id, input.staffId, office.id) as { n: number };
+  if (workedHere.n === 0) {
+    return {
+      ok: false,
+      code: 400,
+      error: `${staff.name} has not checked or packed anything in ${office.name}. Switch to the office where the work was done.`,
+    };
+  }
 
   let id = 0;
   let docNo = '';

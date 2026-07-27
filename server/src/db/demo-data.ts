@@ -570,12 +570,14 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   receive(BR, 2, bj1, [{ lineId: bi1.lineId(bj1, SIZE.PIPE), qtyPcs: 48 }]);
   purchase(BR, 3, VENDOR.SHARMA, COLOR.NAVY, 60, 40, 3900);
 
-  // resolve the two oldest discrepancies so a demo shows both review states
+  // resolve the two oldest head-office discrepancies so a demo shows both review states
   const toResolve = db
-    .prepare('SELECT id FROM discrepancies ORDER BY created_at ASC, id ASC LIMIT 2')
-    .all() as Array<{ id: number }>;
+    .prepare('SELECT id FROM discrepancies WHERE office_id = ? ORDER BY created_at ASC, id ASC LIMIT 2')
+    .all(HO.id) as Array<{ id: number }>;
   const notes = ['counting error at the cutting table — register corrected', 'settled with contractor against dues'];
-  toResolve.forEach((d, i) => must(resolveDiscrepancy(db, d.id, notes[i]!, ADMIN, null), `resolve d${d.id}`));
+  toResolve.forEach((d, i) =>
+    must(resolveDiscrepancy(db, HO.id, d.id, notes[i]!, ADMIN, null), `resolve d${d.id}`),
+  );
 
   return runReconciliation(db);
 }

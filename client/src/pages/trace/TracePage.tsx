@@ -12,7 +12,16 @@ type TraceNode = {
   children: TraceNode[];
 };
 
-type FgLot = { packIssueId: number; docNo: string; modelCode: string; colorName: string; sizeCode: string; qtyPcs: number };
+type FgLot = {
+  packIssueId: number;
+  docNo: string;
+  modelCode: string;
+  colorName: string;
+  sizeCode: string;
+  /** the size-code the goods carry everywhere else, e.g. "315-HR" */
+  sizeCodeLabel: string;
+  qtyPcs: number;
+};
 type PurchaseRow = { id: number; docNo: string; vendorName: string; modelCode: string; colorName: string };
 
 const NODE_ICON: Record<string, string> = {
@@ -75,8 +84,8 @@ export default function TracePage() {
               </option>
               {fgLots?.items.map((lot) => (
                 <option key={lot.packIssueId} value={lot.packIssueId}>
-                  {lot.docNo} · {lot.modelCode} {lot.colorName} {lot.sizeCode} ·{' '}
-                  {formatPieces(lot.qtyPcs)} in stock
+                  {lot.sizeCodeLabel} {lot.colorName} · {formatPieces(lot.qtyPcs)} in stock ·{' '}
+                  {lot.docNo}
                 </option>
               ))}
             </Select>

@@ -1,9 +1,14 @@
+import { formatLen } from '@shared';
 import type { Db } from '../db/connection';
 
 /**
  * Batch traceability (spec: trace any finished-goods batch back to vendor, and any
  * purchase forward to finished goods). Downstream hops use the recorded FIFO
  * allocations, so the tree is qty-weighted and honest about mixed bins.
+ *
+ * Every entry point is OFFICE-SCOPED (ADR-028): the root document must belong to the
+ * caller's office, and the walk from there stays inside it because allocations only
+ * ever point at documents of the same office.
  */
 
 export type TraceNode = {
@@ -14,7 +19,7 @@ export type TraceNode = {
   children: TraceNode[];
 };
 
-export function traceFgLot(db: Db, packIssueId: number): TraceNode | null {
+export function traceFgLot(db: Db, packIssueId: number, officeId: number): TraceNode | null {
   const pack = db
     .prepare(
       `SELECT pi.*, st.name AS packer, m.code AS model, c.name AS color, s.code AS size
@@ -23,9 +28,9 @@ export function traceFgLot(db: Db, packIssueId: number): TraceNode | null {
        JOIN models m ON m.id = pi.model_id
        JOIN colors c ON c.id = pi.color_id
        JOIN sizes s ON s.id = pi.size_id
-       WHERE pi.id = ?`,
+       WHERE pi.id = ? AND pi.office_id = ?`,
     )
-    .get(packIssueId) as Record<string, unknown> | undefined;
+    .get(packIssueId, officeId) as Record<string, unknown> | undefined;
   if (!pack) return null;
 
   const packed = (
@@ -179,22 +184,26 @@ function openingNode(db: Db, openingId: number, qtyPcs?: number): TraceNode {
 }
 
 /** Forward: purchase → cutting → jobs → receipts → checks → packs → FG. */
-export function tracePurchaseForward(db: Db, purchaseId: number): TraceNode | null {
+export function tracePurchaseForward(
+  db: Db,
+  purchaseId: number,
+  officeId: number,
+): TraceNode | null {
   const purchase = db
     .prepare(
       `SELECT p.*, v.name AS vendor, c.name AS color FROM purchases p
        JOIN vendors v ON v.id = p.vendor_id
        JOIN colors c ON c.id = p.color_id
-       WHERE p.id = ?`,
+       WHERE p.id = ? AND p.office_id = ?`,
     )
-    .get(purchaseId) as Record<string, unknown> | undefined;
+    .get(purchaseId, officeId) as Record<string, unknown> | undefined;
   if (!purchase) return null;
 
-  // raw cloth has no model — it gets one at cutting (children carry the models)
+  // raw cloth has no code — it gets one at cutting (children carry the codes)
   const root: TraceNode = {
     type: 'purchase',
     label: `${purchase.doc_no as string} — Cloth from ${purchase.vendor as string}`,
-    detail: `${purchase.color as string} cloth · ${(((purchase.qty_cm as number) ?? 0) / 100).toFixed(2)} m`,
+    detail: `${purchase.color as string} cloth · ${formatLen((purchase.len_inch_c as number) ?? 0)}`,
     children: [],
   };
 
@@ -250,20 +259,21 @@ export function tracePurchaseForward(db: Db, purchaseId: number): TraceNode | nu
 }
 
 /** FG lots with balance, for the trace picker. */
-export function listFgLots(db: Db): Array<Record<string, unknown>> {
+export function listFgLots(db: Db, officeId: number): Array<Record<string, unknown>> {
   return db
     .prepare(
       `SELECT l.lot_id AS packIssueId, pi.doc_no AS docNo,
               m.code AS modelCode, c.name AS colorName, s.code AS sizeCode,
+              m.code || '-' || s.code AS sizeCodeLabel,
               SUM(l.qty) AS qtyPcs
        FROM stock_ledger l
        JOIN pack_issues pi ON l.lot_type = 'pack_issue' AND pi.id = l.lot_id
        JOIN models m ON m.id = l.model_id
        JOIN colors c ON c.id = l.color_id
        JOIN sizes s ON s.id = l.size_id
-       WHERE l.stage = 'FG'
+       WHERE l.stage = 'FG' AND l.office_id = ?
        GROUP BY l.lot_id HAVING SUM(l.qty) != 0
        ORDER BY pi.id DESC`,
     )
-    .all() as Array<Record<string, unknown>>;
+    .all(officeId) as Array<Record<string, unknown>>;
 }

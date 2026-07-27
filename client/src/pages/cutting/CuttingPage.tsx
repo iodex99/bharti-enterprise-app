@@ -11,7 +11,7 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
+import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
 import { DzPcInput, ImageInput, InchesInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { VoidModal } from '../purchases/PurchasesPage';
@@ -263,9 +263,7 @@ export default function CuttingPage() {
                     <td className="py-1.5 font-medium">{l.sizeCodeLabel}</td>
                     <td>
                       {l.imagePath ? (
-                        <a href={l.imagePath} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">
-                          📷 view
-                        </a>
+                        <ThumbLink href={l.imagePath} label="view" title="Product photo" />
                       ) : (
                         '—'
                       )}
@@ -411,14 +409,16 @@ function PlanModal({
               <option value="" disabled>
                 — select the roll being cut —
               </option>
+              {/* the cutter recognises a roll by its colour and how much is left — batch
+                  numbers are bookkeeping and only made this list harder to read */}
               {lots.map((l) => (
                 <option key={`${l.lotType}-${l.lotId}`} value={`${l.lotType}-${l.lotId}`}>
-                  {(l.purchaseDocNo ?? l.openingDocNo)!} · {l.colorName} ·{' '}
-                  {formatLen(l.qtyInchC)} left{l.widthInchC ? ` · ${formatInchC(l.widthInchC)} wide` : ''}
+                  {l.colorName} · {formatLen(l.qtyInchC)} left
+                  {l.widthInchC ? ` · ${formatInchC(l.widthInchC)} wide` : ''}
                 </option>
               ))}
               {batch && !lots.some((l) => `${l.lotType}-${l.lotId}` === lotKey) && (
-                <option value={lotKey}>{batch.rawDocNo} (current)</option>
+                <option value={lotKey}>{batch.colorName} · the roll already being cut</option>
               )}
             </Select>
           </Field>

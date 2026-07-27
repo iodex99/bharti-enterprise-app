@@ -4,7 +4,7 @@ import { PAYMENT_MODES, formatBusinessDate, formatPaise, formatPieces, label as 
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
+import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
 import { MoneyInput } from '../../components/inputs';
 
 type ContractorDue = {
@@ -72,9 +72,7 @@ export default function DuesPage() {
 
   const qr = (path: string | null) =>
     path ? (
-      <a href={path} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline" title="Payment QR code">
-        🔳 QR
-      </a>
+      <ThumbLink href={path} icon="🔳" label="QR" title="Payment QR code" />
     ) : (
       <span className="text-gray-300">—</span>
     );

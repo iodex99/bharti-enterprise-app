@@ -1,5 +1,30 @@
-import { type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, useEffect } from 'react';
+import {
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  useEffect,
+  useSyncExternalStore,
+} from 'react';
 import clsx from 'clsx';
+
+/** Tailwind's `sm`. Below it, lists render as cards (ADR-038). */
+const COMPACT = '(max-width: 639.98px)';
+
+function subscribeToWidth(onChange: () => void): () => void {
+  const mq = window.matchMedia(COMPACT);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+
+/**
+ * True on phone-width screens. Lists SWAP their markup on this rather than rendering
+ * both and hiding one with CSS: a hidden copy still sits in the DOM, where it doubles
+ * every text match (and every row a test or a screen reader can find).
+ */
+export function useIsCompact(): boolean {
+  return useSyncExternalStore(subscribeToWidth, () => window.matchMedia(COMPACT).matches);
+}
 
 export function Button({
   variant = 'primary',
@@ -20,6 +45,119 @@ export function Button({
       )}
       {...props}
     />
+  );
+}
+
+/**
+ * A small list that is a TABLE on a laptop and CARDS on a phone. Operators work on
+ * phones, where a wide table pushes the quantity and the action button off-screen —
+ * so below `sm` each row stacks into label/value pairs with its buttons underneath.
+ */
+export function MiniTable<T>({
+  rows,
+  keyOf,
+  columns,
+  actions,
+  actionHeader = 'Action',
+  minWidth = 640,
+}: {
+  rows: T[];
+  keyOf: (row: T) => string | number;
+  columns: Array<{ header: string; render: (row: T) => ReactNode; className?: string }>;
+  actions?: (row: T) => ReactNode;
+  actionHeader?: string;
+  minWidth?: number;
+}) {
+  // role table/row/cell so a card is the same thing as its table row to a screen
+  // reader — and to a test, which then describes ONE list rather than two
+  if (useIsCompact()) {
+    return (
+      <div className="space-y-2" role="table">
+        {rows.map((row) => (
+          <div key={keyOf(row)} role="row" className="rounded-xl border border-gray-200 bg-white p-3">
+            <dl className="space-y-1.5">
+              {columns.map((c) => (
+                <div key={c.header} className="flex items-baseline justify-between gap-3">
+                  <dt className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    {c.header}
+                  </dt>
+                  <dd role="cell" className={clsx('min-w-0 text-right text-sm', c.className)}>
+                    {c.render(row)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {actions && (
+              <div
+                role="cell"
+                className="mt-2 flex flex-wrap justify-end gap-1 border-t border-gray-100 pt-2"
+              >
+                {actions(row)}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <table className="w-full text-sm" style={{ minWidth }}>
+        <thead>
+          <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+            {columns.map((c) => (
+              <th key={c.header} className="px-3 py-2">
+                {c.header}
+              </th>
+            ))}
+            {actions && <th className="px-3 py-2 text-right">{actionHeader}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={keyOf(row)} className="border-b border-gray-100 last:border-0">
+              {columns.map((c) => (
+                <td key={c.header} className={clsx('px-3 py-2', c.className)}>
+                  {c.render(row)}
+                </td>
+              ))}
+              {actions && <td className="px-3 py-2 text-right">{actions(row)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * A link to a photo or QR code. Operators work on phones, so these never render as a
+ * bare emoji — every one gets a finger-sized (36px) hit area of its own.
+ */
+export function ThumbLink({
+  href,
+  icon = '📷',
+  label,
+  title,
+}: {
+  href: string;
+  icon?: string;
+  label?: string;
+  title?: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title={title ?? label ?? 'Open photo'}
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center gap-1 rounded-lg px-1.5 text-sm text-violet-600 hover:bg-violet-50 hover:underline"
+    >
+      <span aria-hidden>{icon}</span>
+      {label && <span>{label}</span>}
+    </a>
   );
 }
 

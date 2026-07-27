@@ -3,7 +3,8 @@
 All endpoints under `/api`, session-cookie auth, zod-validated bodies, audited mutations.
 Roles: **A**dmin, **O**perator, **W**=owner (read-only). `anon` = no session.
 Document-creating POSTs accept an optional `Idempotency-Key` header (replays return the
-original id with `replayed: true`).
+original id with `replayed: true`; reusing a key for a DIFFERENT kind of document is a
+409, never another entity's id).
 
 **Office scoping (ADR-028):** every document/stock/report endpoint works within ONE
 office. Operators are pinned server-side to `users.office_id`; admin/owner select the
@@ -76,7 +77,8 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 | /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs, ratePaisePerDozen?} names the received batch (rate defaults from the staff master) | GET /pending (batches waiting w/ contractor+photo), POST /:id/results ({qtyPassed, rejections:[{reason, qtyPcs}]} — 'missing' is a reason, ADR-034), POST /:id/pack (allot passed pcs to a packer or keep a labeled bundle, ADR-035) | A, before results |
 | /api/packing | A O — directed at {lotType ∈ check_issue\|opening\|pack_issue(bundle), lotId}; kind pack\|bundle + label | GET ?kind=, POST /:id/results (packed/short sessions) | A, before results |
 | /api/dispatches | A | | A (ledger replay) |
-| /api/contractors/payments | A O | | A |
+| /api/contractors/payments | A O — refused (400) if that contractor has no job work in this office (ADR-039) | | A |
+| /api/staff/payments | A O — refused (400) if that person has not checked or packed in this office (ADR-039) | | A |
 
 ### Discrepancies (review workflow)
 | Method | Path | Roles | Notes |

@@ -39,13 +39,19 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
      JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL AND j.office_id = ?
      WHERE j.contractor_id = ?`,
   );
+  // Round ONCE per job line over everything received against it — the same rule the
+  // job card itself uses (listJobCards). Rounding each partial receipt separately made
+  // the card and the dues page disagree by a paise or two on split deliveries.
   const costStmt = db.prepare(
-    `SELECT COALESCE(SUM(CAST(ROUND(rl.qty_pcs * l.rate_paise_per_dozen / 12.0) AS INTEGER)), 0) AS cost
-     FROM job_receipt_lines rl
-     JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
-     JOIN job_card_lines l ON l.id = rl.job_card_line_id
-     JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL AND j.office_id = ?
-     WHERE j.contractor_id = ? AND rl.return_type = 'stitched'`,
+    `SELECT COALESCE(SUM(lineCost), 0) AS cost FROM (
+       SELECT CAST(ROUND(SUM(rl.qty_pcs) * l.rate_paise_per_dozen / 12.0) AS INTEGER) AS lineCost
+       FROM job_receipt_lines rl
+       JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
+       JOIN job_card_lines l ON l.id = rl.job_card_line_id
+       JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL AND j.office_id = ?
+       WHERE j.contractor_id = ? AND rl.return_type = 'stitched'
+       GROUP BY rl.job_card_line_id
+     )`,
   );
   const shortExcessStmt = db.prepare(
     `SELECT
@@ -135,9 +141,22 @@ export function createPayment(
   onCreated?: (id: number) => void,
 ): ServiceResult<{ id: number; docNo: string }> {
   const contractor = db
-    .prepare('SELECT id FROM contractors WHERE id = ? AND deleted_at IS NULL')
-    .get(input.contractorId);
+    .prepare('SELECT id, name FROM contractors WHERE id = ? AND deleted_at IS NULL')
+    .get(input.contractorId) as { id: number; name: string } | undefined;
   if (!contractor) return { ok: false, code: 400, error: 'Contractor not found.' };
+
+  // Job-work cost is per office, so a payment booked in the wrong office settles
+  // nothing — the money leaves and the dues stay on the other office's page forever.
+  const workedHere = db
+    .prepare('SELECT COUNT(*) AS n FROM job_cards WHERE contractor_id = ? AND office_id = ?')
+    .get(input.contractorId, office.id) as { n: number };
+  if (workedHere.n === 0) {
+    return {
+      ok: false,
+      code: 400,
+      error: `${contractor.name} has no job work in ${office.name}. Switch to the office where the work was issued.`,
+    };
+  }
 
   let id = 0;
   let docNo = '';

@@ -185,18 +185,22 @@ export default function AppShell() {
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 font-bold text-white">
+        {/* shrink-0: without it the office switcher squashes the logo to a sliver on a phone */}
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600 font-bold text-white">
           B
         </div>
-        <div className="min-w-0">
+        {/* the wordmark is the first thing to go when the bar gets tight */}
+        <div className="hidden min-w-0 sm:block">
           <p className="truncate text-sm font-bold leading-tight text-gray-900">Bharti Enterprises</p>
           <p className="hidden text-[11px] leading-tight text-gray-400 sm:block">
             Production &amp; Inventory
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
           <OfficeSwitcher role={user.role} />
-          <Badge tone={ROLE_TONE[user.role]}>{user.role}</Badge>
+          <span className="hidden sm:inline">
+            <Badge tone={ROLE_TONE[user.role]}>{user.role}</Badge>
+          </span>
           <div className="group relative">
             <button
               aria-label={`User menu: ${user.displayName}`}

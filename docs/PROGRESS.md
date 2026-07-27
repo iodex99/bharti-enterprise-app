@@ -117,7 +117,7 @@
   contractors AND staff with dated partial payments; contractor/staff masters carry a
   payment-QR photo shown when paying. Client's default sizes: HR / PIPE / JUMBO.
 
-Tests: 27 files / 329 unit+integration green; E2E rewritten for v2 (incl. offices.spec,
+Tests: 30 files / 648 unit+integration green; E2E rewritten for v2 (incl. offices.spec,
 photo-required receipts, pack-from-checking + bundle flow). Demo data (populateDemo) is
 v2: HO + BR offices, branch operator `branch-op`/Branch@123, codes 315/410/…, combined
 job issue → 2 cards, a bundle, missing-as-reason.
@@ -172,6 +172,24 @@ discrepancies review, reconciliation self-checks, PWA, dashboard.
 3. If the client ever wants the Android app back: android-release.yml still works via
    manual dispatch (signing secrets already configured; keystore at the developer's
    `bharti-signing` folder).
+
+**Audit findings baked into tests (2026-07-27).** Two independent audits (permissions,
+workflow) walked the whole system; nine real defects were fixed and pinned by tests.
+Things to remember:
+- Office scoping must be checked on the ROOT document of any walk — trace/discrepancy
+  resolve were missed because they take an id and never touched office_id. The new
+  `office-isolation.test.ts` attacks every read and write across the boundary by
+  guessing the other office's ids; run it after touching any service.
+- `LedgerError` carries `status = 400`, which the body-parser branch of the error
+  handler used to swallow ("Invalid request body"). The handler now answers LedgerError
+  explicitly BEFORE that branch — keep that ordering.
+- SQLite recycles row ids: any hard delete (cutting lines on edit) plus a surviving
+  allocation row equals a silently mis-pointed allocation. Delete allocations with their
+  document.
+- Money rounds ONCE per line/issue over the total, in every query that reports it
+  (jobs, contractors, dashboard, staffpay). Rounding per receipt makes screens disagree.
+- The RBAC matrix now covers every route group and PUT/DELETE — add a row when adding a
+  route; it is the cheapest guard in the repo (376 assertions).
 
 ## Session notes
 

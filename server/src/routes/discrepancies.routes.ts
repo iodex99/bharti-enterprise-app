@@ -19,6 +19,7 @@ export function discrepanciesRoutes(): Router {
   router.post('/:id/resolve', requireRole('admin'), validateBody(resolveDiscrepancySchema), (req, res) => {
     const result = resolveDiscrepancy(
       getDb(),
+      officeOf(req).id,
       Number(req.params.id),
       (req.body as { note: string }).note,
       req.user!.id,

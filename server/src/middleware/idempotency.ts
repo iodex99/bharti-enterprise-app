@@ -23,6 +23,12 @@ export function idempotencyGuard(entityType: string) {
       .prepare('SELECT entity_type, entity_id FROM idempotency_keys WHERE key = ?')
       .get(key) as { entity_type: string; entity_id: number } | undefined;
     if (existing) {
+      // A replay only means anything for the SAME kind of document. A key reused across
+      // routes is a client bug, not a retry — never hand back another entity's id.
+      if (existing.entity_type !== entityType) {
+        res.status(409).json({ error: 'This Idempotency-Key was already used for a different document.' });
+        return;
+      }
       res.status(200).json({ id: existing.entity_id, replayed: true });
       return;
     }

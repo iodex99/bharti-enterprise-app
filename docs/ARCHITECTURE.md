@@ -64,6 +64,14 @@ scripts/           setup / install-service / packaging helpers / app-server + mo
 data/              app.db, backups/  ← gitignored, survives updates (Node host)
 ```
 
+## UI contract (ADR-038)
+
+Operators use phones. Every list therefore has two renderings from ONE definition:
+stacked cards below the `sm` breakpoint, the table above it — `DataTable` for the main
+lists and `MiniTable` (components/ui.tsx) for the hand-rolled ones. Any new list must go
+through one of them, or the action buttons end up off-screen on a phone. Photo/QR links
+use `ThumbLink` so they keep a 36px hit area.
+
 ## Core invariants
 
 1. **Units are integers**: pieces (1dz=12), hundredths-of-an-inch for cloth

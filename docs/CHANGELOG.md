@@ -5,6 +5,49 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-07-27 — **Full-system audit: phone-first lists, and nine defects found and fixed**
+  (ADR-038…041). The whole system was walked end to end — every login, every permission,
+  every workflow — with two independent audits and ~250 new automated checks.
+
+  **Made for phones** (ADR-038): every list becomes stacked cards below tablet width.
+  This was not cosmetic — on a 360px screen the "Issue to checker" button and the
+  waiting quantity were *off the right edge*, so an operator on a phone could not see
+  the work waiting for them. Photo/QR links went from 19px to a 36px finger target, and
+  the header no longer squashes the logo. Verified on 360/390/768px: no page scrolls
+  sideways and every modal fits.
+
+  **Cutting**: the cloth-batch dropdown no longer lists RM- batch numbers — a roll is
+  chosen by *colour, yards left and width*, which is how the cutter recognises it.
+
+  **Money and data-integrity fixes:**
+  - A payment booked in the wrong office used to be accepted and then settle nothing —
+    the money left and the dues stayed forever. Now refused by name (ADR-039).
+  - Checkers were paid for pieces they reported *missing* — pieces that never reached
+    them, which also rewarded writing stock off. Pay now follows what was inspected
+    (ADR-040).
+  - The job card, dues page, dashboard and reports could disagree by a paise or two on
+    split deliveries; all four now round the same way (ADR-040).
+  - A **fully settled job card** still accepted more goods, inflating the contractor's
+    bill with stock from nowhere (ADR-041).
+  - Rejections with two reasons wrote **one** discrepancy blaming the first reason for
+    everything ("14 pcs damage" when 10 were colour defects). One row per reason now.
+  - Traceability and discrepancy-resolve were **not office-scoped** — a branch operator
+    could walk head office's finished goods back to the vendor, and an admin could
+    resolve another office's discrepancy. Both fixed and covered by a new isolation
+    suite.
+  - Voiding anything the ledger refused reported *"Invalid request body"* instead of the
+    real reason ("60 pcs have already moved on").
+  - A voided job card left its FIFO allocations behind; SQLite recycles row ids, so a
+    later cutting edit could silently inherit them.
+  - A bundle emptied and then given pieces back (child void) was stuck "completed" and
+    could never be packed again.
+  - The purchase trace still printed cloth in **metres** from the retired column.
+
+  **Test coverage**: RBAC matrix 92 → 376 assertions (it could not even express PUT or
+  DELETE before, and covered 23 of ~126 routes); new `office-isolation` suite (16) that
+  attacks every read and write across the office boundary; new `workflow-integrity`
+  suite (10). 648 unit/integration + 51 E2E green.
+
 - 2026-07-25 — **Checker/packer pay, payment QR codes, dues settled in place, and the
   client's real sizes** (ADR-037, migration 005):
   - Checkers & Packers carry a **rate per dozen** on their master; it fills in (editable)

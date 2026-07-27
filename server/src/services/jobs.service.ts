@@ -392,6 +392,16 @@ export function createReceipt(
   if (card.status === 'closed_with_discrepancy') {
     return { ok: false, code: 409, error: 'This job was closed with a discrepancy — no more receipts.' };
   }
+  // A settled card takes nothing more. The excess path exists for a contractor handing
+  // back more than PENDING, not for reopening a finished job: without this, picking the
+  // wrong card adds pieces from nowhere and bills the contractor for them.
+  if (card.status === 'completed') {
+    return {
+      ok: false,
+      code: 409,
+      error: 'This job card is already fully settled. Issue a new job card for further goods.',
+    };
+  }
 
   const lines = db
     .prepare('SELECT * FROM job_card_lines WHERE job_card_id = ?')
@@ -701,6 +711,10 @@ export function voidJobCard(
         })),
       ];
       postMovements(db, movements, userId);
+      // The cloth went back, so these FIFO draws no longer exist. Leaving them behind
+      // is not just clutter: SQLite recycles rowids, so a later cutting edit can create
+      // a new line that a stale allocation silently claims (with the old quantity).
+      db.prepare('DELETE FROM job_allocations WHERE job_card_line_id = ?').run(line.id);
     }
     db.prepare('UPDATE job_cards SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?').run(
       nowIso(),

@@ -57,7 +57,9 @@ cloth is just cloth until it is cut. It immediately appears in **Inventory → R
 Material** (by color and vendor, with its width).
 
 ### 2. Cutting — where the code number is given
-**Production → Cutting → + New cutting.** Pick the exact cloth roll. For each size line:
+**Production → Cutting → + New cutting.** Pick the roll being cut — the list shows each
+roll by its **colour, how much is left and how wide it is**, which is how you recognise
+it on the shelf. For each size line:
 
 - type the **CODE NUMBER** in the box beside the size — that code + size (e.g. `315-XS`)
   becomes the **size-code** the goods carry everywhere from here on;
@@ -140,7 +142,13 @@ days, the job-work cost earned and dues.
 **Checkers and packers are paid per dozen too.** Set each person's usual rate in
 **Masters → Checkers & Packers**; when a batch is allotted for checking or packing, that
 rate fills in (change it for one batch if something different was agreed). Their pay
-builds up from the results they record — every piece checked and every piece packed.
+builds up from the results they record: **every piece they inspected** (passed or
+rejected) and every piece they packed. Pieces marked *missing* are not paid for — those
+never reached the checker.
+
+Payments belong to the office where the work was done. If you try to pay someone in an
+office they have not worked in, the app says so instead of recording money that would
+never clear their dues.
 
 **Production → Pending Dues 💰** is the money page: contractors on top,
 checkers/packers below, each showing what they earned, what has been paid, **what is
@@ -162,6 +170,14 @@ Once the matter is looked into, the **Admin** presses **Resolve** and writes wha
 decided ("recovered from contractor", "written off", "counting error confirmed"…).
 Resolving only records the review — stock was already adjusted the moment the difference
 was recorded, so nothing moves again.
+
+## On a phone
+
+The app is built for phones as much as for the office computer. On a phone every list
+turns into **one card per row** — the contractor, the size-code, the quantity and the
+buttons all stacked and readable, with nothing hidden off the side of the screen. The
+menu is behind the ☰ button, and photo and QR links are sized for a fingertip. On a
+tablet or laptop the same lists show as normal tables.
 
 ## Finding things fast
 

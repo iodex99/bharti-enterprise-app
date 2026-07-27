@@ -60,12 +60,16 @@ export function dashboardData(db: Db, officeId: number): Record<string, unknown>
     db
       .prepare(
         `SELECT COALESCE((
-           SELECT SUM(CAST(ROUND(rl.qty_pcs * l.rate_paise_per_dozen / 12.0) AS INTEGER))
-           FROM job_receipt_lines rl
-           JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
-           JOIN job_card_lines l ON l.id = rl.job_card_line_id
-           JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL
-           WHERE rl.return_type = 'stitched' AND j.office_id = $office
+           -- rounded once per job line, matching the job card and the dues page
+           SELECT SUM(lineCost) FROM (
+             SELECT CAST(ROUND(SUM(rl.qty_pcs) * l.rate_paise_per_dozen / 12.0) AS INTEGER) AS lineCost
+             FROM job_receipt_lines rl
+             JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
+             JOIN job_card_lines l ON l.id = rl.job_card_line_id
+             JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL
+             WHERE rl.return_type = 'stitched' AND j.office_id = $office
+             GROUP BY rl.job_card_line_id
+           )
          ), 0) -
          COALESCE((SELECT SUM(amount_paise) FROM contractor_payments WHERE voided_at IS NULL AND office_id = $office), 0) AS dues`,
       )

@@ -90,15 +90,17 @@ export type ResolveResult = { ok: true } | { ok: false; code: number; error: str
 
 export function resolveDiscrepancy(
   db: Db,
+  officeId: number,
   id: number,
   note: string,
   userId: number,
   ip: string | null,
 ): ResolveResult {
   const tx = db.transaction((): ResolveResult => {
+    // scoped to the caller's office — a row from another office is simply not there
     const row = db
-      .prepare('SELECT id, stage, reason, resolved_at FROM discrepancies WHERE id = ?')
-      .get(id) as { id: number; stage: string; reason: string; resolved_at: string | null } | undefined;
+      .prepare('SELECT id, stage, reason, resolved_at FROM discrepancies WHERE id = ? AND office_id = ?')
+      .get(id, officeId) as { id: number; stage: string; reason: string; resolved_at: string | null } | undefined;
     if (!row) return { ok: false, code: 404, error: 'Discrepancy not found.' };
     if (row.resolved_at) return { ok: false, code: 409, error: 'Already resolved.' };
     db.prepare(

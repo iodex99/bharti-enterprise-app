@@ -13,7 +13,10 @@ async function signIn(page: Page, username: string, password: string) {
 }
 
 // runs after cutting/full-chain/jobs specs, so purchases and jobs exist
-test('lists support facet filters, date range and column sorting', async ({ page }) => {
+test('lists support facet filters, date range and sorting', async ({ page }) => {
+  // On a phone a list is CARDS with a "Sort by" picker; on a laptop it is a table with
+  // click-to-sort headings (ADR-038). Both are exercised here, on their own affordance.
+  const phone = test.info().project.name === 'mobile';
   await signIn(page, 'owner', 'Owner@123');
   await page.goto('/purchases');
   await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
@@ -22,7 +25,8 @@ test('lists support facet filters, date range and column sorting', async ({ page
   const colorFacet = page.getByLabel('Filter Color');
   const firstColor = await colorFacet.locator('option').nth(1).textContent();
   await colorFacet.selectOption({ index: 1 });
-  const rows = page.locator('tbody tr');
+  // cards carry role=row too, but the table adds a heading row that is not data
+  const rows = phone ? page.getByRole('row') : page.locator('tbody tr');
   const rowCount = await rows.count();
   expect(rowCount).toBeGreaterThan(0);
   for (let i = 0; i < rowCount; i++) {
@@ -38,10 +42,18 @@ test('lists support facet filters, date range and column sorting', async ({ page
   await expect(page.getByText('No matches for the current filters')).toBeVisible();
   await page.getByRole('button', { name: 'Clear filters' }).click();
 
-  // column sorting: sort by Length ascending, first row <= last row
-  await page.getByRole('button', { name: /^Length/ }).click();
+  // sorting by Length: ascending then descending must reorder the list
+  const sortAsc = async () =>
+    phone
+      ? page.getByLabel('Sort by').selectOption({ label: 'Length ↑' })
+      : page.getByRole('button', { name: /^Length/ }).click();
+  const sortDesc = async () =>
+    phone
+      ? page.getByLabel('Sort by').selectOption({ label: 'Length ↓' })
+      : page.getByRole('button', { name: /^Length/ }).click();
+  await sortAsc();
   const first = await rows.first().textContent();
-  await page.getByRole('button', { name: /^Length/ }).click(); // desc
+  await sortDesc();
   const firstDesc = await rows.first().textContent();
   expect(first).not.toBe(firstDesc);
 

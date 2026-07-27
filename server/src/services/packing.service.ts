@@ -442,6 +442,25 @@ export function voidPackIssue(
       userId,
       packIssueId,
     );
+    // Pieces just flowed back onto their source. If that source was a BUNDLE which had
+    // been marked completed when it was emptied, it is holding stock again — reopen it,
+    // or those pieces could never be packed from the bundle again.
+    for (const c of consumed) {
+      if (c.lot_type !== 'pack_issue') continue;
+      const held = (
+        db
+          .prepare(
+            `SELECT COALESCE(SUM(qty),0) AS bal FROM stock_ledger
+             WHERE stage='PACKING' AND lot_type='pack_issue' AND lot_id = ?`,
+          )
+          .get(c.lot_id) as { bal: number }
+      ).bal;
+      if (held > 0) {
+        db.prepare(
+          "UPDATE pack_issues SET status = 'open', completed_at = NULL WHERE id = ? AND status = 'completed'",
+        ).run(c.lot_id);
+      }
+    }
     audit(db, { userId, action: 'void', entityType: 'pack_issue', entityId: packIssueId, new: { reason }, ip });
   });
   tx();

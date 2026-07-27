@@ -57,7 +57,10 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
 - auth: generic failures (no username probing), lockout, logout revocation, forced
   password change, session revocation on deactivate/reset/role-change, CSRF origin guard,
   login rate limit (dedicated suite)
-- RBAC: exhaustive matrix — every route group × {admin, operator, owner, anon}
+- RBAC: exhaustive matrix — every route group × {admin, operator, owner, anon}, all five
+  methods incl. PUT/DELETE, 94 rows / 376 assertions (system, offices, products, masters,
+  uploads, purchases, opening balances, cutting, jobs, contractor + staff money, checking,
+  packing, dispatch, stock, reports, trace, dashboard)
 - masters ×6 lifecycle: dupes (case-insensitive), search, deactivate-vs-delete, delete
   blocked while referenced, uploads (webp conversion, auth-gated serving, traversal block)
 - ledger conservation: genesis/terminal direction rules, unbalanced-transfer rejection,
@@ -83,9 +86,18 @@ fractional-rejection) · variance math · update-feed parsing + checksum matchin
   alert links point at /discrepancies
 - FULL-CHAIN CONSERVATION: genesis − terminal = on-hand, drift 0 (pieces) + RAW (inch_c)
 - dashboard numbers vs fixture ledger; alerts feed
-- offices: office 1 from migration, per-office doc numbers + stock split, operator
-  pinning (403 without an office), header selection for admin/owner, session revocation
-  on office change
+- offices (`office-isolation.test.ts`, 16): two offices run the full chain side by side;
+  every list is checked for leakage both ways; the X-Office-Id header cannot move a
+  pinned operator; guessing the OTHER office's document ids gets 404 on every read
+  (incl. trace) and every write (voids, results, resolve, cutting from their cloth);
+  money never pools across offices; deactivating an office locks out its operators;
+  office 1 can never be deactivated; reconciliation stays green with both running
+- workflow integrity (`workflow-integrity.test.ts`, 10): a refused ledger move reports
+  its real reason (not "Invalid request body"); payments are refused in an office where
+  the payee never worked; a bundle reopens when a draw from it is voided; two rejection
+  reasons write two discrepancy rows; voiding a job card deletes its allocations; a
+  settled card refuses further receipts; job card / dues / dashboard agree on split
+  deliveries; checkers are not paid for pieces reported missing
 - reports: all 16 run + column shape (office-scoped), filters narrow, losses
   completeness, xlsx
   round-trip parse (title/headers/values); trace to-vendor + forward; 404s
