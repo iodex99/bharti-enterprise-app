@@ -5,6 +5,24 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-09-12 — **New `docs/INSTALL_CLIENT.md`: step-by-step client installation guide.**
+  Written for whoever installs the system at the office (not for someone who knows this
+  codebase): pre-visit checklist, two install paths — **A online** via `install-service.ps1`
+  + GitHub Releases, **B offline** from a USB stick with the zip built by
+  `package-release.mjs` — then first sign-in, Tailscale remote access, business setup
+  (offices → users → masters → opening balances), backups, PC migration, a symptom-based
+  troubleshooting table and a 19-point go-live checklist.
+
+  Adds practical items the reference docs did not carry: disabling sleep/hibernate on the
+  office PC (a sleeping server is the most likely "system is down" call), the native-module
+  rule that the **build-time Node major must equal the office PC's** (or boot fails with
+  `NODE_MODULE_VERSION`), the `current.txt`-must-match-`releases\<v>` trap in a manual
+  install, and an optional LAN firewall rule for in-office desktops.
+
+  Also corrects `DEPLOYMENT.md`, whose banner still announced the Android app as the
+  shipped product — contradicting ADR-027 and `release.yml`. Part 1 is now labelled
+  dormant and Part 2 is identified as the shipped deployment.
+
 - 2026-07-27 — **Full-system audit: phone-first lists, and nine defects found and fixed**
   (ADR-038…041). The whole system was walked end to end — every login, every permission,
   every workflow — with two independent audits and ~250 new automated checks.

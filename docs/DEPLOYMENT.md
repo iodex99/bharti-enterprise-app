@@ -1,10 +1,16 @@
 # Deployment & Operations
 
-> **The shipped product is the Android app.** Everything the business needs runs on one
-> tablet or phone. The Windows/PC deployment described later in this document is kept for
-> development and as an option, but it is not what the client installs.
+> **The shipped product is the central-PC web app** (ADR-027): the office PC runs the
+> server and operators work from browsers. That is Part 2 below, and `release.yml` (the
+> 1.0.x line) is the pipeline that feeds it.
+>
+> **Installing for the client? Follow [`INSTALL_CLIENT.md`](INSTALL_CLIENT.md)** — the
+> step-by-step field guide. This document is the reference behind it.
+>
+> **Part 1 (Android) is dormant.** `android-release.yml` is manual-dispatch only and the
+> Android runtime stays in the tree unused. It is kept for reference, not for installation.
 
-# Part 1 — The Android app
+# Part 1 — The Android app (dormant — not what the client installs)
 
 ## What it is
 
@@ -148,11 +154,12 @@ Business data is stored separately from the app bundle, so it survives every one
 
 ---
 
-# Part 2 — Optional PC/server deployment
+# Part 2 — The PC/server deployment (the shipped product)
 
-Everything below describes the original Windows-server topology. It is unchanged and still
-supported (`npm run build`, the supervisor, releases from `release.yml`), but the client's
-system is the Android app above.
+Everything below describes the Windows-server topology the client actually runs: the
+supervisor, releases from `release.yml`, Tailscale remote access and the operational
+runbook. For the install itself, work through [`INSTALL_CLIENT.md`](INSTALL_CLIENT.md);
+this part is the reference it draws on.
 
 ## Topology
 
