@@ -15,10 +15,19 @@ type UpdateStatus = {
    */
   kind?: 'bundle' | 'apk' | null;
   rolledBackFrom?: string;
+  /** Office server only: it installs updates itself once nobody has worked for a while. */
+  autoUpdate?: boolean;
+  autoUpdateIdleMinutes?: number;
 };
 
-const POLL_CHECK_MS = 15 * 60 * 1000; // periodic "is there an update" check
+// A push should reach the office as soon as CI finishes, so check every minute rather
+// than every quarter-hour. The server does the same against GitHub; this is only the
+// browser asking the server what it already knows.
+const POLL_CHECK_MS = 60 * 1000;
 const POLL_ACTIVE_MS = 2000; // fast polling while an update runs
+
+/** States that mean the server is mid-update — whoever or whatever started it. */
+const BUSY_STATES = new Set(['downloading', 'verifying', 'staged', 'restarting', 'finalizing']);
 
 /**
  * Shows an "Update available" banner for everyone and drives the one-click update
@@ -37,6 +46,15 @@ export function UpdateBanner({ canUpdate = true }: { canUpdate?: boolean }) {
       if (!res.ok) return null;
       const body = (await res.json()) as UpdateStatus;
       setStatus(body);
+      // The office PC applies updates by itself once everyone has stopped working, so
+      // one can begin without anyone pressing anything here. Adopt it, so nobody
+      // watches the page restart with no explanation. These sets are idempotent —
+      // React bails out when the value has not changed.
+      if (BUSY_STATES.has(body.state)) {
+        startedFrom.current ??= body.current;
+        setResult(null);
+        setUpdating(true);
+      }
       return body;
     } catch {
       return null; // server restarting — keep polling
@@ -174,6 +192,12 @@ export function UpdateBanner({ canUpdate = true }: { canUpdate?: boolean }) {
           >
             Update now
           </button>
+        )}
+        {status.supervised && status.autoUpdate && status.kind !== 'apk' && (
+          <span className="ml-2 text-xs opacity-70">
+            Installs by itself once everyone has stopped working for{' '}
+            {status.autoUpdateIdleMinutes ?? 3} minutes — or press Update now.
+          </span>
         )}
         {!status.supervised && (
           <span className="ml-2 text-xs opacity-70">(auto-update available on the office server)</span>

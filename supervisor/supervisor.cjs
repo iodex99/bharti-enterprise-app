@@ -104,6 +104,23 @@ function releaseEntry(version) {
   return path.join(RELEASES_DIR, version, 'server', 'dist', 'index.js');
 }
 
+/**
+ * The interpreter a release must be run with. Every release ships the exact Node its
+ * native modules were compiled against (ADR-044), so use that in preference to whatever
+ * happens to be on PATH — that is what makes "install Node first" unnecessary and makes
+ * a NODE_MODULE_VERSION mismatch impossible. Falls back to the supervisor's own
+ * interpreter for releases built before the runtime was bundled.
+ */
+function releaseNode(version) {
+  const bundled = path.join(RELEASES_DIR, version, 'node', 'node.exe');
+  try {
+    if (fs.existsSync(bundled)) return bundled;
+  } catch {
+    /* fall through */
+  }
+  return process.execPath;
+}
+
 function releaseIsRunnable(version) {
   try {
     return fs.existsSync(releaseEntry(version));
@@ -236,10 +253,11 @@ function pruneReleases(currentVersion) {
 
 function startApp(version) {
   const entry = releaseEntry(version);
-  log(`starting app ${version} (${entry})`);
+  const nodeBin = releaseNode(version);
+  log(`starting app ${version} (${entry}) with ${nodeBin}`);
   fs.mkdirSync(LOGS_DIR, { recursive: true });
   const appLog = fs.openSync(path.join(LOGS_DIR, 'app.log'), 'a');
-  child = spawn(process.execPath, [entry], {
+  child = spawn(nodeBin, [entry], {
     cwd: path.join(RELEASES_DIR, version),
     env: {
       ...process.env,
@@ -248,9 +266,11 @@ function startApp(version) {
       DATA_DIR,
       BHARTI_ROOT: ROOT,
       BHARTI_SUPERVISED: '1',
-      // PAT for private-repo release polling/downloads (empty for public repos).
+      // PAT for private-repo release polling/downloads (empty for public repos —
+      // which is the norm now that releases go to the public feed, ADR-042).
       BHARTI_GITHUB_TOKEN: config.githubToken || process.env.BHARTI_GITHUB_TOKEN || '',
       ...(config.repo ? { BHARTI_REPO: config.repo } : {}),
+      ...(config.pollMinutes ? { UPDATE_POLL_MINUTES: String(config.pollMinutes) } : {}),
     },
     stdio: ['ignore', appLog, appLog],
   });

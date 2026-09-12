@@ -174,3 +174,29 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   for a contractor handing back more than *pending*, not for reopening a completed card;
   without the guard, choosing the wrong card conjured stock and billed the contractor for
   it. Further goods need a new job card.
+- **ADR-042** **PC releases are published to the PUBLIC `bharti-releases` repo, not the
+  private source repo.** The install token was the worst part of the deployment: a
+  fine-grained PAT had to be created by hand, pasted into the installer, stored in
+  `supervisor/config.json` — and when it expired the office simply stopped seeing updates,
+  with nothing on screen to say so. A public feed removes the token from installation and
+  from update polling entirely; there is now nothing to create and nothing to renew. The
+  source stays private. The cost, accepted deliberately: the built app zip is
+  world-downloadable. Business data never travels in a release, and the app still requires
+  a sign-in, so what leaks is compiled code, not the business.
+- **ADR-043** **The office PC installs updates itself, once nobody is working.** Waiting
+  for an admin to notice a banner and press a button meant real installs sat versions
+  behind. Applying one restarts the server, so it waits for a genuinely quiet moment —
+  `auto_update_idle_minutes` (default 3) with no deliberate user request — rather than a
+  clock, because offices keep their own hours. Crucially, screens that refresh on a timer
+  (dashboard, stock, health, the update check itself) are excluded from "activity" server
+  side: counting them would let one browser tab left open on a desk block every future
+  update, and the exclusion lives on the server so a tab running the PREVIOUS version's
+  code cannot veto the next one. Admin can turn it off (`auto_update`). Every existing
+  safeguard still applies: DB backup first, health gate, automatic rollback.
+- **ADR-044** **Every release ships the Node runtime it was built against.** The native
+  modules (better-sqlite3, sharp) are compiled for one Node ABI, so "install Node 24 first,
+  exactly 24" was both a prerequisite the office could get wrong and a whole class of
+  confusing `NODE_MODULE_VERSION` boot failures. The release now carries `node/node.exe` —
+  literally the interpreter CI built the modules with — the supervisor runs each release
+  with its own, and the installer copies one to the root for the supervisor itself. The
+  office PC needs nothing pre-installed. Cost: ~55 MB added to each release zip.

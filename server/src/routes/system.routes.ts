@@ -26,6 +26,13 @@ const EDITABLE_SETTINGS: Record<string, z.ZodType> = {
     .refine((v) => Number(v) > 0, 'Must be at least 1 day'),
   // path of a folder synced by Google Drive for Desktop / OneDrive; '' turns it off
   cloud_backup_dir: z.string().trim().max(300),
+  // 'on' (default) lets the office PC apply releases by itself once nobody is working
+  auto_update: z.enum(['on', 'off']),
+  // how long the office must be quiet before an automatic update is applied
+  auto_update_idle_minutes: z
+    .string()
+    .regex(/^\d{1,3}$/, 'Enter a number of minutes (1–999)')
+    .refine((v) => Number(v) > 0, 'Must be at least 1 minute'),
 };
 
 const settingSchema = z.object({
@@ -58,7 +65,11 @@ export function systemRoutes(ops?: Router): Router {
     const rows = getDb()
       .prepare(`SELECT key, value FROM settings WHERE key IN (${keys.map(() => '?').join(',')})`)
       .all(...keys) as Array<{ key: string; value: string }>;
-    const settings: Record<string, string> = { delayed_job_days: '7' };
+    const settings: Record<string, string> = {
+      delayed_job_days: '7',
+      auto_update: 'on',
+      auto_update_idle_minutes: '3',
+    };
     for (const row of rows) settings[row.key] = row.value;
     res.json({ settings });
   });

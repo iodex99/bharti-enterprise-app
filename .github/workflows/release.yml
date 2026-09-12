@@ -45,13 +45,42 @@ jobs:
       - name: Package release zip
         shell: pwsh
         run: node scripts/package-release.mjs $env:VERSION
+      # Published to a small PUBLIC repository (ADR-042) so the office PC can check for
+      # and download updates with no credentials at all — nothing to create when
+      # installing and nothing that expires silently months later. The source stays
+      # private. Requires that repo to exist (with a README, so it has a default branch)
+      # and a fine-grained PAT with Contents: read+write on it, as RELEASES_REPO_TOKEN.
+      # Until that secret is set, releases land here instead and the office will not
+      # see them — the run stays green but says so loudly.
       - name: Create GitHub Release
-        shell: pwsh
+        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO || 'iodex99/bharti-releases' }}
+          # via env, never interpolated into the script: a commit message is arbitrary text
+          NOTES: ${{ github.event.head_commit.message }}
         run: |
-          gh release create "v$env:VERSION" `
-            "dist-release/bharti-app-v$env:VERSION.zip" `
-            "dist-release/checksums.txt" `
-            --title "v$env:VERSION" `
-            --generate-notes
+          set -euo pipefail
+          if [ -n "$RELEASES_TOKEN" ]; then
+            export GH_TOKEN="$RELEASES_TOKEN"
+            TARGET="$RELEASES_REPO"
+          else
+            export GH_TOKEN="$FALLBACK_TOKEN"
+            TARGET="$GITHUB_REPOSITORY"
+            echo "::warning title=Update feed not configured::RELEASES_REPO_TOKEN is not set, so v$VERSION went to the private repo $TARGET. Office installs poll $RELEASES_REPO and will NOT see this release. See docs/DEPLOYMENT.md."
+          fi
+          echo "Publishing v$VERSION to $TARGET"
+
+          # Re-running a workflow reuses its run number; the rebuilt assets are
+          # equivalent, so replace the release rather than failing the run.
+          if gh release view "v$VERSION" --repo "$TARGET" >/dev/null 2>&1; then
+            echo "v$VERSION already exists — replacing it."
+            gh release delete "v$VERSION" --repo "$TARGET" --yes --cleanup-tag
+          fi
+          gh release create "v$VERSION" \
+            "dist-release/bharti-app-v$VERSION.zip" \
+            "dist-release/checksums.txt" \
+            --repo "$TARGET" \
+            --title "v$VERSION" \
+            --notes "${NOTES:-Release v$VERSION}"

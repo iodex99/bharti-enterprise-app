@@ -9,8 +9,14 @@
  *   server/package.json          (type: module — required for ESM resolution)
  *   client-dist/                 built SPA
  *   node_modules/                production deps, exact lockfile versions, built on THIS os/arch
+ *   node/node.exe                the Node runtime itself (ADR-044)
  *   package.json                 minimal root manifest
- *   version.json                 { version, sha, builtAt, notes }
+ *   version.json                 { version, sha, builtAt, notes, nodeVersion }
+ *
+ * Why the runtime ships too: the native modules (better-sqlite3, sharp) are compiled
+ * against one Node ABI, so a release and its interpreter have to agree. Carrying the
+ * exact binary the modules were built against removes both the "install Node 24 first"
+ * step and the NODE_MODULE_VERSION failure that follows when someone installs 22 or 26.
  */
 import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -83,7 +89,29 @@ fs.cpSync(path.join(installDir, 'node_modules'), path.join(staging, 'node_module
 });
 fs.rmSync(installDir, { recursive: true, force: true });
 
-// 3. manifests
+// 3. the Node runtime the office machine will run this release with.
+//    On Windows that is THIS interpreter — the one the native modules above were just
+//    built against, so the ABI cannot drift. Packaging from Linux/macOS (a developer
+//    checking the script) fetches the matching win-x64 build instead of shipping a
+//    binary the office PC cannot execute.
+const nodeDir = path.join(staging, 'node');
+fs.mkdirSync(nodeDir, { recursive: true });
+const nodeTarget = path.join(nodeDir, 'node.exe');
+if (process.platform === 'win32') {
+  console.log(`bundling node runtime ${process.version} (this interpreter)`);
+  fs.copyFileSync(process.execPath, nodeTarget);
+} else {
+  const url = `https://nodejs.org/dist/${process.version}/win-x64/node.exe`;
+  console.log(`bundling node runtime ${process.version} (downloading ${url})`);
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(`Could not download the Node runtime: ${res.status} ${url}`);
+    process.exit(1);
+  }
+  fs.writeFileSync(nodeTarget, Buffer.from(await res.arrayBuffer()));
+}
+
+// 4. manifests
 fs.writeFileSync(
   path.join(staging, 'package.json'),
   JSON.stringify({ name: 'bharti-enterprise-app', version, private: true, type: 'module' }, null, 2),
@@ -96,13 +124,15 @@ fs.writeFileSync(
       sha: process.env.GITHUB_SHA ?? 'local',
       builtAt: new Date().toISOString(),
       notes,
+      // Which interpreter this release's native modules were compiled against.
+      nodeVersion: process.version,
     },
     null,
     2,
   ),
 );
 
-// 4. zip + checksum
+// 5. zip + checksum
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 const zipName = `bharti-app-v${version}.zip`;

@@ -18,8 +18,20 @@ export type ReleaseInfo = {
   publishedAt: string | null;
 };
 
+/**
+ * Which .zip in a release is *ours*. The PC and Android lines publish to the SAME public
+ * releases repo, so "the first .zip" is not good enough: a PC server must never download
+ * `web-bundle-*.zip` and an Android device must never download `bharti-app-*.zip`.
+ * Callers pass the pattern for their own platform; omitting it keeps the historic
+ * "any zip" behaviour (used by the mock feed in drills, whose asset is named freely).
+ */
+export type ParseReleaseOptions = { zipMatch?: RegExp };
+
 /** Parse a GitHub /releases/latest response (or our mock feed with the same shape). */
-export function parseReleaseResponse(json: unknown): ReleaseInfo | null {
+export function parseReleaseResponse(
+  json: unknown,
+  opts: ParseReleaseOptions = {},
+): ReleaseInfo | null {
   if (!json || typeof json !== 'object') return null;
   const rel = json as {
     tag_name?: string;
@@ -28,7 +40,8 @@ export function parseReleaseResponse(json: unknown): ReleaseInfo | null {
     assets?: ReleaseAsset[];
   };
   if (!rel.tag_name || !Array.isArray(rel.assets)) return null;
-  const zip = rel.assets.find((a) => a.name.endsWith('.zip'));
+  const zips = rel.assets.filter((a) => a.name.endsWith('.zip'));
+  const zip = opts.zipMatch ? zips.find((a) => opts.zipMatch!.test(a.name)) : zips[0];
   if (!zip) return null;
   const checksums = rel.assets.find((a) => a.name === 'checksums.txt');
   return {

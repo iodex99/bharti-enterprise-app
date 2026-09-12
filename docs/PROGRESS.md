@@ -125,6 +125,19 @@ job issue → 2 cards, a bundle, missing-as-reason.
 Still live from earlier phases: in-app demo mode, complete backup/restore + setup wizard,
 discrepancies review, reconciliation self-checks, PWA, dashboard.
 
+**Deployment reworked 2026-09-12 (ADR-042…044).** Installing is now ONE command with no
+prerequisites: releases carry their own `node/node.exe` (so no Node install and no
+`NODE_MODULE_VERSION` class of failure) and go to the PUBLIC `bharti-releases` feed (so no
+PAT to create or renew). Offline installs are one command too (`-ZipPath`). Updates apply
+themselves: polled every minute, applied once nobody has worked for `auto_update_idle_minutes`
+(default 3) — with timer-driven screens excluded from "activity" server-side so a
+left-open tab cannot block them. Push → office running it: 6–10 min, nearly all CI.
+**`RELEASES_REPO_TOKEN` must be set on this repo** or releases fall back here and the
+office never sees them (the workflow warns, loudly, but stays green).
+
+Next steps: confirm `RELEASES_REPO_TOKEN` is configured, then watch one real push land on
+a real install (go-live checklist item 15).
+
 **v2 quirks discovered (don't relearn these):**
 - Code-created models get ids > 1000000 (the RAW-CLOTH sentinel holds 1000000) — tests
   must look model ids up by code, never hardcode.

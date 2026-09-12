@@ -89,3 +89,40 @@ describe('isBusy', () => {
     expect(isBusy('rolled_back')).toBe(false);
   });
 });
+
+/**
+ * The PC line (1.0.x) and the dormant Android line (1.1.x) publish to ONE public
+ * releases repo, so a release can carry both platforms' zips. Picking the wrong one
+ * would have the office server install an Android web bundle — it would fail the
+ * staging check, but only after downloading and wiping a release directory.
+ */
+describe('choosing our own asset from a shared releases feed', () => {
+  const mixed = {
+    tag_name: 'v1.0.42',
+    body: '',
+    published_at: null,
+    assets: [
+      // Android's asset sorts FIRST — the old "first .zip wins" rule picked this.
+      { name: 'web-bundle-v1.1.7.zip', browser_download_url: 'https://x/bundle', url: 'https://api/1' },
+      { name: 'bharti-app-v1.0.42.zip', browser_download_url: 'https://x/pc', url: 'https://api/2' },
+      { name: 'checksums.txt', browser_download_url: 'https://x/sums', url: 'https://api/3' },
+    ],
+  };
+
+  const PC_ZIP = /^bharti-app-v.*\.zip$/i;
+
+  it('takes the PC zip, not whichever zip comes first', () => {
+    const parsed = parseReleaseResponse(mixed, { zipMatch: PC_ZIP });
+    expect(parsed?.zipName).toBe('bharti-app-v1.0.42.zip');
+    expect(parsed?.zipUrl).toBe('https://x/pc');
+  });
+
+  it('reports no release rather than installing a foreign asset', () => {
+    const androidOnly = { ...mixed, assets: [mixed.assets[0]!, mixed.assets[2]!] };
+    expect(parseReleaseResponse(androidOnly, { zipMatch: PC_ZIP })).toBeNull();
+  });
+
+  it('without a matcher keeps the historic first-zip behaviour (mock feed)', () => {
+    expect(parseReleaseResponse(mixed)?.zipName).toBe('web-bundle-v1.1.7.zip');
+  });
+});

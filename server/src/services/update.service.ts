@@ -6,6 +6,9 @@ import { Readable } from 'node:stream';
 import { spawn } from 'node:child_process';
 import { config } from '../config';
 import { isNewerVersion } from '@shared';
+import { getDb } from '../db/connection';
+import { EXIT_APPLY_UPDATE, gracefulExit } from '../lifecycle';
+import { idleSeconds } from './activity';
 import {
   expectedHashFor,
   isBusy,
@@ -20,12 +23,26 @@ import {
  * release (see supervisor/supervisor.cjs).
  */
 
-const REPO = process.env.BHARTI_REPO ?? 'iodex99/bharti-enterprise-app';
+/**
+ * Releases are published to a small PUBLIC repo (ADR-042) so the office PC needs no
+ * credentials at all — nothing to create at install time and nothing that expires
+ * silently later. BHARTI_REPO still overrides it for drills and for anyone who kept the
+ * old private-repo setup; a token is honoured when present but is no longer required.
+ */
+const REPO =
+  process.env.BHARTI_REPO ?? process.env.BHARTI_RELEASES_REPO ?? 'iodex99/bharti-releases';
 const FEED_URL = process.env.UPDATE_FEED_URL; // mock feed for drills/tests
-// PAT for private repos (supervisor passes it from config.json). Public repos need none.
+// Optional PAT — only needed if releases are kept in a private repo.
 const GITHUB_TOKEN = process.env.BHARTI_GITHUB_TOKEN ?? '';
 const SUPERVISED = process.env.BHARTI_SUPERVISED === '1' && !!process.env.BHARTI_ROOT;
 const ROOT = process.env.BHARTI_ROOT ?? '';
+
+/**
+ * The PC and Android lines share one releases repo, so pick OUR zip by name rather than
+ * taking whichever .zip comes first — a PC server must never install `web-bundle-*.zip`.
+ * The mock feed used by the update drill names its asset freely, so it opts out.
+ */
+const PC_ZIP = /^bharti-app-v.*\.zip$/i;
 
 function ghHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = { 'User-Agent': 'bharti-app', ...extra };
@@ -89,12 +106,16 @@ export function getUpdateStatus(): {
   updateAvailable: boolean;
   notes: string;
   lastCheckedAt: string | null;
+  autoUpdate: boolean;
+  autoUpdateIdleMinutes: number;
+  idleSeconds: number;
 } {
   // While this process is actively working, its in-memory state wins; otherwise the
   // file (which the supervisor updates across restarts) is the truth.
   const fileStatus = readStatusFile();
   const active = memoryStatus && isBusy(memoryStatus.state) ? memoryStatus : null;
   const effective = active ?? fileStatus ?? memoryStatus;
+  const auto = autoUpdateConfig();
   return {
     state: effective?.state ?? 'idle',
     detail: effective?.detail,
@@ -107,6 +128,9 @@ export function getUpdateStatus(): {
     updateAvailable: latestKnown ? isNewerVersion(latestKnown.version, config.version) : false,
     notes: latestKnown?.notes ?? '',
     lastCheckedAt,
+    autoUpdate: auto.enabled,
+    autoUpdateIdleMinutes: auto.idleMinutes,
+    idleSeconds: idleSeconds(),
   };
 }
 
@@ -121,7 +145,12 @@ export async function checkForUpdate(): Promise<ReturnType<typeof getUpdateStatu
     ? `${FEED_URL.replace(/\/$/, '')}/latest.json`
     : `https://api.github.com/repos/${REPO}/releases/latest`;
   try {
-    const release = parseReleaseResponse(await fetchJson(url));
+    // The mock feed publishes a single, freely-named zip; the real feed is shared with
+    // the Android line and must be filtered to our own asset.
+    const release = parseReleaseResponse(
+      await fetchJson(url),
+      FEED_URL ? {} : { zipMatch: PC_ZIP },
+    );
     if (release) {
       latestKnown = release;
       lastCheckedAt = new Date().toISOString();
@@ -133,11 +162,81 @@ export async function checkForUpdate(): Promise<ReturnType<typeof getUpdateStatu
   return getUpdateStatus();
 }
 
+// ---------------------------------------------------------------------------
+// Automatic updates (ADR-043)
+//
+// The office has no technical staff, so waiting for an admin to notice a banner and
+// press a button meant real installs sat months behind. The PC now applies updates by
+// itself — but only at a quiet moment, because applying one restarts the server and
+// anything half-typed in a form would be lost. "Quiet" is defined by real user
+// activity, not the clock: offices keep their own hours.
+//
+// Everything that made the manual path safe still applies: the supervisor backs the
+// database up first, health-gates the new version and rolls back automatically.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_IDLE_MINUTES = 3;
+
+/** Reads a setting without letting a DB problem break the update loop. */
+function setting(key: string): string | null {
+  try {
+    const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function autoUpdateConfig(): { enabled: boolean; idleMinutes: number } {
+  const enabled = (setting('auto_update') ?? 'on') !== 'off';
+  const raw = Number(setting('auto_update_idle_minutes') ?? DEFAULT_IDLE_MINUTES);
+  const idleMinutes = Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_IDLE_MINUTES;
+  return { enabled, idleMinutes };
+}
+
+/**
+ * Apply a pending update if the office is quiet. Returns why it declined, for the log
+ * and for the admin's System Health panel.
+ */
+export function maybeAutoUpdate(): { applied: boolean; reason: string } {
+  if (!SUPERVISED) return { applied: false, reason: 'not supervised' };
+  if (updateRunning) return { applied: false, reason: 'already updating' };
+  if (!latestKnown || !isNewerVersion(latestKnown.version, config.version)) {
+    return { applied: false, reason: 'up to date' };
+  }
+  const { enabled, idleMinutes } = autoUpdateConfig();
+  if (!enabled) return { applied: false, reason: 'auto-update turned off' };
+
+  const idle = idleSeconds();
+  if (idle < idleMinutes * 60) {
+    return { applied: false, reason: `waiting for a quiet moment (idle ${idle}s)` };
+  }
+
+  console.log(`[update] applying ${latestKnown.version} automatically (idle ${idle}s)`);
+  const result = startUpdate(() => {
+    setTimeout(() => gracefulExit(EXIT_APPLY_UPDATE), 300);
+  });
+  return result.ok
+    ? { applied: true, reason: 'applying' }
+    : { applied: false, reason: result.error };
+}
+
 export function startUpdatePolling(): void {
-  const minutes = Number(process.env.UPDATE_POLL_MINUTES ?? 15);
+  // Default one minute: a push should reach the office as soon as CI finishes, and an
+  // authenticated GitHub poll at this rate is ~60 of the 5000 requests allowed per hour.
+  const minutes = Number(process.env.UPDATE_POLL_MINUTES ?? 1);
   if (!minutes || Number.isNaN(minutes)) return;
-  void checkForUpdate();
-  setInterval(() => void checkForUpdate(), minutes * 60 * 1000).unref();
+  const tick = async (): Promise<void> => {
+    await checkForUpdate();
+    const outcome = maybeAutoUpdate();
+    if (!outcome.applied && outcome.reason.startsWith('waiting')) {
+      console.log(`[update] ${latestKnown?.version ?? 'update'} ready — ${outcome.reason}`);
+    }
+  };
+  void tick();
+  setInterval(() => void tick(), minutes * 60 * 1000).unref();
 }
 
 export type StartUpdateResult =

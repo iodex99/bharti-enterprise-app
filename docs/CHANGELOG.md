@@ -5,6 +5,39 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-09-12 — **One-command install, and the office PC now updates itself**
+  (ADR-042…044).
+
+  **Install is one line.** No prerequisites at all: every release now ships the Node
+  runtime its native modules were compiled against (`node/node.exe`), the supervisor runs
+  each version with its own interpreter, and the installer copies one to the root for
+  itself. That deletes the "install Node 24, exactly 24" step *and* the
+  `NODE_MODULE_VERSION` boot failures that followed when someone installed 22 or 26.
+  PC releases moved to the **public** `bharti-releases` feed, so there is no token to
+  create at install and none to expire silently later. Offline installs are one command
+  too (`-ZipPath`), replacing the twenty-line manual sequence. The installer now reads
+  the version out of the release itself (so `releases\<v>` and `current.txt` cannot
+  disagree — the classic manual-install failure), keeps existing config on re-run, and
+  waits for `/api/system/health` before reporting success. Release zip: ~70 MB.
+
+  **Updates apply themselves.** Polling went from every 15 minutes to every minute, and
+  a new version is applied automatically once nobody has worked for a few minutes,
+  instead of waiting for an admin to notice a banner and press a button — a push now
+  reaches the office in 6–10 minutes, nearly all of it CI. Applying one restarts the
+  server, so "quiet" is measured from real user requests. Screens that refresh on a timer
+  (dashboard, stock, health, the update check) are excluded server-side, because
+  otherwise one browser tab left open on a desk would block every future update — and
+  server-side so that a tab running the *previous* version cannot veto the next one.
+  Admin → System Health can turn it off or change the quiet period. All the existing
+  safeguards still apply: DB backup first, health gate, automatic rollback.
+
+  Also: the PC updater now selects the `bharti-app-*.zip` asset by name, since the PC and
+  dormant Android lines share one releases repo and "first zip wins" would have had the
+  office server download an Android web bundle.
+
+  14 new tests (662 total), covering the asset-selection guard and — the one that keeps
+  the feature honest — that background polls do not count as user activity.
+
 - 2026-09-12 — **New `docs/INSTALL_CLIENT.md`: step-by-step client installation guide.**
   Written for whoever installs the system at the office (not for someone who knows this
   codebase): pre-visit checklist, two install paths — **A online** via `install-service.ps1`

@@ -167,34 +167,48 @@ this part is the reference it draws on.
 [phones/tablets/laptops anywhere, signed into Tailscale]
         │ https (tailscale serve — no domain, no open ports)
 [Office Windows PC]
-  WinSW service → supervisor.cjs → node releases\v1.0.N\server\dist\index.js
+  WinSW service → C:\bharti\node\node.exe supervisor.cjs
+                    → releases\v1.0.N\node\node.exe releases\v1.0.N\server\dist\index.js
                                      │
   C:\bharti\data\        (app.db, uploads\, backups\)  ← NEVER touched by updates
   C:\bharti\data-demo\   (demo database — buttons in Admin → System Health)
 ```
 
+Each release carries the Node runtime its native modules were compiled against (ADR-044),
+so the supervisor runs every version with its own interpreter and the machine needs no
+Node installed. The installer copies one to `C:\bharti\node` for the supervisor itself,
+which is never auto-updated.
+
 ## One-time office PC installation
 
-Prerequisites on the office PC:
-1. **Node.js 24 LTS** — https://nodejs.org (Windows installer, default options).
-2. A **GitHub fine-grained personal access token** for the private repo
-   (`iodex99/bharti-enterprise-app`): GitHub → Settings → Developer settings →
-   Fine-grained tokens → generate with **Repository access: this repo** and
-   **Permissions → Contents: Read-only**. Copy the token.
+**No prerequisites.** Nothing to install first (the release brings its own Node) and no
+token to create (releases are public, ADR-042).
 
-Then, in an **elevated PowerShell** (Run as administrator), from a copy of this repo's
-`scripts/` folder (or a checkout):
+In an **elevated PowerShell**, from a copy of this repo's `scripts/` folder:
 
 ```powershell
+# online
+powershell -ExecutionPolicy Bypass -File install-service.ps1
+
+# offline — everything from a USB stick
 powershell -ExecutionPolicy Bypass -File install-service.ps1 `
-  -Root C:\bharti -Port 8787 -GithubToken "github_pat_XXXX"
+  -ZipPath E:\bharti-app-v1.0.0.zip -WinswPath E:\WinSW-x64.exe
 ```
 
 The installer:
-- creates `C:\bharti\{supervisor,releases,data,logs,service}`,
-- copies `supervisor.cjs` and writes `supervisor\config.json` (port, repo, token),
-- downloads the **latest GitHub Release zip** and extracts it to `releases\<version>`,
-- installs and starts the **bharti-app** Windows service (WinSW) wrapping the supervisor.
+- creates `C:\bharti\{supervisor,releases,data,logs,service,node}`,
+- copies `supervisor.cjs` and writes `supervisor\config.json` (port, feed repo),
+- fetches (or unpacks) the release, taking the `bharti-app-*.zip` asset specifically —
+  the feed is shared with the dormant Android line,
+- reads the version from the release's own `version.json`, so `releases\<version>` and
+  `current.txt` cannot disagree,
+- copies the release's bundled `node.exe` to `C:\bharti\node\`,
+- installs and starts the **bharti-app** Windows service (WinSW) wrapping the supervisor,
+- waits for `/api/system/health` and prints the first-run admin password.
+
+Re-running it installs the newest release over the top and restarts the service;
+`C:\bharti\data` is untouched. Other options: `-Root`, `-Port`, `-Repo`, and
+`-GithubToken` if you keep releases in a private repo.
 
 Open `http://localhost:8787` — sign in with the initial admin credentials from
 `C:\bharti\data\initial-admin-password.txt` (created on first boot; the password must be
@@ -242,19 +256,30 @@ that's the security model.
 
 ## How updates flow
 
-1. Developer pushes to `main` → GitHub Actions runs the full test suite → `release.yml`
-   builds the Windows zip → publishes Release `v1.0.<run>`.
-2. The running app polls the releases API every 15 min → every user sees the
-   "Update available" banner; **Admin** presses *Update now*.
-3. The app downloads + sha256-verifies + stages the release, then hands over (exit 42).
-   The supervisor backs up the database, flips `current.txt`, starts the new version and
-   health-checks it.
-4. **Any failure → automatic rollback** to the previous release including the database
-   copy. The UI reports success or rollback either way. Old releases are pruned (last 3 kept).
+Updates install themselves (ADR-043). Nobody at the office has to do anything.
 
-Manual fallback (GitHub down / token expired): download the Release zip on any machine,
-copy it over, extract to `C:\bharti\releases\v1.0.N\`, write that version into
-`C:\bharti\current.txt`, then `Restart-Service bharti-app`.
+1. Developer pushes to `main` → GitHub Actions runs the full test suite → `release.yml`
+   builds the Windows zip → publishes `v1.0.<run>` to the **public** `bharti-releases`
+   repo (ADR-042; needs the `RELEASES_REPO_TOKEN` secret, else it falls back to this repo
+   and warns that the office will not see it).
+2. The app polls that feed **every minute** (`UPDATE_POLL_MINUTES`, default 1) and picks
+   the `bharti-app-*.zip` asset — never the Android line's `web-bundle-*.zip`.
+3. When a newer version exists, it waits for the office to be **quiet**: no deliberate
+   user request for `auto_update_idle_minutes` (default 3). Timer-driven screens
+   (dashboard, stock, health, the update check) are excluded server-side from "activity",
+   so a browser tab left open cannot block updates forever. An admin can still press
+   *Update now*; setting `auto_update` to `off` disables the automatic path.
+4. It downloads + sha256-verifies + stages the release, then hands over (exit 42). The
+   supervisor backs up the database, flips `current.txt`, starts the new version and
+   health-checks it. Open browsers notice and reload themselves.
+5. **Any failure → automatic rollback** to the previous release including the database
+   copy. The UI reports success or rollback either way. Old releases are pruned (last 3
+   kept).
+
+End to end a push typically reaches the office in **6–10 minutes**, nearly all of it CI.
+
+Manual fallback (feed unreachable): re-run the installer with `-ZipPath <the new zip>`.
+It stages that release and restarts the service, leaving `data\` alone.
 
 ## Backups & restore
 
