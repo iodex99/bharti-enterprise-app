@@ -138,14 +138,14 @@ themselves: polled every minute, applied once nobody has worked for
 `auto_update_idle_minutes` (default 3), timer-driven screens excluded from "activity".
 Push → office running it: 6–10 min, nearly all CI. Guide: `docs/INSTALL_CLIENT.md`.
 
-**`RELEASES_REPO_TOKEN` is set (2026-10-04)** — the public feed publishes; v1.0.24 was the first release there.
-2026-10-04: `bharti-releases` has zero releases; v1.0.21/v1.0.22 fell back to this private
-repo). Until it is, the one-liner answers "no release has been published yet" and
-installed PCs never see updates. Setup steps: INSTALL_CLIENT.md §1.1.
+**`RELEASES_REPO_TOKEN` is set (2026-10-04)** — the public feed publishes; v1.0.24 was the
+first release there. The first real install on a client PC then failed the installer's
+checksum step (5.1 `.Content` is a byte[]) — fixed in v1.0.25+, rehearsed against the
+live feed.
 
-Next steps: set `RELEASES_REPO_TOKEN`, re-run the Release workflow, confirm the four
-assets appear on the feed, then do one real install and watch one real push land
-(go-live checklist items 3 and 14).
+Next steps: complete one real install on the office PC with the one-liner, restart the
+PC to confirm the service comes back, then watch one real push land on it (go-live
+checklist items 3 and 14).
 
 **Installer quirks discovered (don't relearn these):**
 - `irm | iex` delivers the script as a string: it must be pure ASCII (5.1 mangles the
