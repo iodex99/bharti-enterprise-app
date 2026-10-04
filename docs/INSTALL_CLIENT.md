@@ -383,6 +383,7 @@ restarts) and `C:\bharti\logs\app.log` (the app itself).
 
 | You see | Do this |
 |---|---|
+| `irm : The request was aborted: The connection was closed unexpectedly.` | Misleading wording: it is GitHub saying **404 — not found**. The release feed has no `install.ps1` yet. See 1.1 (check the releases page; set `RELEASES_REPO_TOKEN`). Not a network or TLS problem. |
 | "Could not download the installer … no release has been published yet" | The feed is empty — see 1.1. Or the PC is offline: use 3.2. |
 | "Could not create SSL/TLS secure channel" (old Windows 10) | Paste `[Net.ServicePointManager]::SecurityProtocol = 'Tls12'` first, then the one line again. |
 | Antivirus blocks the one line | Use the double-click install (3.2) — same result. |
