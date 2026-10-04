@@ -138,7 +138,7 @@ themselves: polled every minute, applied once nobody has worked for
 `auto_update_idle_minutes` (default 3), timer-driven screens excluded from "activity".
 Push → office running it: 6–10 min, nearly all CI. Guide: `docs/INSTALL_CLIENT.md`.
 
-**BLOCKER for the one-line install: `RELEASES_REPO_TOKEN` is NOT set** (verified
+**`RELEASES_REPO_TOKEN` is set (2026-10-04)** — the public feed publishes; v1.0.24 was the first release there.
 2026-10-04: `bharti-releases` has zero releases; v1.0.21/v1.0.22 fell back to this private
 repo). Until it is, the one-liner answers "no release has been published yet" and
 installed PCs never see updates. Setup steps: INSTALL_CLIENT.md §1.1.
@@ -152,6 +152,9 @@ assets appear on the feed, then do one real install and watch one real push land
   rest), must never `exit` (closes the user's window), and `$PSScriptRoot` is empty.
 - WinSW 2.x finds its config by its OWN file name in its own folder
   (`bharti-service.exe` ↔ `bharti-service.xml`); it takes no config-path argument.
+- In 5.1, `(Invoke-WebRequest …).Content` is a **byte[]** for octet-stream downloads
+  (every GitHub release asset) — `[string]` of it is `"50 56 100 …"`. Use `-OutFile` and
+  read the file, or `Invoke-RestMethod` (which returns a string for those).
 - PowerShell 5.1 reads BOM-less files as ANSI — read the app's UTF-8 files with
   `-Encoding UTF8`, and write JSON the supervisor parses without a BOM.
 - `Remove-Item -Recurse` gives up past 260 chars; `rd /s /q "\\?\path"` does not.

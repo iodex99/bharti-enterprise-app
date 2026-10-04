@@ -5,6 +5,16 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-10-04 — **Fix: the one-line install failed its own checksum check on the first
+  real PC** ("checksums.txt does not list bharti-app-v1.0.24.zip"). In Windows PowerShell
+  5.1, `Invoke-WebRequest` returns `.Content` as a byte array for octet-stream downloads,
+  and `[string]` of that is `"50 56 100 …"` — so the file name was never found and the
+  install refused, correctly, to continue. The installer now saves `checksums.txt` to disk
+  and reads it as text, and removes the downloaded zip if a run fails. This was the one
+  path the earlier rehearsal could not cover while the feed was empty; it has now been
+  rehearsed against the live feed (download → verified → installed → healthy), and a test
+  forbids reading `.Content` again.
+
 - 2026-10-04 — **True one-line install** (ADR-045). On the office PC, in any PowerShell
   window:
   `irm https://github.com/iodex99/bharti-releases/releases/latest/download/install.ps1 | iex`.

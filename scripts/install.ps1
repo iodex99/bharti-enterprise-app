@@ -174,7 +174,13 @@ if ($selfPath -and ((Split-Path $selfPath -Leaf) -ne 'install.ps1')) { $selfPath
 
       if ($sums) {
         if ($GithubToken) { $sumUrl = $sums.url } else { $sumUrl = $sums.browser_download_url }
-        $sumText = [string](Invoke-WebRequest $sumUrl -Headers $dl -UseBasicParsing).Content
+        # Save to a file and read it back: for an octet-stream download, Windows PowerShell
+        # 5.1 hands .Content back as a byte array, and [string] of that is "50 56 100 ..."
+        # - which then never contains the file name.
+        $sumFile = Join-Path $env:TEMP 'bharti-checksums.txt'
+        Invoke-WebRequest $sumUrl -OutFile $sumFile -Headers $dl -UseBasicParsing
+        $sumText = [IO.File]::ReadAllText($sumFile)
+        Remove-Item $sumFile -Force -ErrorAction SilentlyContinue
         $line = ($sumText -split "`n") | Where-Object { $_ -match [regex]::Escape($asset.name) } | Select-Object -First 1
         $expected = if ($line) { ($line.Trim() -split '\s+')[0].ToLower() } else { $null }
         $actual = (Get-FileHash $tempZip -Algorithm SHA256).Hash.ToLower()
@@ -373,6 +379,8 @@ if ($selfPath -and ((Split-Path $selfPath -Leaf) -ne 'install.ps1')) { $selfPath
     Write-Host '  Fix the problem above and run the installer again.'
   } finally {
     Remove-Tree $stage
+    # A failed run would otherwise leave the 70 MB download behind in %TEMP%.
+    if ($tempZip -and (Test-Path $tempZip)) { Remove-Item $tempZip -Force -ErrorAction SilentlyContinue }
     Finish
   }
 }

@@ -41,6 +41,13 @@ describe('install.ps1 survives `irm | iex`', () => {
     expect(code).not.toMatch(/\$PSScriptRoot/i);
   });
 
+  it('never reads Invoke-WebRequest .Content — in 5.1 that is a byte array for downloads', () => {
+    // The first real install failed on exactly this: checksums.txt arrived as bytes,
+    // [string] turned it into "50 56 100 ...", and the zip "was not listed". Save with
+    // -OutFile and read the file instead.
+    expect(code).not.toMatch(/\)\s*\.Content\b/);
+  });
+
   it('forces TLS 1.2 for its own downloads (older Windows 10 does not default to it)', () => {
     expect(code).toMatch(/Tls12/);
   });
