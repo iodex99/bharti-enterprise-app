@@ -200,3 +200,21 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   literally the interpreter CI built the modules with — the supervisor runs each release
   with its own, and the installer copies one to the root for the supervisor itself. The
   office PC needs nothing pre-installed. Cost: ~55 MB added to each release zip.
+- **ADR-045** **The office PC installs with one line, and a release zip is everything it
+  needs.** `irm https://github.com/iodex99/bharti-releases/releases/latest/download/install.ps1 | iex`
+  — the stable `releases/latest/download/` URL always serves the newest installer. That
+  only works if the installer is a single self-sufficient file, so each release zip now
+  also carries the supervisor, the service config and WinSW (2.12.0, the 0.6 MB .NET 4.6.1
+  build, pinned by version AND sha256 — it runs as a Windows service), and the installer
+  no longer needs a copy of this repo. Offline is the same file: `install.cmd` +
+  `install.ps1` + the zip in one folder, double-click. The script asks for admin itself.
+  Rules `irm | iex` imposes, enforced by `installer-script.test.ts` and the packager:
+  **pure ASCII** (PowerShell 5.1 mangles anything else in transit), **never `exit`** (it
+  would close the user's own window), **no `$PSScriptRoot`** (empty when run from a
+  string). Re-running is the repair/manual-update path, so it must be safe over a live
+  install: stage first while the old copy keeps serving; stop it and free locked files;
+  copy the database aside (as `pre-update-install-*`, so the Backups screen lists it);
+  move the old release aside rather than deleting it; and on ANY failure put back the
+  release folder, `current.txt` and the database, then restart unconditionally — a
+  supervisor crash-looping on a bad release still reports the service as Running.
+  Rehearsed end to end, including a deliberately broken upgrade.

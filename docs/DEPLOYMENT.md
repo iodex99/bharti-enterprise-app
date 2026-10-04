@@ -181,38 +181,43 @@ which is never auto-updated.
 
 ## One-time office PC installation
 
-**No prerequisites.** Nothing to install first (the release brings its own Node) and no
-token to create (releases are public, ADR-042).
-
-In an **elevated PowerShell**, from a copy of this repo's `scripts/` folder:
+**No prerequisites, one line** (ADR-045). In any PowerShell window on the office PC:
 
 ```powershell
-# online
-powershell -ExecutionPolicy Bypass -File install-service.ps1
-
-# offline — everything from a USB stick
-powershell -ExecutionPolicy Bypass -File install-service.ps1 `
-  -ZipPath E:\bharti-app-v1.0.0.zip -WinswPath E:\WinSW-x64.exe
+irm https://github.com/iodex99/bharti-releases/releases/latest/download/install.ps1 | iex
 ```
 
-The installer:
-- creates `C:\bharti\{supervisor,releases,data,logs,service,node}`,
-- copies `supervisor.cjs` and writes `supervisor\config.json` (port, feed repo),
-- fetches (or unpacks) the release, taking the `bharti-app-*.zip` asset specifically —
-  the feed is shared with the dormant Android line,
-- reads the version from the release's own `version.json`, so `releases\<version>` and
-  `current.txt` cannot disagree,
-- copies the release's bundled `node.exe` to `C:\bharti\node\`,
-- installs and starts the **bharti-app** Windows service (WinSW) wrapping the supervisor,
-- waits for `/api/system/health` and prints the first-run admin password.
+No internet at the office: put `install.cmd`, `install.ps1` and `bharti-app-v*.zip` (all
+three are assets on every release) in one folder and double-click `install.cmd`. Step-by-
+step instructions for the person installing: [`INSTALL_CLIENT.md`](INSTALL_CLIENT.md).
 
-Re-running it installs the newest release over the top and restarts the service;
-`C:\bharti\data` is untouched. Other options: `-Root`, `-Port`, `-Repo`, and
-`-GithubToken` if you keep releases in a private repo.
+`scripts/install.ps1` (published as the `install.ps1` release asset):
+- asks for admin itself — relaunches elevated, re-downloading itself when it arrived via
+  `irm | iex` and so has no file to relaunch;
+- takes the zip from `-ZipPath`, else a `bharti-app-v*.zip` beside the script, else the
+  latest release on the feed (the `bharti-app-*.zip` asset specifically — the feed is
+  shared with the dormant Android line), sha256-checked against `checksums.txt`;
+- unpacks into `C:\bharti\tmp\stage-*` while any running copy keeps serving, and reads the
+  version from the release's own `version.json`, so `releases\<version>` and
+  `current.txt` cannot disagree;
+- stops the running copy and frees locked files, copies the database to
+  `data\backups\pre-update-install-*`, moves the old release folder aside (never deletes
+  it in place), and puts the new one in;
+- installs the supervisor, its Node, WinSW and the service config at the root, all taken
+  from the release zip;
+- registers the **bharti-app** service if needed, starts it, adds a desktop shortcut,
+  waits for `/api/system/health`, and on a fresh install prints the first-run username
+  and password;
+- on ANY failure after the swap, puts back the old release, `current.txt` and the
+  database, and restarts the service.
 
-Open `http://localhost:8787` — sign in with the initial admin credentials from
-`C:\bharti\data\initial-admin-password.txt` (created on first boot; the password must be
-changed at first sign-in, then delete the file).
+Re-running it is the repair and manual-update path. `C:\bharti\data` is never modified,
+except for being restored from that safety copy on a failed upgrade. Options: `-Root`,
+`-Port`, `-Repo`, `-ZipPath`, and `-GithubToken` only for a private feed.
+
+Rules the script must keep for `irm | iex` to work — pure ASCII, never `exit`, no
+`$PSScriptRoot` — are enforced by `server/tests/unit/installer-script.test.ts`, and the
+packager refuses to publish a non-ASCII installer.
 
 ## Remote access — Tailscale (recommended: NO domain needed)
 
@@ -278,8 +283,9 @@ Updates install themselves (ADR-043). Nobody at the office has to do anything.
 
 End to end a push typically reaches the office in **6–10 minutes**, nearly all of it CI.
 
-Manual fallback (feed unreachable): re-run the installer with `-ZipPath <the new zip>`.
-It stages that release and restarts the service, leaving `data\` alone.
+Manual fallback (feed unreachable): copy `install.cmd`, `install.ps1` and the new zip into
+one folder on the office PC and double-click `install.cmd`. It upgrades in place with the
+same safety copy and rollback as an automatic update.
 
 ## Backups & restore
 
@@ -305,7 +311,7 @@ It stages that release and restarts the service, leaving `data\` alone.
 
 The whole business is portable. On the **new PC**:
 
-1. Install the app exactly like a first go-live (Node 24 + `install-service.ps1`, above).
+1. Install the app exactly like a first go-live (the one-line install, above).
 2. Open the app and sign in as admin. Because there is no data yet, the **first-run setup
    wizard** appears — choose **"Move from another computer"**.
 3. Provide the complete backup, either way:
@@ -327,7 +333,7 @@ passwords, masters, ledger, audit trail or photos is lost.
 |---|---|
 | App unreachable locally | `Get-Service bharti-app` → start it; check `C:\bharti\logs\supervisor.log` and `app.log` |
 | Unreachable remotely only | Tailscale toggle on the device? `tailscale status` on the PC; `tailscale serve status` shows the https proxy |
-| Update banner never appears | Token expired? Update `supervisor\config.json` → `githubToken`, restart service |
+| Updates never arrive | Is the release on the public feed? If CI warned "Update feed not configured", the source repo's `RELEASES_REPO_TOKEN` secret is missing or expired. Then: is `auto_update` off in System Health? Then `supervisor.log` |
 | Update failed | Nothing to do — it rolled back automatically; check `update-status.json` + logs, fix, push a new release |
 | "Inventory self-check" shows ❌ | Stop entering data, take a manual backup, contact the developer |
 | Disk filling up | Old zips in `C:\bharti\tmp`, old releases beyond 3, `data\backups` — all safe to trim |
@@ -337,8 +343,8 @@ configuration, but the UPS avoids interrupted work sessions).
 
 ## Go-live checklist
 
-1. ☐ Office PC: Node 24 installed, service installed via `install-service.ps1`, app
-   answers on `http://localhost:8787`.
+1. ☐ Office PC: installed with the one-line install (or `install.cmd` offline), app
+   answers on `http://localhost:8787`, and comes back by itself after a reboot.
 2. ☐ Initial admin password changed; `initial-admin-password.txt` deleted.
 3. ☐ Remote access up (Tailscale serve); app reachable from a phone on mobile data
    (not office Wi-Fi) at the https://…ts.net address.

@@ -59,7 +59,7 @@ client/src/local/   THE ANDROID RUNTIME
 android/           Capacitor native shell (thin WebView host; native-version.txt)
 supervisor/        zero-dep process manager (CJS, never auto-updated)
 e2e/               Playwright specs (desktop + mobile against Node; app against the bundle)
-scripts/           setup / install-service / packaging helpers / app-server + mock feed
+scripts/           install.ps1 + install.cmd (one-line installer) / packaging / app-server + mock feed
 .github/workflows/ ci.yml, release.yml (PC zip), android-release.yml (bundle + APK)
 data/              app.db, backups/  ← gitignored, survives updates (Node host)
 ```

@@ -5,6 +5,36 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-10-04 — **True one-line install** (ADR-045). On the office PC, in any PowerShell
+  window:
+  `irm https://github.com/iodex99/bharti-releases/releases/latest/download/install.ps1 | iex`.
+  No copy of this repository is needed any more: each release zip now also carries the
+  supervisor, the service config and WinSW (2.12.0, the 0.6 MB .NET 4.6.1 build, pinned by
+  version and sha256), and `install.ps1` / `install.cmd` are published as release assets.
+  Offline: those two plus the zip in one folder, double-click `install.cmd`. The installer
+  asks for admin rights itself, verifies the download's checksum, adds a desktop shortcut,
+  and shows the first-run username and password cleanly (previously garbled: PowerShell
+  5.1 read the app's UTF-8 file as ANSI).
+
+  **Re-running is now genuinely safe on a live install** — it is the repair and manual
+  upgrade path. A rehearsal of the previous installer found it deleted the *running*
+  version's folder in place, so a failure part-way left the office on a half-deleted
+  release. Now it stages while the old copy keeps serving, stops it and frees locked
+  files, takes a database safety copy (`data\backups\pre-update-install-*`, listed on the
+  Backups screen), moves the old release aside, and on any failure restores the release
+  folder, `current.txt` and the database and restarts the service unconditionally (a
+  supervisor crash-looping on a bad release still reports Running). Rehearsed end to end:
+  fresh offline install; re-install over a live, in-use copy with data surviving; and an
+  upgrade to a deliberately broken release that rolled back with data intact. Only the
+  Windows service registration itself could not be exercised without admin rights.
+
+  `scripts/install-service.ps1` is replaced by `scripts/install.ps1`. New
+  `installer-script.test.ts` and a packager check enforce what `irm | iex` needs: pure
+  ASCII, never `exit`, no `$PSScriptRoot`. 667 tests.
+
+  Still blocked on one setting: the source repo has no `RELEASES_REPO_TOKEN`, so CI has
+  been publishing to itself and the public feed is empty — see INSTALL_CLIENT.md §1.1.
+
 - 2026-09-12 — **One-command install, and the office PC now updates itself**
   (ADR-042…044).
 

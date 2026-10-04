@@ -10,13 +10,24 @@
  *   client-dist/                 built SPA
  *   node_modules/                production deps, exact lockfile versions, built on THIS os/arch
  *   node/node.exe                the Node runtime itself (ADR-044)
+ *   supervisor/supervisor.cjs    process manager the installer puts at the root (ADR-045)
+ *   service/WinSW.exe            Windows service wrapper, pinned + hash-checked (ADR-045)
+ *   service/bharti-service.xml   its config
  *   package.json                 minimal root manifest
  *   version.json                 { version, sha, builtAt, notes, nodeVersion }
+ *
+ * Alongside the zip, in the output folder (published as release assets):
+ *   install.ps1, install.cmd     the one-line / double-click installer (ADR-045)
+ *   checksums.txt                sha256 of all three
  *
  * Why the runtime ships too: the native modules (better-sqlite3, sharp) are compiled
  * against one Node ABI, so a release and its interpreter have to agree. Carrying the
  * exact binary the modules were built against removes both the "install Node 24 first"
  * step and the NODE_MODULE_VERSION failure that follows when someone installs 22 or 26.
+ *
+ * Why the supervisor and service wrapper ship too: then a release zip is EVERYTHING the
+ * office PC needs, so the installer can be one file fetched from the web (or carried on
+ * a USB stick) instead of a copy of this repository's scripts/ and supervisor/ folders.
  */
 import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -111,7 +122,39 @@ if (process.platform === 'win32') {
   fs.writeFileSync(nodeTarget, Buffer.from(await res.arrayBuffer()));
 }
 
-// 4. manifests
+// 4. what the installer needs besides the app, so the zip is self-sufficient (ADR-045).
+fs.mkdirSync(path.join(staging, 'supervisor'), { recursive: true });
+fs.copyFileSync(
+  path.join(repoRoot, 'supervisor', 'supervisor.cjs'),
+  path.join(staging, 'supervisor', 'supervisor.cjs'),
+);
+fs.mkdirSync(path.join(staging, 'service'), { recursive: true });
+fs.copyFileSync(
+  path.join(repoRoot, 'scripts', 'winsw', 'bharti-service.xml'),
+  path.join(staging, 'service', 'bharti-service.xml'),
+);
+// WinSW 2.12.0, the .NET Framework 4.6.1 build: 0.6 MB instead of the 17 MB
+// self-contained one, and that framework is part of every Windows 10 1607+ / Windows 11.
+// Pinned by version AND hash — this binary runs as a Windows service.
+const WINSW_URL = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe';
+const WINSW_SHA256 = 'b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f';
+{
+  console.log(`bundling WinSW (${WINSW_URL})`);
+  const res = await fetch(WINSW_URL);
+  if (!res.ok) {
+    console.error(`Could not download WinSW: ${res.status}`);
+    process.exit(1);
+  }
+  const bytes = Buffer.from(await res.arrayBuffer());
+  const got = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (got !== WINSW_SHA256) {
+    console.error(`WinSW hash mismatch: expected ${WINSW_SHA256}, got ${got}. Refusing to package.`);
+    process.exit(1);
+  }
+  fs.writeFileSync(path.join(staging, 'service', 'WinSW.exe'), bytes);
+}
+
+// 5. manifests
 fs.writeFileSync(
   path.join(staging, 'package.json'),
   JSON.stringify({ name: 'bharti-enterprise-app', version, private: true, type: 'module' }, null, 2),
@@ -132,7 +175,7 @@ fs.writeFileSync(
   ),
 );
 
-// 5. zip + checksum
+// 6. zip + installer + checksums
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 const zipName = `bharti-app-v${version}.zip`;
@@ -145,8 +188,29 @@ if (process.platform === 'win32') {
 } else {
   run(`cd "${staging}" && zip -qry "${zipPath}" .`);
 }
-const hash = crypto.createHash('sha256').update(fs.readFileSync(zipPath)).digest('hex');
-fs.writeFileSync(path.join(outDir, 'checksums.txt'), `${hash}  ${zipName}\n`);
+// The installer travels beside the zip: `irm .../releases/latest/download/install.ps1 | iex`
+// and the offline USB-stick install both use these exact files.
+for (const name of ['install.ps1', 'install.cmd']) {
+  const src = path.join(repoRoot, 'scripts', name);
+  const text = fs.readFileSync(src);
+  // `irm | iex` delivers install.ps1 as a string, and Windows PowerShell 5.1 mangles any
+  // non-ASCII byte on the way — one stray em dash would break the one-line install.
+  const bad = text.findIndex((b) => b > 0x7e || (b < 0x20 && b !== 0x0a && b !== 0x0d && b !== 0x09));
+  if (bad !== -1) {
+    console.error(`${name} must be pure ASCII (offending byte at offset ${bad}). Refusing to package.`);
+    process.exit(1);
+  }
+  fs.writeFileSync(path.join(outDir, name), text);
+}
+
+const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const hash = sha(zipPath);
+fs.writeFileSync(
+  path.join(outDir, 'checksums.txt'),
+  [zipName, 'install.ps1', 'install.cmd']
+    .map((name) => `${name === zipName ? hash : sha(path.join(outDir, name))}  ${name}\n`)
+    .join(''),
+);
 fs.rmSync(staging, { recursive: true, force: true });
 
 const sizeMb = (fs.statSync(zipPath).size / 1024 / 1024).toFixed(1);

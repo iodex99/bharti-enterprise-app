@@ -125,18 +125,38 @@ job issue → 2 cards, a bundle, missing-as-reason.
 Still live from earlier phases: in-app demo mode, complete backup/restore + setup wizard,
 discrepancies review, reconciliation self-checks, PWA, dashboard.
 
-**Deployment reworked 2026-09-12 (ADR-042…044).** Installing is now ONE command with no
-prerequisites: releases carry their own `node/node.exe` (so no Node install and no
-`NODE_MODULE_VERSION` class of failure) and go to the PUBLIC `bharti-releases` feed (so no
-PAT to create or renew). Offline installs are one command too (`-ZipPath`). Updates apply
-themselves: polled every minute, applied once nobody has worked for `auto_update_idle_minutes`
-(default 3) — with timer-driven screens excluded from "activity" server-side so a
-left-open tab cannot block them. Push → office running it: 6–10 min, nearly all CI.
-**`RELEASES_REPO_TOKEN` must be set on this repo** or releases fall back here and the
-office never sees them (the workflow warns, loudly, but stays green).
+**Deployment reworked 2026-09-12 → 2026-10-04 (ADR-042…045).** The office PC installs
+with ONE line and no prerequisites:
+`irm https://github.com/iodex99/bharti-releases/releases/latest/download/install.ps1 | iex`
+(offline: double-click `install.cmd` beside `install.ps1` + the zip). Each release zip is
+self-sufficient — app, its own `node/node.exe`, supervisor, WinSW (pinned + hashed) and
+service config — and releases go to the PUBLIC `bharti-releases` feed, so there is no
+Node to install and no PAT to create or renew. Re-running the installer is the safe
+repair/upgrade path (stages while serving, DB safety copy, old release moved aside, full
+rollback on failure — rehearsed incl. a deliberately broken upgrade). Updates apply
+themselves: polled every minute, applied once nobody has worked for
+`auto_update_idle_minutes` (default 3), timer-driven screens excluded from "activity".
+Push → office running it: 6–10 min, nearly all CI. Guide: `docs/INSTALL_CLIENT.md`.
 
-Next steps: confirm `RELEASES_REPO_TOKEN` is configured, then watch one real push land on
-a real install (go-live checklist item 15).
+**BLOCKER for the one-line install: `RELEASES_REPO_TOKEN` is NOT set** (verified
+2026-10-04: `bharti-releases` has zero releases; v1.0.21/v1.0.22 fell back to this private
+repo). Until it is, the one-liner answers "no release has been published yet" and
+installed PCs never see updates. Setup steps: INSTALL_CLIENT.md §1.1.
+
+Next steps: set `RELEASES_REPO_TOKEN`, re-run the Release workflow, confirm the four
+assets appear on the feed, then do one real install and watch one real push land
+(go-live checklist items 3 and 14).
+
+**Installer quirks discovered (don't relearn these):**
+- `irm | iex` delivers the script as a string: it must be pure ASCII (5.1 mangles the
+  rest), must never `exit` (closes the user's window), and `$PSScriptRoot` is empty.
+- WinSW 2.x finds its config by its OWN file name in its own folder
+  (`bharti-service.exe` ↔ `bharti-service.xml`); it takes no config-path argument.
+- PowerShell 5.1 reads BOM-less files as ANSI — read the app's UTF-8 files with
+  `-Encoding UTF8`, and write JSON the supervisor parses without a BOM.
+- `Remove-Item -Recurse` gives up past 260 chars; `rd /s /q "\\?\path"` does not.
+- When writing test .ps1 files through the Bash tool's heredocs, `\\` collapses to `\`
+  — use the file-writing tool for anything with Windows paths.
 
 **v2 quirks discovered (don't relearn these):**
 - Code-created models get ids > 1000000 (the RAW-CLOTH sentinel holds 1000000) — tests

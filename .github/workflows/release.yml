@@ -78,8 +78,12 @@ jobs:
             echo "v$VERSION already exists — replacing it."
             gh release delete "v$VERSION" --repo "$TARGET" --yes --cleanup-tag
           fi
+          # install.ps1 is what the office's one-line install fetches, via the stable
+          # .../releases/latest/download/install.ps1 URL (ADR-045).
           gh release create "v$VERSION" \
             "dist-release/bharti-app-v$VERSION.zip" \
+            "dist-release/install.ps1" \
+            "dist-release/install.cmd" \
             "dist-release/checksums.txt" \
             --repo "$TARGET" \
             --title "v$VERSION" \
