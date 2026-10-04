@@ -106,6 +106,30 @@ describe('auth', () => {
     expect(res.status).toBe(403);
   });
 
+  // Phones reach the office PC through `tailscale serve`, an HTTPS reverse proxy. Should a
+  // proxy rewrite Host to the backend's localhost address, the browser's real host only
+  // survives in X-Forwarded-Host — and every sign-in would otherwise be rejected.
+  it('accepts a same-origin mutation that arrives through a reverse proxy', async () => {
+    const res = await request(ctx.app)
+      .post('/api/auth/login')
+      .set('Host', 'localhost:8787')
+      .set('X-Forwarded-Host', 'office-pc.tail1a2b3c.ts.net')
+      .set('X-Forwarded-Proto', 'https')
+      .set('Origin', 'https://office-pc.tail1a2b3c.ts.net')
+      .send({ username: 'admin', password: 'Admin@123' });
+    expect(res.status).toBe(200);
+  });
+
+  it('still rejects a foreign origin even when a forwarded host is present', async () => {
+    const res = await request(ctx.app)
+      .post('/api/auth/login')
+      .set('Host', 'localhost:8787')
+      .set('X-Forwarded-Host', 'office-pc.tail1a2b3c.ts.net')
+      .set('Origin', 'https://evil.example')
+      .send({ username: 'admin', password: 'Admin@123' });
+    expect(res.status).toBe(403);
+  });
+
   it('garbage session cookie is just anonymous', async () => {
     const res = await request(ctx.app)
       .get('/api/auth/me')

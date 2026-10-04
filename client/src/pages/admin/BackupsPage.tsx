@@ -157,11 +157,13 @@ function CloudBackupCard({ currentDir }: { currentDir: string | null }) {
     <section className="mb-5 rounded-2xl border border-sky-200 bg-sky-50/50 p-4">
       <h2 className="mb-1 text-sm font-bold text-gray-900">☁️ Cloud backup (Google Drive)</h2>
       <p className="mb-3 text-sm text-gray-600">
-        Install <strong>Google Drive for Desktop</strong> on this computer and sign in with
-        the owner's Google account (that sign-in is the only permission Google needs).
-        Create a folder inside “My Drive”, paste its path below, and every backup is
-        copied there automatically — Drive then uploads it to the owner's account.
-        OneDrive or Dropbox folders work the same way.
+        Make a plain folder on this computer, such as <code>C:\BhartiCloud</code>, and paste
+        its path below — every backup is then copied there automatically. Install{' '}
+        <strong>Google Drive for Desktop</strong>, sign in with the owner's Google account,
+        and under <em>Folders from your computer</em> add that folder with{' '}
+        <em>Sync with Google Drive</em>. Use a folder on <code>C:</code>, not the{' '}
+        <code>G:</code> drive: the app runs as a Windows service, and services cannot see a
+        drive letter that only exists for the signed-in user.
       </p>
       <form
         className="flex flex-wrap items-end gap-2"
@@ -174,7 +176,7 @@ function CloudBackupCard({ currentDir }: { currentDir: string | null }) {
           <Field label="Synced folder path (empty = off)">
             <TextInput
               value={effectiveDir}
-              placeholder="e.g. G:\My Drive\BhartiBackups"
+              placeholder="e.g. C:\BhartiCloud"
               onChange={(e) => setDir(e.target.value)}
             />
           </Field>

@@ -104,6 +104,11 @@ export default function SystemPage() {
         </p>
       </section>
 
+      <AutoUpdateCard
+        supervised={status?.supervised ?? false}
+        settings={settings?.settings}
+      />
+
       <DemoCard />
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -131,6 +136,90 @@ export default function SystemPage() {
         <ErrorText>{error}</ErrorText>
       </section>
     </div>
+  );
+}
+
+/**
+ * Automatic updates (ADR-043): the office PC installs a new release by itself once
+ * nobody has worked for a few minutes. Admin can turn that off — then the banner's
+ * "Update now" is the only way in — or change how long "quiet" must last.
+ */
+function AutoUpdateCard({
+  supervised,
+  settings,
+}: {
+  supervised: boolean;
+  settings: Record<string, string> | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const [minutes, setMinutes] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [note, setNote] = useState('');
+
+  const enabled = (settings?.auto_update ?? 'on') !== 'off';
+  const effectiveMinutes = minutes ?? settings?.auto_update_idle_minutes ?? '3';
+
+  const save = useMutation({
+    mutationFn: (s: { key: string; value: string }) => api.put('/api/system/settings', s),
+    onSuccess: () => {
+      setError('');
+      setNote('Saved.');
+      void queryClient.invalidateQueries({ queryKey: ['system', 'settings'] });
+    },
+    onError: (err) => {
+      setNote('');
+      setError(err instanceof ApiError ? err.message : 'Save failed.');
+    },
+  });
+
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-4">
+      <h2 className="mb-1 text-sm font-bold text-gray-900">
+        Automatic updates{' '}
+        {enabled ? <Badge tone="green">on</Badge> : <Badge tone="gray">off</Badge>}
+      </h2>
+      <p className="mb-3 text-sm text-gray-600">
+        {enabled
+          ? 'New versions install by themselves once nobody has used the app for the time below, so no one loses a half-typed form. The database is backed up first, and a version that fails to start is rolled back automatically.'
+          : 'Off: new versions wait for an admin to press “Update now” in the banner.'}
+        {!supervised && (
+          <span className="ml-1 text-xs text-gray-400">(only applies on the office server)</span>
+        )}
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Button
+          variant="secondary"
+          disabled={save.isPending}
+          onClick={() => save.mutate({ key: 'auto_update', value: enabled ? 'off' : 'on' })}
+        >
+          {enabled ? 'Turn off' : 'Turn on'}
+        </Button>
+        {enabled && (
+          <form
+            className="flex items-end gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate({ key: 'auto_update_idle_minutes', value: effectiveMinutes });
+            }}
+          >
+            <div className="w-56">
+              <Field label="Wait until nobody has worked for (minutes)">
+                <TextInput
+                  inputMode="numeric"
+                  value={effectiveMinutes}
+                  onChange={(e) => /^\d{0,3}$/.test(e.target.value) && setMinutes(e.target.value)}
+                />
+              </Field>
+            </div>
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </form>
+        )}
+      </div>
+      {note && <p className="mt-2 text-sm text-emerald-700">{note}</p>}
+      <ErrorText>{error}</ErrorText>
+    </section>
   );
 }
 

@@ -5,6 +5,18 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-10-04 — **Automatic-update controls, a backup-folder hint that works, and a
+  proxy-safe sign-in check.** System Health gains an *Automatic updates* card (on/off and
+  the quiet period) — the docs already promised it, but only the server settings existed.
+  The Backups page suggested `G:\My Drive\…`; the app runs as a Windows service, which
+  cannot see Google Drive's per-user `G:` drive, so it now suggests a plain `C:\BhartiCloud`
+  synced via Drive's *Folders from your computer*. The CSRF origin check also accepts
+  `X-Forwarded-Host`, so sign-in keeps working through `tailscale serve` should the proxy
+  rewrite `Host` (cross-site pages still cannot forge it; tests cover both directions).
+  INSTALL_CLIENT.md: Tailscale `--unattended` (else it drops off at the Windows login
+  screen) and *Disable key expiry* (else the PC leaves the network after 180 days), a
+  Tailscale-only Google account, and step-by-step Google Drive backup setup.
+
 - 2026-10-04 — **Fix: the one-line install failed its own checksum check on the first
   real PC** ("checksums.txt does not list bharti-app-v1.0.24.zip"). In Windows PowerShell
   5.1, `Invoke-WebRequest` returns `.Content` as a byte array for octet-stream downloads,

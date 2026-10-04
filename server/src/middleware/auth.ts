@@ -89,7 +89,14 @@ export function checkOrigin(req: Request, res: Response, next: NextFunction): vo
   }
   try {
     const originHost = new URL(origin).host;
-    if (originHost !== req.headers.host) {
+    // Behind a reverse proxy (tailscale serve, Cloudflare Tunnel) the browser's host may
+    // only survive in X-Forwarded-Host if the proxy rewrote Host. Accepting it does not
+    // weaken the check: a cross-site page cannot set that header without a CORS
+    // preflight, which this app never grants — and SameSite=Lax already withholds the
+    // session cookie from cross-site POSTs.
+    const forwarded = req.headers['x-forwarded-host'];
+    const forwardedHost = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
+    if (originHost !== req.headers.host && originHost !== forwardedHost) {
       res.status(403).json({ error: 'Cross-origin request rejected.' });
       return;
     }

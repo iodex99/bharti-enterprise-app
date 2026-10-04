@@ -230,14 +230,35 @@ Staff need the app from their own phones, including on mobile data. Tailscale is
 no domain name, and never exposes the app to the public internet: only devices signed into
 your private network can reach it.
 
+**Which account:** create a **new Google account used only for Tailscale** (e.g.
+`bharti.office.network@gmail.com`). You will sign it in on every staff phone; if it holds
+nothing else — no Gmail, no Drive, no backups — nothing is exposed if a phone is lost or
+someone leaves. **You** do each sign-in; staff never need the password.
+
 **On the office PC**, in PowerShell **as administrator**:
 
 ```powershell
 winget install Tailscale.Tailscale
-tailscale up
 ```
 
-`tailscale up` opens a browser — sign in with the **business Google account** from 1.2. Then:
+Close that window and open a **new** administrator PowerShell (so the `tailscale` command is
+found), then:
+
+```powershell
+tailscale up --unattended
+```
+
+A browser opens — sign in with the Tailscale-only Google account. `--unattended` matters:
+without it, Tailscale on Windows disconnects whenever nobody is signed in to Windows — for
+instance after a power cut, while the PC sits at the login screen and the app is running.
+
+**In the Tailscale admin console** (login.tailscale.com, same account):
+
+1. **DNS** tab → enable **MagicDNS**, then **HTTPS Certificates**.
+2. **Machines** tab → the office PC → `…` menu → **Disable key expiry**. Otherwise Tailscale
+   makes the PC sign in again after 180 days, and phones lose the app without warning.
+
+Back on the office PC:
 
 ```powershell
 tailscale serve --bg localhost:8787
@@ -245,17 +266,20 @@ tailscale dns status
 ```
 
 `dns status` shows the PC's name, e.g. `office-pc.tail1a2b3c.ts.net`. **Write it down — this
-is the address the whole business will use.**
-
-If `tailscale serve` complains about HTTPS: open the Tailscale admin console → **DNS** →
-enable **MagicDNS** and **HTTPS Certificates** once, then run it again.
+is the address the whole business will use.** Check it on the office PC first: open
+`https://office-pc.….ts.net` in its browser and sign in.
 
 **On each staff phone:**
 
 1. Install **Tailscale** from the Play Store / App Store.
-2. Sign in with the **same business account**, and turn the VPN switch on.
-3. Open `https://office-pc.….ts.net` in Chrome or Safari.
+2. Sign in with the **Tailscale-only account** (you type the password), and turn the VPN
+   switch on.
+3. Open `https://office-pc.….ts.net` in Chrome or Safari, and sign in with **that person's
+   own app account**.
 4. Menu → **Add to Home Screen**. It now opens like an app.
+
+If signing in on a phone ever says *"Cross-origin request rejected"*, tell the developer —
+it means the proxy is altering a header the app checks.
 
 **Test it properly:** turn Wi-Fi **off** on one phone and load the app on mobile data. If
 that works, remote access is done.
@@ -300,14 +324,27 @@ The app already takes care of itself:
 All of that is on the same PC — useless if the PC is stolen, its disk dies, or the office
 floods. **One copy must leave the building.**
 
-1. **Administration → Backups → Download complete backup** — one `.zip` with the database
-   **and every photo**.
-2. Put it on Google Drive (business account) or a USB stick that goes home with someone.
-3. Agree **who does this, weekly**, and write their name in the handover notes. A routine
-   with nobody's name against it does not happen.
+The app can send every backup to Google Drive by itself. Set it up once:
 
-Easiest of all: install **Google Drive for Desktop** on the office PC under the business
-account and save complete backups into it — then the off-site copy happens by itself.
+1. On the office PC, create a plain folder: **`C:\BhartiCloud`**.
+   (Not on the `G:` drive Google Drive creates — the app runs as a Windows service, and a
+   service cannot see a drive letter that only exists for the signed-in user.)
+2. Install **Google Drive for Desktop** (google.com/drive/download) and sign in with the
+   **owner's** Google account — the one that should hold the backups, *not* the
+   Tailscale-only account.
+3. Drive's **Settings → Preferences → Folders from your computer → Add folder** → choose
+   `C:\BhartiCloud` → **Sync with Google Drive** → Done.
+4. In the app: **Administration → Backups → Cloud backup** → paste `C:\BhartiCloud` →
+   **Save folder** → **Copy all backups now**. Within a few minutes the files appear at
+   drive.google.com → **Computers**.
+
+From then on, every daily backup is copied there automatically (newest 30 kept). Those are
+the **database only**. For the photos too, press **Send a complete backup to Google Drive**
+on the same page — **once a week**. Agree who does it and write their name in the handover
+notes; a routine with nobody's name against it does not happen.
+
+Drive uploads while someone is signed in to Windows on that PC; files made overnight go up
+at the next sign-in.
 
 ---
 
