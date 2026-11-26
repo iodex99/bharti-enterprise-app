@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatBusinessDate, formatLen, formatPieces, label as stageLabel, STAGES, todayIST } from '@shared';
+import {
+  formatBusinessDate,
+  formatLen,
+  formatPieces,
+  label as stageLabel,
+  STAGES,
+  todayIST,
+} from '@shared';
 import { api, ApiError } from '../../api/client';
 import { DataTable } from '../../components/DataTable';
 import { Badge, Button, ErrorText, Field, Modal, Select, TextInput } from '../../components/ui';
@@ -57,7 +64,11 @@ export default function OpeningBalancesPage() {
             header: 'As of',
             render: (r) => formatBusinessDate(r.balanceDate),
           },
-          { key: 'stage', header: 'Stage', render: (r) => <Badge tone="violet">{stageLabel(r.stage)}</Badge> },
+          {
+            key: 'stage',
+            header: 'Stage',
+            render: (r) => <Badge tone="violet">{stageLabel(r.stage)}</Badge>,
+          },
           {
             key: 'item',
             header: 'Item',
@@ -101,10 +112,23 @@ export default function OpeningBalancesPage() {
         }
       />
 
-      <NewOpeningModal key={String(createOpen)} open={createOpen} onClose={() => setCreateOpen(false)} onDone={invalidate} />
+      <NewOpeningModal
+        key={String(createOpen)}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={invalidate}
+      />
       <VoidModal
         entity="opening balance"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/opening-balances/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? {
+                id: voidFor.id,
+                label: voidFor.docNo,
+                url: `/api/opening-balances/${voidFor.id}/void`,
+              }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
@@ -162,7 +186,12 @@ function NewOpeningModal({
         className="space-y-4"
       >
         <Field label="Stock as of">
-          <TextInput type="date" value={balanceDate} onChange={(e) => setBalanceDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={balanceDate}
+            onChange={(e) => setBalanceDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Stage">
           <Select value={stage} onChange={(e) => setStage(e.target.value)}>
@@ -174,11 +203,21 @@ function NewOpeningModal({
           </Select>
         </Field>
         {stage !== 'RAW' && (
-          <Field label="Code number" hint="Typed like at cutting — new codes are created automatically">
-            <TextInput value={modelCode} onChange={(e) => setModelCode(e.target.value)} placeholder="e.g. 315" />
+          <Field
+            label="Code number"
+            hint="Typed like at cutting — new codes are created automatically"
+          >
+            <TextInput
+              value={modelCode}
+              onChange={(e) => setModelCode(e.target.value)}
+              placeholder="e.g. 315"
+            />
           </Field>
         )}
-        <Field label="Color" hint={stage === 'RAW' ? 'Raw cloth gets its code at cutting' : undefined}>
+        <Field
+          label="Color"
+          hint={stage === 'RAW' ? 'Raw cloth gets its code at cutting' : undefined}
+        >
           <MasterSelect master="colors" value={colorId} onChange={setColorId} />
         </Field>
         {stage !== 'RAW' && (
@@ -204,7 +243,11 @@ function NewOpeningModal({
           </Field>
         )}
         <Field label="Note">
-          <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. from register page 42" />
+          <TextInput
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. from register page 42"
+          />
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending} className="w-full">

@@ -51,8 +51,7 @@ function packSourceInfo(
          WHERE id = ? AND office_id = ? AND voided_at IS NULL`,
       )
       .get(lotId, office.id) as
-      | { doc_no: string; model_id: number; color_id: number; size_id: number }
-      | undefined;
+      { doc_no: string; model_id: number; color_id: number; size_id: number } | undefined;
     if (!ci) return null;
     const bal = (
       db
@@ -78,8 +77,7 @@ function packSourceInfo(
          WHERE id = ? AND office_id = ? AND stage = 'PACKING' AND voided_at IS NULL`,
       )
       .get(lotId, office.id) as
-      | { doc_no: string; model_id: number; color_id: number; size_id: number }
-      | undefined;
+      { doc_no: string; model_id: number; color_id: number; size_id: number } | undefined;
     if (!o) return null;
     const bal = (
       db
@@ -105,7 +103,14 @@ function packSourceInfo(
        WHERE id = ? AND office_id = ? AND voided_at IS NULL`,
     )
     .get(lotId, office.id) as
-    | { doc_no: string; model_id: number; color_id: number; size_id: number; staff_id: number; kind: string }
+    | {
+        doc_no: string;
+        model_id: number;
+        color_id: number;
+        size_id: number;
+        staff_id: number;
+        kind: string;
+      }
     | undefined;
   if (!bundle || bundle.kind !== 'bundle') return null;
   const bal = (
@@ -197,9 +202,17 @@ export function createPackIssue(
             `SELECT packing_lot_type, packing_lot_id, qty_pcs FROM pack_allocations
              WHERE pack_issue_id = ? ORDER BY id`,
           )
-          .all(input.lotId) as Array<{ packing_lot_type: 'check_issue' | 'opening'; packing_lot_id: number; qty_pcs: number }>;
+          .all(input.lotId) as Array<{
+          packing_lot_type: 'check_issue' | 'opening';
+          packing_lot_id: number;
+          qty_pcs: number;
+        }>;
         const takes = splitFifo(
-          bundleAllocs.map((a) => ({ lotType: a.packing_lot_type, lotId: a.packing_lot_id, qty: a.qty_pcs })),
+          bundleAllocs.map((a) => ({
+            lotType: a.packing_lot_type,
+            lotId: a.packing_lot_id,
+            qty: a.qty_pcs,
+          })),
           input.qtyPcs,
         );
         for (const take of takes) insertAlloc.run(id, take.lotType, take.lotId, take.qty);
@@ -366,7 +379,14 @@ export function recordPackResult(
       );
       status = 'completed';
     }
-    audit(db, { userId, action: 'record_result', entityType: 'pack_issue', entityId: packIssueId, new: input, ip });
+    audit(db, {
+      userId,
+      action: 'record_result',
+      entityType: 'pack_issue',
+      entityId: packIssueId,
+      new: input,
+      ip,
+    });
   });
   tx();
   return { ok: true, id: resultId, status };
@@ -401,7 +421,12 @@ export function voidPackIssue(
        WHERE ref_type = 'pack_issue' AND ref_id = ? AND qty < 0
        GROUP BY lot_type, lot_id`,
     )
-    .all(packIssueId) as Array<{ lot_type: string; lot_id: number; staff_id: number | null; qty: number }>;
+    .all(packIssueId) as Array<{
+    lot_type: string;
+    lot_id: number;
+    staff_id: number | null;
+    qty: number;
+  }>;
 
   const base = {
     officeId: office.id,
@@ -436,12 +461,9 @@ export function voidPackIssue(
       ],
       userId,
     );
-    db.prepare('UPDATE pack_issues SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?').run(
-      nowIso(),
-      reason,
-      userId,
-      packIssueId,
-    );
+    db.prepare(
+      'UPDATE pack_issues SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
+    ).run(nowIso(), reason, userId, packIssueId);
     // Pieces just flowed back onto their source. If that source was a BUNDLE which had
     // been marked completed when it was emptied, it is holding stock again — reopen it,
     // or those pieces could never be packed from the bundle again.
@@ -461,7 +483,14 @@ export function voidPackIssue(
         ).run(c.lot_id);
       }
     }
-    audit(db, { userId, action: 'void', entityType: 'pack_issue', entityId: packIssueId, new: { reason }, ip });
+    audit(db, {
+      userId,
+      action: 'void',
+      entityType: 'pack_issue',
+      entityId: packIssueId,
+      new: { reason },
+      ip,
+    });
   });
   tx();
   return { ok: true, id: packIssueId };
@@ -538,7 +567,17 @@ export function createDispatch(
           `INSERT INTO fg_dispatches (doc_no, office_id, dispatch_date, model_id, color_id, size_id, qty_pcs, notes, created_by)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(docNo, office.id, input.dispatchDate, input.modelId, input.colorId, input.sizeId, input.qtyPcs, input.notes, userId);
+        .run(
+          docNo,
+          office.id,
+          input.dispatchDate,
+          input.modelId,
+          input.colorId,
+          input.sizeId,
+          input.qtyPcs,
+          input.notes,
+          userId,
+        );
       id = Number(info.lastInsertRowid);
 
       const lots = availableLots(db, {
@@ -571,7 +610,14 @@ export function createDispatch(
         })),
         userId,
       );
-      audit(db, { userId, action: 'create', entityType: 'fg_dispatch', entityId: id, new: { docNo, officeId: office.id, ...input }, ip });
+      audit(db, {
+        userId,
+        action: 'create',
+        entityType: 'fg_dispatch',
+        entityId: id,
+        new: { docNo, officeId: office.id, ...input },
+        ip,
+      });
       onCreated?.(id);
     });
     tx();
@@ -621,13 +667,17 @@ export function voidDispatch(
       })),
       userId,
     );
-    db.prepare('UPDATE fg_dispatches SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?').run(
-      nowIso(),
-      reason,
+    db.prepare(
+      'UPDATE fg_dispatches SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
+    ).run(nowIso(), reason, userId, id);
+    audit(db, {
       userId,
-      id,
-    );
-    audit(db, { userId, action: 'void', entityType: 'fg_dispatch', entityId: id, new: { reason }, ip });
+      action: 'void',
+      entityType: 'fg_dispatch',
+      entityId: id,
+      new: { reason },
+      ip,
+    });
   });
   tx();
   return { ok: true, id };

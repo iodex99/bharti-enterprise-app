@@ -70,7 +70,10 @@ export function staffAnalytics(db: Db, officeId: number): Array<Record<string, u
 }
 
 /** Staff pending dues, largest first; fully-paid staff drop out (mirrors contractors). */
-export function listStaffDues(db: Db, officeId: number): {
+export function listStaffDues(
+  db: Db,
+  officeId: number,
+): {
   items: Array<Record<string, unknown>>;
   totalDuesPaise: number;
 } {
@@ -143,7 +146,14 @@ export function createStaffPayment(
         userId,
       );
     id = Number(info.lastInsertRowid);
-    audit(db, { userId, action: 'create', entityType: 'staff_payment', entityId: id, new: { docNo, officeId: office.id, ...input }, ip });
+    audit(db, {
+      userId,
+      action: 'create',
+      entityType: 'staff_payment',
+      entityId: id,
+      new: { docNo, officeId: office.id, ...input },
+      ip,
+    });
     onCreated?.(id);
   });
   tx();
@@ -167,7 +177,14 @@ export function voidStaffPayment(
     db.prepare(
       'UPDATE staff_payments SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
     ).run(nowIso(), reason, userId, id);
-    audit(db, { userId, action: 'void', entityType: 'staff_payment', entityId: id, new: { reason }, ip });
+    audit(db, {
+      userId,
+      action: 'void',
+      entityType: 'staff_payment',
+      entityId: id,
+      new: { reason },
+      ip,
+    });
   });
   tx();
   return { ok: true, id };

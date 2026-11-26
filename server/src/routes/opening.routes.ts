@@ -21,15 +21,26 @@ export function openingRoutes(): Router {
     res.json({ items: listOpeningBalances(getDb(), officeOf(req).id) });
   });
 
-  router.post('/', idempotencyGuard('opening_balance'), validateBody(openingBalanceSchema), (req, res) => {
-    const result = createOpeningBalance(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null);
-    if (!result.ok) {
-      res.status(result.code).json({ error: result.error });
-      return;
-    }
-    recordIdempotency(getDb(), res, result.id);
-    res.status(201).json({ id: result.id, docNo: result.docNo });
-  });
+  router.post(
+    '/',
+    idempotencyGuard('opening_balance'),
+    validateBody(openingBalanceSchema),
+    (req, res) => {
+      const result = createOpeningBalance(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+      );
+      if (!result.ok) {
+        res.status(result.code).json({ error: result.error });
+        return;
+      }
+      recordIdempotency(getDb(), res, result.id);
+      res.status(201).json({ id: result.id, docNo: result.docNo });
+    },
+  );
 
   router.post('/:id/void', validateBody(voidSchema), (req, res) => {
     const result = voidOpeningBalance(
@@ -40,7 +51,9 @@ export function openingRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;

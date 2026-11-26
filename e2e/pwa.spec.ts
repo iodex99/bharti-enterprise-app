@@ -38,9 +38,13 @@ test('PWA manifest and service worker install; /api is never served from cache',
   expect(controlled).toBe(true);
 
   // /api stays live THROUGH the service worker: uptime must move between calls
-  const uptime1 = await page.evaluate(async () => (await (await fetch('/api/system/health')).json()).uptimeSeconds);
+  const uptime1 = await page.evaluate(
+    async () => (await (await fetch('/api/system/health')).json()).uptimeSeconds,
+  );
   await page.waitForTimeout(1500);
-  const uptime2 = await page.evaluate(async () => (await (await fetch('/api/system/health')).json()).uptimeSeconds);
+  const uptime2 = await page.evaluate(
+    async () => (await (await fetch('/api/system/health')).json()).uptimeSeconds,
+  );
   expect(uptime2).toBeGreaterThan(uptime1 as number);
 });
 

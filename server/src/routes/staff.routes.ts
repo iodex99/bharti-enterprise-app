@@ -42,8 +42,13 @@ export function staffRoutes(): Router {
     idempotencyGuard('staff_payment'),
     validateBody(staffPaymentSchema),
     (req, res) => {
-      const result = createStaffPayment(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
-        recordIdempotency(getDb(), res, id),
+      const result = createStaffPayment(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+        (id) => recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
@@ -62,7 +67,9 @@ export function staffRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;

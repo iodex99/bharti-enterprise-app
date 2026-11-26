@@ -1,9 +1,4 @@
-import {
-  GENESIS_REF_TYPES,
-  TERMINAL_REF_TYPES,
-  type RefType,
-  type Stage,
-} from '@shared';
+import { GENESIS_REF_TYPES, TERMINAL_REF_TYPES, type RefType, type Stage } from '@shared';
 import type { Db } from '../db/connection';
 
 /**
@@ -76,7 +71,9 @@ export function postMovements(db: Db, movements: Movement[], userId: number): vo
       throw new LedgerError('Every movement must carry its office.');
     }
     if (m.stage === 'RAW' ? m.sizeId !== null : m.sizeId === null) {
-      throw new LedgerError(`size is ${m.stage === 'RAW' ? 'not allowed' : 'required'} for ${m.stage}.`);
+      throw new LedgerError(
+        `size is ${m.stage === 'RAW' ? 'not allowed' : 'required'} for ${m.stage}.`,
+      );
     }
     if (GENESIS.has(m.refType) && m.qty < 0) {
       throw new LedgerError(`${m.refType} may only create stock (positive qty).`);
@@ -216,7 +213,10 @@ export function availableLots(
  * Pure FIFO splitter: how much to take from which lot. Exported for unit tests.
  * Throws when the pool cannot cover the requirement.
  */
-export function splitFifo(lots: Array<{ lotType: LotType; lotId: number; qty: number }>, needed: number): Array<{ lotType: LotType; lotId: number; qty: number }> {
+export function splitFifo(
+  lots: Array<{ lotType: LotType; lotId: number; qty: number }>,
+  needed: number,
+): Array<{ lotType: LotType; lotId: number; qty: number }> {
   if (!Number.isInteger(needed) || needed <= 0) {
     throw new LedgerError(`FIFO requirement must be a positive integer (got ${needed}).`);
   }

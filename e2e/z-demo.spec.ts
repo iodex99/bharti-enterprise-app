@@ -37,9 +37,7 @@ test('admin enters demo mode from the UI, sees demo data + banner, exits back to
 
   // enter demo (first run creates it; later runs reuse it)
   await page.goto('/admin/system');
-  await page
-    .getByRole('button', { name: /Create & enter demo mode|Enter demo mode/ })
-    .click();
+  await page.getByRole('button', { name: /Create & enter demo mode|Enter demo mode/ }).click();
 
   // switching signs us out → login page with the demo hint
   await expect(page).toHaveURL(/\/login/, { timeout: 30_000 });

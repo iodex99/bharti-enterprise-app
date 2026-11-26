@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatBusinessDate, formatPaise, formatPieces, label as enumLabel, PAYMENT_MODES, todayIST } from '@shared';
+import {
+  formatBusinessDate,
+  formatPaise,
+  formatPieces,
+  label as enumLabel,
+  PAYMENT_MODES,
+  todayIST,
+} from '@shared';
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
@@ -106,7 +113,11 @@ export default function ContractorsPage() {
               },
             },
             { key: 'name', header: 'Contractor', className: 'font-medium' },
-            { key: 'totalJobs', header: 'Jobs', render: (r) => `${r.totalJobs} (${r.openJobs} open)` },
+            {
+              key: 'totalJobs',
+              header: 'Jobs',
+              render: (r) => `${r.totalJobs} (${r.openJobs} open)`,
+            },
             { key: 'issuedPcs', header: 'Issued', render: (r) => formatPieces(r.issuedPcs) },
             { key: 'receivedPcs', header: 'Received', render: (r) => formatPieces(r.receivedPcs) },
             {
@@ -116,7 +127,9 @@ export default function ContractorsPage() {
                 <span>
                   {r.shortagePcs > 0 && <Badge tone="red">−{formatPieces(r.shortagePcs)}</Badge>}{' '}
                   {r.excessPcs > 0 && <Badge tone="blue">+{formatPieces(r.excessPcs)}</Badge>}
-                  {r.shortagePcs === 0 && r.excessPcs === 0 && <span className="text-gray-300">—</span>}
+                  {r.shortagePcs === 0 && r.excessPcs === 0 && (
+                    <span className="text-gray-300">—</span>
+                  )}
                 </span>
               ),
             },
@@ -135,7 +148,11 @@ export default function ContractorsPage() {
               header: 'Avg turnaround',
               render: (r) => (r.avgTurnaroundDays == null ? '—' : `${r.avgTurnaroundDays} days`),
             },
-            { key: 'jobWorkCostPaise', header: 'Job-work cost', render: (r) => formatPaise(r.jobWorkCostPaise) },
+            {
+              key: 'jobWorkCostPaise',
+              header: 'Job-work cost',
+              render: (r) => formatPaise(r.jobWorkCostPaise),
+            },
             {
               key: 'duesPaise',
               header: 'Dues',
@@ -160,7 +177,11 @@ export default function ContractorsPage() {
         <DataTable
           columns={[
             { key: 'docNo', header: 'Doc', className: 'font-mono text-xs' },
-            { key: 'paymentDate', header: 'Date', render: (r) => formatBusinessDate(r.paymentDate) },
+            {
+              key: 'paymentDate',
+              header: 'Date',
+              render: (r) => formatBusinessDate(r.paymentDate),
+            },
             { key: 'contractorName', header: 'Contractor', className: 'font-medium' },
             {
               key: 'amountPaise',
@@ -183,7 +204,11 @@ export default function ContractorsPage() {
             isAdmin
               ? (row) =>
                   row.voidedAt ? null : (
-                    <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
+                    <Button
+                      variant="ghost"
+                      className="text-red-600"
+                      onClick={() => setVoidFor(row)}
+                    >
                       Void
                     </Button>
                   )
@@ -192,10 +217,24 @@ export default function ContractorsPage() {
         />
       )}
 
-      <PaymentModal key={String(payOpen)} open={payOpen} onClose={() => setPayOpen(false)} onDone={invalidate} dues={analytics?.items ?? []} />
+      <PaymentModal
+        key={String(payOpen)}
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        onDone={invalidate}
+        dues={analytics?.items ?? []}
+      />
       <VoidModal
         entity="payment"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/contractors/payments/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? {
+                id: voidFor.id,
+                label: voidFor.docNo,
+                url: `/api/contractors/payments/${voidFor.id}/void`,
+              }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
@@ -257,7 +296,12 @@ function PaymentModal({
           <MasterSelect master="contractors" value={contractorId} onChange={setContractorId} />
         </Field>
         <Field label="Payment date">
-          <TextInput type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={paymentDate}
+            onChange={(e) => setPaymentDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Amount">
           <MoneyInput paise={amountPaise} onChange={setAmount} />

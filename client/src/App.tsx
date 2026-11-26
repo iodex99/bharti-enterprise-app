@@ -35,7 +35,13 @@ function FullScreenSpinner() {
 }
 
 /** Auth gate + forced password change interceptor. */
-function Protected({ children, roles }: { children: ReactNode; roles?: Array<'admin' | 'operator' | 'owner'> }) {
+function Protected({
+  children,
+  roles,
+}: {
+  children: ReactNode;
+  roles?: Array<'admin' | 'operator' | 'owner'>;
+}) {
   const { user, loading } = useAuth();
   if (loading) return <FullScreenSpinner />;
   if (!user) return <Navigate to="/login" replace />;
@@ -51,7 +57,9 @@ export default function App() {
     <Routes>
       <Route
         path="/login"
-        element={loading ? <FullScreenSpinner /> : user ? <Navigate to="/" replace /> : <LoginPage />}
+        element={
+          loading ? <FullScreenSpinner /> : user ? <Navigate to="/" replace /> : <LoginPage />
+        }
       />
       <Route
         path="/setup"

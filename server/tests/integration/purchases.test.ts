@@ -105,14 +105,15 @@ describe('purchases', () => {
     expect(replay.body.replayed).toBe(true);
     expect(replay.body.id).toBe(first.body.id);
 
-    const count = (
-      ctx.db.prepare('SELECT COUNT(*) AS n FROM purchases').get() as { n: number }
-    ).n;
+    const count = (ctx.db.prepare('SELECT COUNT(*) AS n FROM purchases').get() as { n: number }).n;
     expect(count).toBe(2); // first test's + this one — not three
   });
 
   it('owner cannot create; operator cannot void; admin void reverses stock', async () => {
-    const asOwner = await request(ctx.app).post('/api/purchases').set('Cookie', owner).send(PURCHASE);
+    const asOwner = await request(ctx.app)
+      .post('/api/purchases')
+      .set('Cookie', owner)
+      .send(PURCHASE);
     expect(asOwner.status).toBe(403);
 
     const created = await request(ctx.app)
@@ -238,29 +239,40 @@ describe('opening balances', () => {
     const raw = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'RAW', colorId: 1, qty: 5000, widthInchC: 4400, note: 'register carry-over' });
+      .send({
+        balanceDate: '2026-07-01',
+        stage: 'RAW',
+        colorId: 1,
+        qty: 5000,
+        widthInchC: 4400,
+        note: 'register carry-over',
+      });
     expect(raw.status).toBe(201);
     expect(raw.body.docNo).toMatch(/^OPB-/);
 
-    const wip = await request(ctx.app)
-      .post('/api/opening-balances')
-      .set('Cookie', admin)
-      .send({
-        balanceDate: '2026-07-01',
-        stage: 'WIP',
-        modelCode: 'M1',
-        colorId: 1,
-        sizeId: 1,
-        contractorId: 1,
-        qty: 240,
-        note: 'with Meena',
-      });
+    const wip = await request(ctx.app).post('/api/opening-balances').set('Cookie', admin).send({
+      balanceDate: '2026-07-01',
+      stage: 'WIP',
+      modelCode: 'M1',
+      colorId: 1,
+      sizeId: 1,
+      contractorId: 1,
+      qty: 240,
+      note: 'with Meena',
+    });
     expect(wip.status).toBe(201);
 
     const fg = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'FG', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 600 });
+      .send({
+        balanceDate: '2026-07-01',
+        stage: 'FG',
+        modelCode: 'M1',
+        colorId: 1,
+        sizeId: 1,
+        qty: 600,
+      });
     expect(fg.status).toBe(201);
 
     const wipStock = await request(ctx.app).get('/api/stock/WIP').set('Cookie', owner);
@@ -276,7 +288,14 @@ describe('opening balances', () => {
     const wipNoContractor = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'WIP', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 10 });
+      .send({
+        balanceDate: '2026-07-01',
+        stage: 'WIP',
+        modelCode: 'M1',
+        colorId: 1,
+        sizeId: 1,
+        qty: 10,
+      });
     expect(wipNoContractor.status).toBe(400);
     expect(wipNoContractor.body.error).toMatch(/contractor/i);
 
@@ -291,13 +310,27 @@ describe('opening balances', () => {
     const asOperator = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', operator)
-      .send({ balanceDate: '2026-07-01', stage: 'FG', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 5 });
+      .send({
+        balanceDate: '2026-07-01',
+        stage: 'FG',
+        modelCode: 'M1',
+        colorId: 1,
+        sizeId: 1,
+        qty: 5,
+      });
     expect(asOperator.status).toBe(403);
 
     const created = await request(ctx.app)
       .post('/api/opening-balances')
       .set('Cookie', admin)
-      .send({ balanceDate: '2026-07-01', stage: 'CUT', modelCode: 'M1', colorId: 1, sizeId: 1, qty: 60 });
+      .send({
+        balanceDate: '2026-07-01',
+        stage: 'CUT',
+        modelCode: 'M1',
+        colorId: 1,
+        sizeId: 1,
+        qty: 60,
+      });
     const voided = await request(ctx.app)
       .post(`/api/opening-balances/${created.body.id}/void`)
       .set('Cookie', admin)

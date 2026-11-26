@@ -52,9 +52,9 @@ function lineTotals(db: Db, lineId: number): { stitched: number; unstitched: num
 
 /** Recompute the denormalized card status from its lines. Call inside the transaction. */
 function refreshJobStatus(db: Db, jobCardId: number): string {
-  const card = db
-    .prepare('SELECT status FROM job_cards WHERE id = ?')
-    .get(jobCardId) as { status: string };
+  const card = db.prepare('SELECT status FROM job_cards WHERE id = ?').get(jobCardId) as {
+    status: string;
+  };
   if (card.status === 'closed_with_discrepancy') return card.status;
 
   const lines = db
@@ -158,11 +158,9 @@ function issueCardLines(
 
 function labelFor(db: Db, modelId: number, sizeId: number): string {
   const m = db.prepare('SELECT code FROM models WHERE id = ?').get(modelId) as
-    | { code: string }
-    | undefined;
+    { code: string } | undefined;
   const s = db.prepare('SELECT code FROM sizes WHERE id = ?').get(sizeId) as
-    | { code: string }
-    | undefined;
+    { code: string } | undefined;
   return `${m?.code ?? '?'}-${s?.code ?? '?'}`;
 }
 
@@ -390,7 +388,11 @@ export function createReceipt(
     .get(jobCardId, office.id) as Record<string, unknown> | undefined;
   if (!card) return { ok: false, code: 404, error: 'Job card not found.' };
   if (card.status === 'closed_with_discrepancy') {
-    return { ok: false, code: 409, error: 'This job was closed with a discrepancy — no more receipts.' };
+    return {
+      ok: false,
+      code: 409,
+      error: 'This job was closed with a discrepancy — no more receipts.',
+    };
   }
   // A settled card takes nothing more. The excess path exists for a contractor handing
   // back more than PENDING, not for reopening a finished job: without this, picking the
@@ -501,7 +503,14 @@ export function createReceipt(
             db.prepare(
               `INSERT INTO discrepancies (stage, office_id, ref_type, ref_id, qty_pcs, reason, note, created_by)
                VALUES ('WIP', ?, 'job_card_line', ?, ?, ?, ?, ?)`,
-            ).run(office.id, jobLine.id, excess, rl.discrepancyReason, rl.discrepancyNote ?? '', userId);
+            ).run(
+              office.id,
+              jobLine.id,
+              excess,
+              rl.discrepancyReason,
+              rl.discrepancyNote ?? '',
+              userId,
+            );
           }
           postMovements(db, movements, userId);
         } else {
@@ -516,7 +525,11 @@ export function createReceipt(
               `SELECT cut_lot_type, cut_lot_id, qty_pcs FROM job_allocations
                WHERE job_card_line_id = ? ORDER BY id DESC`,
             )
-            .all(jobLine.id) as Array<{ cut_lot_type: 'cutting_line' | 'opening'; cut_lot_id: number; qty_pcs: number }>;
+            .all(jobLine.id) as Array<{
+            cut_lot_type: 'cutting_line' | 'opening';
+            cut_lot_id: number;
+            qty_pcs: number;
+          }>;
           const movements: Movement[] = [
             {
               stage: 'WIP',
@@ -559,7 +572,14 @@ export function createReceipt(
       }
 
       status = refreshJobStatus(db, jobCardId);
-      audit(db, { userId, action: 'create', entityType: 'job_receipt', entityId: id, new: { docNo, jobCardId, ...input }, ip });
+      audit(db, {
+        userId,
+        action: 'create',
+        entityType: 'job_receipt',
+        entityId: id,
+        new: { docNo, jobCardId, ...input },
+        ip,
+      });
       onCreated?.(id);
     });
     tx();
@@ -682,7 +702,11 @@ export function voidJobCard(
         .prepare(
           `SELECT cut_lot_type, cut_lot_id, qty_pcs FROM job_allocations WHERE job_card_line_id = ?`,
         )
-        .all(line.id) as Array<{ cut_lot_type: 'cutting_line' | 'opening'; cut_lot_id: number; qty_pcs: number }>;
+        .all(line.id) as Array<{
+        cut_lot_type: 'cutting_line' | 'opening';
+        cut_lot_id: number;
+        qty_pcs: number;
+      }>;
       const movements: Movement[] = [
         {
           stage: 'WIP',
@@ -716,13 +740,17 @@ export function voidJobCard(
       // a new line that a stale allocation silently claims (with the old quantity).
       db.prepare('DELETE FROM job_allocations WHERE job_card_line_id = ?').run(line.id);
     }
-    db.prepare('UPDATE job_cards SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?').run(
-      nowIso(),
-      reason,
+    db.prepare(
+      'UPDATE job_cards SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
+    ).run(nowIso(), reason, userId, jobCardId);
+    audit(db, {
       userId,
-      jobCardId,
-    );
-    audit(db, { userId, action: 'void', entityType: 'job_card', entityId: jobCardId, new: { reason }, ip });
+      action: 'void',
+      entityType: 'job_card',
+      entityId: jobCardId,
+      new: { reason },
+      ip,
+    });
   });
   tx();
   return { ok: true, id: jobCardId };
@@ -796,14 +824,8 @@ export function listJobCards(
       const t = totalsStmt.get(line.id) as { stitched: number; unstitched: number };
       line.receivedPcs = t.stitched;
       line.returnedPcs = t.unstitched;
-      line.pendingPcs = Math.max(
-        0,
-        (line.qtyIssuedPcs as number) - t.stitched - t.unstitched,
-      );
-      line.excessPcs = Math.max(
-        0,
-        t.stitched + t.unstitched - (line.qtyIssuedPcs as number),
-      );
+      line.pendingPcs = Math.max(0, (line.qtyIssuedPcs as number) - t.stitched - t.unstitched);
+      line.excessPcs = Math.max(0, t.stitched + t.unstitched - (line.qtyIssuedPcs as number));
       issued += line.qtyIssuedPcs as number;
       received += t.stitched;
       returned += t.unstitched;
@@ -816,17 +838,24 @@ export function listJobCards(
     card.pendingPcs = lines.reduce((s, l) => s + (l.pendingPcs as number), 0);
     card.pendingCheckPcs = (pendingCheckStmt.get(card.id) as { pcs: number }).pcs;
     card.jobCostPaise = lines.reduce(
-      (s, l) =>
-        s + Math.round(((l.receivedPcs as number) * (l.ratePaisePerDozen as number)) / 12),
+      (s, l) => s + Math.round(((l.receivedPcs as number) * (l.ratePaisePerDozen as number)) / 12),
       0,
     );
     // no receipts yet → the card can still be edited or deleted
-    card.editable = !card.voidedAt && received === 0 && returned === 0 && card.status !== 'closed_with_discrepancy';
+    card.editable =
+      !card.voidedAt &&
+      received === 0 &&
+      returned === 0 &&
+      card.status !== 'closed_with_discrepancy';
   }
   return cards;
 }
 
-export function jobReceiptsFor(db: Db, officeId: number, jobCardId: number): Array<Record<string, unknown>> {
+export function jobReceiptsFor(
+  db: Db,
+  officeId: number,
+  jobCardId: number,
+): Array<Record<string, unknown>> {
   return db
     .prepare(
       `SELECT r.id, r.doc_no AS docNo, r.receipt_date AS receiptDate, r.image_path AS imagePath, r.notes,

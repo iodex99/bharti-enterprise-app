@@ -30,15 +30,13 @@ function legacyCm(lenInchC: number): number {
  */
 export function rawClothModelId(db: Db): number {
   const row = db.prepare('SELECT id FROM models WHERE code = ?').get(RAW_CLOTH_MODEL_CODE) as
-    | { id: number }
-    | undefined;
+    { id: number } | undefined;
   if (!row) throw new Error('RAW-CLOTH sentinel model missing — migrations not applied?');
   return row.id;
 }
 
 export type ServiceResult<T = { id: number }> =
-  | ({ ok: true } & T)
-  | { ok: false; code: number; error: string };
+  ({ ok: true } & T) | { ok: false; code: number; error: string };
 
 export function assertActive(db: Db, table: string, id: number, label: string): string | null {
   const row = db

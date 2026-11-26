@@ -150,9 +150,7 @@ export function DataTable<T extends { id: number | string }>({
             <Select
               aria-label={`Filter ${facet.label}`}
               value={facetValues[facet.key] ?? ''}
-              onChange={(e) =>
-                setFacetValues({ ...facetValues, [facet.key]: e.target.value })
-              }
+              onChange={(e) => setFacetValues({ ...facetValues, [facet.key]: e.target.value })}
             >
               <option value="">{facet.label}: all</option>
               {(facetOptions[facet.key] ?? []).map((opt) => (
@@ -250,7 +248,11 @@ export function DataTable<T extends { id: number | string }>({
         // role table/row/cell so a card behaves exactly like its table row
         <div className="space-y-2" role="table">
           {filtered.map((row) => (
-            <div key={row.id} role="row" className="rounded-2xl border border-gray-200 bg-white p-3">
+            <div
+              key={row.id}
+              role="row"
+              className="rounded-2xl border border-gray-200 bg-white p-3"
+            >
               <dl className="space-y-1.5">
                 {columns.map((c) => {
                   const content = c.render ? c.render(row) : String(columnValue(c, row) ?? '');
@@ -320,12 +322,13 @@ export function DataTable<T extends { id: number | string }>({
             </thead>
             <tbody>
               {filtered.map((row) => (
-                <tr key={row.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50">
+                <tr
+                  key={row.id}
+                  className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50"
+                >
                   {columns.map((c) => (
                     <td key={c.key} className={clsx('px-4 py-2.5 align-middle', c.className)}>
-                      {c.render
-                        ? c.render(row)
-                        : String(columnValue(c, row) ?? '')}
+                      {c.render ? c.render(row) : String(columnValue(c, row) ?? '')}
                     </td>
                   ))}
                   {actions && (
@@ -337,7 +340,10 @@ export function DataTable<T extends { id: number | string }>({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + (actions ? 1 : 0)} className="p-6 text-center text-sm text-gray-400">
+                  <td
+                    colSpan={columns.length + (actions ? 1 : 0)}
+                    className="p-6 text-center text-sm text-gray-400"
+                  >
                     No matches for the current filters
                   </td>
                 </tr>

@@ -1,10 +1,26 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PAYMENT_MODES, formatBusinessDate, formatPaise, formatPieces, label as enumLabel, todayIST } from '@shared';
+import {
+  PAYMENT_MODES,
+  formatBusinessDate,
+  formatPaise,
+  formatPieces,
+  label as enumLabel,
+  todayIST,
+} from '@shared';
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  Select,
+  TextInput,
+  ThumbLink,
+} from '../../components/ui';
 import { MoneyInput } from '../../components/inputs';
 
 type ContractorDue = {
@@ -54,7 +70,8 @@ export default function DuesPage() {
 
   const { data: contractorDues, isLoading } = useQuery({
     queryKey: ['contractors', 'dues'],
-    queryFn: () => api.get<{ items: ContractorDue[]; totalDuesPaise: number }>('/api/contractors/dues'),
+    queryFn: () =>
+      api.get<{ items: ContractorDue[]; totalDuesPaise: number }>('/api/contractors/dues'),
   });
   const { data: staffDues, isLoading: staffLoading } = useQuery({
     queryKey: ['staff', 'dues'],
@@ -83,8 +100,8 @@ export default function DuesPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Pending Dues</h1>
           <p className="text-sm text-gray-500">
-            Who is owed what right now — record payments here (part-payments with their
-            date are fine).
+            Who is owed what right now — record payments here (part-payments with their date are
+            fine).
           </p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-right">
@@ -147,7 +164,13 @@ export default function DuesPage() {
                     variant="ghost"
                     className="text-emerald-700"
                     onClick={() =>
-                      setPayFor({ kind: 'contractor', id: row.contractorId, name: row.name, duesPaise: row.duesPaise, imagePath: row.imagePath })
+                      setPayFor({
+                        kind: 'contractor',
+                        id: row.contractorId,
+                        name: row.name,
+                        duesPaise: row.duesPaise,
+                        imagePath: row.imagePath,
+                      })
                     }
                   >
                     Record payment
@@ -159,7 +182,9 @@ export default function DuesPage() {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-bold text-gray-900">✅ Checkers &amp; packers (per-dozen pay)</h2>
+        <h2 className="mb-2 text-sm font-bold text-gray-900">
+          ✅ Checkers &amp; packers (per-dozen pay)
+        </h2>
         <DataTable
           columns={[
             { key: 'name', header: 'Name', className: 'font-medium' },
@@ -214,7 +239,13 @@ export default function DuesPage() {
                     variant="ghost"
                     className="text-emerald-700"
                     onClick={() =>
-                      setPayFor({ kind: 'staff', id: row.staffId, name: row.name, duesPaise: row.duesPaise, imagePath: row.imagePath })
+                      setPayFor({
+                        kind: 'staff',
+                        id: row.staffId,
+                        name: row.name,
+                        duesPaise: row.duesPaise,
+                        imagePath: row.imagePath,
+                      })
                     }
                   >
                     Record payment
@@ -225,7 +256,12 @@ export default function DuesPage() {
         />
       </section>
 
-      <PaymentModal key={payFor ? `${payFor.kind}-${payFor.id}` : 'none'} payee={payFor} onClose={() => setPayFor(null)} onDone={invalidate} />
+      <PaymentModal
+        key={payFor ? `${payFor.kind}-${payFor.id}` : 'none'}
+        payee={payFor}
+        onClose={() => setPayFor(null)}
+        onDone={invalidate}
+      />
     </div>
   );
 }
@@ -292,18 +328,35 @@ function PaymentModal({
           <span>
             Pending dues: <strong>{formatPaise(payee.duesPaise)}</strong>
             {remaining != null && remaining > 0 && (
-              <> · after this payment: <strong>{formatPaise(remaining)}</strong> still due</>
+              <>
+                {' '}
+                · after this payment: <strong>{formatPaise(remaining)}</strong> still due
+              </>
             )}
           </span>
           {payee.imagePath && (
-            <a href={payee.imagePath} target="_blank" rel="noreferrer" title="Open the payment QR code">
-              <img src={payee.imagePath} alt="Payment QR" className="h-16 w-16 rounded border border-amber-200 object-cover" />
+            <a
+              href={payee.imagePath}
+              target="_blank"
+              rel="noreferrer"
+              title="Open the payment QR code"
+            >
+              <img
+                src={payee.imagePath}
+                alt="Payment QR"
+                className="h-16 w-16 rounded border border-amber-200 object-cover"
+              />
             </a>
           )}
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Payment date">
-            <TextInput type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+            <TextInput
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              required
+            />
           </Field>
           <Field label="Amount" hint="Part-payments are fine — the rest stays pending">
             <MoneyInput paise={amount} onChange={setAmount} placeholder="e.g. 500.00" />

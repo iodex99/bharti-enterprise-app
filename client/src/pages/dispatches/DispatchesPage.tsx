@@ -53,7 +53,11 @@ export default function DispatchesPage() {
       <DataTable
         columns={[
           { key: 'docNo', header: 'Doc', className: 'font-mono text-xs font-medium' },
-          { key: 'dispatchDate', header: 'Date', render: (r) => formatBusinessDate(r.dispatchDate) },
+          {
+            key: 'dispatchDate',
+            header: 'Date',
+            render: (r) => formatBusinessDate(r.dispatchDate),
+          },
           {
             key: 'item',
             header: 'Item',
@@ -102,10 +106,19 @@ export default function DispatchesPage() {
         }
       />
 
-      <NewDispatchModal key={String(createOpen)} open={createOpen} onClose={() => setCreateOpen(false)} onDone={invalidate} />
+      <NewDispatchModal
+        key={String(createOpen)}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={invalidate}
+      />
       <VoidModal
         entity="dispatch"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/dispatches/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? { id: voidFor.id, label: voidFor.docNo, url: `/api/dispatches/${voidFor.id}/void` }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
@@ -113,7 +126,15 @@ export default function DispatchesPage() {
   );
 }
 
-function NewDispatchModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+function NewDispatchModal({
+  open,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [dispatchDate, setDate] = useState(todayIST());
   const [modelId, setModelId] = useState<number | null>(null);
   const [colorId, setColorId] = useState<number | null>(null);
@@ -123,7 +144,8 @@ function NewDispatchModal({ open, onClose, onDone }: { open: boolean; onClose: (
   const [error, setError] = useState('');
 
   const save = useMutation({
-    mutationFn: () => api.post('/api/dispatches', { dispatchDate, modelId, colorId, sizeId, qtyPcs, notes }),
+    mutationFn: () =>
+      api.post('/api/dispatches', { dispatchDate, modelId, colorId, sizeId, qtyPcs, notes }),
     onSuccess: () => {
       onDone();
       onClose();
@@ -141,7 +163,12 @@ function NewDispatchModal({ open, onClose, onDone }: { open: boolean; onClose: (
         className="space-y-4"
       >
         <Field label="Dispatch date">
-          <TextInput type="date" value={dispatchDate} onChange={(e) => setDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={dispatchDate}
+            onChange={(e) => setDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Code">
           <ProductSelect value={modelId} onChange={setModelId} />
@@ -167,8 +194,13 @@ function NewDispatchModal({ open, onClose, onDone }: { open: boolean; onClose: (
   );
 }
 
-
-function ProductSelect({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+function ProductSelect({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (id: number | null) => void;
+}) {
   const { data: products } = useProducts();
   return (
     <select

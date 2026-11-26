@@ -11,7 +11,17 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, MiniTable, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  MiniTable,
+  Modal,
+  Select,
+  TextInput,
+  ThumbLink,
+} from '../../components/ui';
 import { DzPcInput, MoneyInput } from '../../components/inputs';
 import { useMasterOptions } from '../../api/masters';
 import { VoidModal } from '../purchases/PurchasesPage';
@@ -134,7 +144,9 @@ export default function CheckingPage() {
           Received from contractors but not yet verified — allot each batch to a checker.
         </p>
         {pending && pending.items.length === 0 && (
-          <p className="text-sm text-gray-400">Nothing waiting — every received batch is with a checker.</p>
+          <p className="text-sm text-gray-400">
+            Nothing waiting — every received batch is with a checker.
+          </p>
         )}
         {pending && pending.items.length > 0 && (
           <MiniTable
@@ -146,7 +158,11 @@ export default function CheckingPage() {
                 className: 'text-gray-500',
                 render: (b) => (b.receiptDate ? formatBusinessDate(b.receiptDate) : '—'),
               },
-              { header: 'From', className: 'font-medium', render: (b) => b.contractorName ?? 'Opening stock' },
+              {
+                header: 'From',
+                className: 'font-medium',
+                render: (b) => b.contractorName ?? 'Opening stock',
+              },
               {
                 header: 'Receipt',
                 className: 'font-mono text-xs text-gray-500',
@@ -163,13 +179,19 @@ export default function CheckingPage() {
               },
               {
                 header: 'Waiting',
-                render: (b) => <span className="font-semibold text-red-700">{formatPieces(b.qtyPcs)}</span>,
+                render: (b) => (
+                  <span className="font-semibold text-red-700">{formatPieces(b.qtyPcs)}</span>
+                ),
               },
               {
                 header: 'Photo',
                 render: (b) =>
                   b.imagePath ? (
-                    <ThumbLink href={b.imagePath} label="view" title="Photo of the returned goods" />
+                    <ThumbLink
+                      href={b.imagePath}
+                      label="view"
+                      title="Photo of the returned goods"
+                    />
                   ) : (
                     <span className="text-gray-300">—</span>
                   ),
@@ -178,7 +200,11 @@ export default function CheckingPage() {
             actions={
               canWrite
                 ? (b) => (
-                    <Button variant="ghost" className="text-violet-700" onClick={() => setIssueFor(b)}>
+                    <Button
+                      variant="ghost"
+                      className="text-violet-700"
+                      onClick={() => setIssueFor(b)}
+                    >
                       Issue to checker
                     </Button>
                   )
@@ -201,8 +227,12 @@ export default function CheckingPage() {
               r.contractorName ? (
                 <span>
                   {r.contractorName}{' '}
-                  {r.receiptDocNo && <span className="font-mono text-xs text-gray-400">({r.receiptDocNo})</span>}{' '}
-                  {r.receiptImagePath && <ThumbLink href={r.receiptImagePath} title="Photo of the returned goods" />}
+                  {r.receiptDocNo && (
+                    <span className="font-mono text-xs text-gray-400">({r.receiptDocNo})</span>
+                  )}{' '}
+                  {r.receiptImagePath && (
+                    <ThumbLink href={r.receiptImagePath} title="Photo of the returned goods" />
+                  )}
                 </span>
               ) : (
                 <span className="text-gray-300">—</span>
@@ -302,13 +332,24 @@ export default function CheckingPage() {
                       </span>
                     ),
                   },
-                  { header: 'With packer', render: (p) => <Badge tone="blue">{formatPieces(p.heldPcs)}</Badge> },
-                  { header: 'Packed', className: 'text-emerald-700', render: (p) => formatPieces(p.packedPcs) },
+                  {
+                    header: 'With packer',
+                    render: (p) => <Badge tone="blue">{formatPieces(p.heldPcs)}</Badge>,
+                  },
+                  {
+                    header: 'Packed',
+                    className: 'text-emerald-700',
+                    render: (p) => formatPieces(p.packedPcs),
+                  },
                 ]}
                 actions={
                   canWrite
                     ? (p) => (
-                        <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(p)}>
+                        <Button
+                          variant="ghost"
+                          className="text-emerald-700"
+                          onClick={() => setPackResultFor(p)}
+                        >
                           Record packing
                         </Button>
                       )
@@ -347,12 +388,19 @@ export default function CheckingPage() {
                       </span>
                     ),
                   },
-                  { header: 'Kept aside', render: (b) => <Badge tone="blue">{formatPieces(b.heldPcs)}</Badge> },
+                  {
+                    header: 'Kept aside',
+                    render: (b) => <Badge tone="blue">{formatPieces(b.heldPcs)}</Badge>,
+                  },
                 ]}
                 actions={
                   canWrite
                     ? (b) => (
-                        <Button variant="ghost" className="text-emerald-700" onClick={() => setPackResultFor(b)}>
+                        <Button
+                          variant="ghost"
+                          className="text-emerald-700"
+                          onClick={() => setPackResultFor(b)}
+                        >
                           Pack from bundle
                         </Button>
                       )
@@ -379,7 +427,12 @@ export default function CheckingPage() {
         onDone={invalidate}
       />
       {packFor && (
-        <PackModal key={`pack-${packFor.id}`} issue={packFor} onClose={() => setPackFor(null)} onDone={invalidate} />
+        <PackModal
+          key={`pack-${packFor.id}`}
+          issue={packFor}
+          onClose={() => setPackFor(null)}
+          onDone={invalidate}
+        />
       )}
       <PackResultModal
         key={`pr-${packResultFor?.id ?? 'none'}`}
@@ -389,7 +442,11 @@ export default function CheckingPage() {
       />
       <VoidModal
         entity="check issue"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/checking/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? { id: voidFor.id, label: voidFor.docNo, url: `/api/checking/${voidFor.id}/void` }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
@@ -446,8 +503,14 @@ function IssueModal({
       >
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
           <strong>{batch.contractorName ?? 'Opening stock'}</strong>
-          {batch.receiptDocNo && <> · receipt <span className="font-mono text-xs">{batch.receiptDocNo}</span></>} ·{' '}
-          {batch.sizeCodeLabel} {batch.colorName} · <strong>{formatPieces(batch.qtyPcs)}</strong> waiting
+          {batch.receiptDocNo && (
+            <>
+              {' '}
+              · receipt <span className="font-mono text-xs">{batch.receiptDocNo}</span>
+            </>
+          )}{' '}
+          · {batch.sizeCodeLabel} {batch.colorName} · <strong>{formatPieces(batch.qtyPcs)}</strong>{' '}
+          waiting
           {batch.imagePath && (
             <>
               {' '}
@@ -456,7 +519,12 @@ function IssueModal({
           )}
         </div>
         <Field label="Date">
-          <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={issueDate}
+            onChange={(e) => setIssueDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Checker" hint="Any staff member can check or pack">
           <Select
@@ -480,8 +548,16 @@ function IssueModal({
         <Field label="Quantity" hint="Defaults to the whole batch — reduce to split it">
           <DzPcInput pieces={qtyPcs} onChange={setQty} />
         </Field>
-        <Field label="Checking pay per dozen" hint="Filled from the checker's usual rate — change it for this batch if needed">
-          <MoneyInput key={staffId ?? 'none'} paise={rate} onChange={setRate} placeholder="e.g. 3.00" />
+        <Field
+          label="Checking pay per dozen"
+          hint="Filled from the checker's usual rate — change it for this batch if needed"
+        >
+          <MoneyInput
+            key={staffId ?? 'none'}
+            paise={rate}
+            onChange={setRate}
+            placeholder="e.g. 3.00"
+          />
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending || !staffId || !qtyPcs} className="w-full">
@@ -504,7 +580,9 @@ function ResultModal({
 }) {
   const [resultDate, setResultDate] = useState(todayIST());
   const [passed, setPassed] = useState<number | null>(null);
-  const [rejections, setRejections] = useState<Array<{ reason: string; qtyPcs: number | null }>>([]);
+  const [rejections, setRejections] = useState<Array<{ reason: string; qtyPcs: number | null }>>(
+    [],
+  );
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
@@ -542,12 +620,17 @@ function ResultModal({
         <p className="rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-900">
           {issue.staffName} holds <strong>{formatPieces(issue.pendingPcs)}</strong> of{' '}
           {issue.sizeCodeLabel} {issue.colorName}
-          {issue.contractorName && <> (from {issue.contractorName})</>}. You can record
-          results in parts — this session covers {formatPieces(sessionTotal)}.
+          {issue.contractorName && <> (from {issue.contractorName})</>}. You can record results in
+          parts — this session covers {formatPieces(sessionTotal)}.
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Result date">
-            <TextInput type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} required />
+            <TextInput
+              type="date"
+              value={resultDate}
+              onChange={(e) => setResultDate(e.target.value)}
+              required
+            />
           </Field>
           <Field label="Passed">
             <DzPcInput pieces={passed} onChange={setPassed} />
@@ -556,7 +639,8 @@ function ResultModal({
 
         <div>
           <p className="mb-2 text-sm font-medium text-gray-700">
-            Rejected pieces {rejectedTotal > 0 && <span>— total {formatPieces(rejectedTotal)}</span>}
+            Rejected pieces{' '}
+            {rejectedTotal > 0 && <span>— total {formatPieces(rejectedTotal)}</span>}
           </p>
           {rejections.map((r, i) => (
             <div key={i} className="mb-2 flex items-end gap-2">
@@ -600,7 +684,9 @@ function ResultModal({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => setRejections([...rejections, { reason: 'stitching_issue', qtyPcs: null }])}
+            onClick={() =>
+              setRejections([...rejections, { reason: 'stitching_issue', qtyPcs: null }])
+            }
           >
             + Add rejected pieces (reason includes “missing”)
           </Button>
@@ -678,13 +764,18 @@ function PackModal({
         className="space-y-4"
       >
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          <strong>{formatPieces(issue.packablePcs)}</strong> passed by {issue.staffName} are
-          ready. 9 times out of 10 the checker packs their own goods — change the person
-          only if someone else will pack.
+          <strong>{formatPieces(issue.packablePcs)}</strong> passed by {issue.staffName} are ready.
+          9 times out of 10 the checker packs their own goods — change the person only if someone
+          else will pack.
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Date">
-            <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
+            <TextInput
+              type="date"
+              value={issueDate}
+              onChange={(e) => setIssueDate(e.target.value)}
+              required
+            />
           </Field>
           <Field label="Packer">
             <Select
@@ -706,7 +797,10 @@ function PackModal({
         <Field label="Quantity">
           <DzPcInput pieces={qtyPcs} onChange={setQty} />
         </Field>
-        <Field label="Packing pay per dozen" hint="Filled from the packer's usual rate — change it for this work if needed">
+        <Field
+          label="Packing pay per dozen"
+          hint="Filled from the packer's usual rate — change it for this work if needed"
+        >
           <MoneyInput
             key={`${staffId ?? 'none'}-${staff ? 'loaded' : 'loading'}`}
             paise={rate}
@@ -724,13 +818,20 @@ function PackModal({
           </Select>
         </Field>
         {kind === 'bundle' && (
-          <Field label="Bundle name" hint="e.g. “Festival order reserve” — how you’ll find it later">
+          <Field
+            label="Bundle name"
+            hint="e.g. “Festival order reserve” — how you’ll find it later"
+          >
             <TextInput value={bundleLabel} onChange={(e) => setBundleLabel(e.target.value)} />
           </Field>
         )}
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending || !staffId || !qtyPcs} className="w-full">
-          {save.isPending ? 'Saving…' : kind === 'bundle' ? 'Keep bundle aside' : 'Allot for packing'}
+          {save.isPending
+            ? 'Saving…'
+            : kind === 'bundle'
+              ? 'Keep bundle aside'
+              : 'Allot for packing'}
         </Button>
       </form>
     </Modal>
@@ -789,7 +890,12 @@ function PackResultModal({
           {issue.sizeCodeLabel} {issue.colorName}. Packed pieces become Finished Goods.
         </p>
         <Field label="Date">
-          <TextInput type="date" value={resultDate} onChange={(e) => setResultDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={resultDate}
+            onChange={(e) => setResultDate(e.target.value)}
+            required
+          />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Packed">

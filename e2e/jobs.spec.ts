@@ -22,7 +22,9 @@ const TINY_PNG = Buffer.from(
  * Full job-work flow through the UI. Uses its own purchase+cutting fixture per
  * project (desktop/mobile share the DB) via distinct codes and colors.
  */
-test('issue goods, partial receipts with photo, auto-complete, contractor analytics', async ({ page }) => {
+test('issue goods, partial receipts with photo, auto-complete, contractor analytics', async ({
+  page,
+}) => {
   const mobile = test.info().project.name === 'mobile';
   const color = mobile ? 'White' : 'Black';
   const code = mobile ? 'JOB-M' : 'JOB-D';

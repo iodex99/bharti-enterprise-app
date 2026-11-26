@@ -8,7 +8,12 @@ import { useHealth } from '../api/health';
 import { UpdateBanner } from './UpdateBanner';
 import { Badge } from './ui';
 
-type NavItem = { to: string; label: string; icon: string; roles?: Array<'admin' | 'operator' | 'owner'> };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: string;
+  roles?: Array<'admin' | 'operator' | 'owner'>;
+};
 type NavSection = { title: string; items: NavItem[] };
 
 /** Grows with each phase; only list routes that exist. */
@@ -165,10 +170,7 @@ export default function AppShell() {
         >
           🎭 DEMO MODE — sample data only. Real records are untouched.
           {user.role === 'admin' && (
-            <button
-              className="ml-2 underline"
-              onClick={() => navigate('/admin/system')}
-            >
+            <button className="ml-2 underline" onClick={() => navigate('/admin/system')}>
               Exit from System Health
             </button>
           )}
@@ -181,7 +183,14 @@ export default function AppShell() {
           onClick={() => setMenuOpen(true)}
           aria-label="Open menu"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
@@ -191,7 +200,9 @@ export default function AppShell() {
         </div>
         {/* the wordmark is the first thing to go when the bar gets tight */}
         <div className="hidden min-w-0 sm:block">
-          <p className="truncate text-sm font-bold leading-tight text-gray-900">Bharti Enterprises</p>
+          <p className="truncate text-sm font-bold leading-tight text-gray-900">
+            Bharti Enterprises
+          </p>
           <p className="hidden text-[11px] leading-tight text-gray-400 sm:block">
             Production &amp; Inventory
           </p>
@@ -238,7 +249,14 @@ export default function AppShell() {
                   className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
                   aria-label="Close menu"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M18 6 6 18M6 6l12 12" />
                   </svg>
                 </button>

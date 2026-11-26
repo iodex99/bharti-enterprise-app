@@ -26,7 +26,9 @@ const TINY_PNG = Buffer.from(
  * aside → pack the bundle later → finished goods → discrepancy review.
  * Distinct color+code per project so the two runs never collide.
  */
-test('purchase → cutting → job work → checking → packing (+bundle) → finished goods', async ({ page }) => {
+test('purchase → cutting → job work → checking → packing (+bundle) → finished goods', async ({
+  page,
+}) => {
   const mobile = test.info().project.name === 'mobile';
   // colors no other spec buys, so the raw-lot picker always finds OUR fresh lot first
   const color = mobile ? 'Baby Pink' : 'Maroon';
@@ -168,7 +170,10 @@ test('purchase → cutting → job work → checking → packing (+bundle) → f
   // rejected stage shows the 6pc (missing pieces are NOT stock — they are written off)
   await page.goto('/stock/rejected');
   await expect(
-    page.getByRole('row', { name: new RegExp(code) }).first().getByText('6pc'),
+    page
+      .getByRole('row', { name: new RegExp(code) })
+      .first()
+      .getByText('6pc'),
   ).toBeVisible();
 
   // 10. the "missing" pieces landed on the Discrepancies review page

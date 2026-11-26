@@ -11,7 +11,16 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  Select,
+  TextInput,
+  ThumbLink,
+} from '../../components/ui';
 import { DzPcInput, ImageInput, InchesInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { VoidModal } from '../purchases/PurchasesPage';
@@ -140,7 +149,9 @@ export default function CuttingPage() {
             key: 'consumedInchC',
             // register color code: blue = cloth going out of the store
             header: 'Cloth used',
-            render: (r) => <span className="font-medium text-blue-700">{formatLen(r.consumedInchC)}</span>,
+            render: (r) => (
+              <span className="font-medium text-blue-700">{formatLen(r.consumedInchC)}</span>
+            ),
             value: (r) => r.consumedInchC,
           },
           {
@@ -179,7 +190,11 @@ export default function CuttingPage() {
                   <Button variant="ghost" onClick={() => setEditBatch(row)}>
                     Edit
                   </Button>
-                  <Button variant="ghost" className="text-red-600" onClick={() => setDeleteBatch(row)}>
+                  <Button
+                    variant="ghost"
+                    className="text-red-600"
+                    onClick={() => setDeleteBatch(row)}
+                  >
                     Delete
                   </Button>
                 </>
@@ -217,8 +232,8 @@ export default function CuttingPage() {
         <div className="space-y-4">
           <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
             The cloth this batch used ({deleteBatch ? formatLen(deleteBatch.consumedInchC) : ''})
-            goes back to batch {deleteBatch?.rawDocNo}, and its cut pieces are removed. The
-            entry stays in history as deleted.
+            goes back to batch {deleteBatch?.rawDocNo}, and its cut pieces are removed. The entry
+            stays in history as deleted.
           </p>
           <Button
             variant="danger"
@@ -233,18 +248,28 @@ export default function CuttingPage() {
 
       <VoidModal
         entity="cutting batch"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/cutting/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? { id: voidFor.id, label: voidFor.docNo, url: `/api/cutting/${voidFor.id}/void` }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
 
-      <Modal title={`${detail?.docNo ?? ''} — detail`} open={!!detail} onClose={() => setDetail(null)} wide>
+      <Modal
+        title={`${detail?.docNo ?? ''} — detail`}
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        wide
+      >
         {detail && (
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
               Cut on {formatBusinessDate(detail.cutDate)} from cloth batch{' '}
               <span className="font-mono">{detail.rawDocNo}</span> · {detail.colorName} ·{' '}
-              <span className="font-medium text-blue-700">{formatLen(detail.consumedInchC)}</span> used
+              <span className="font-medium text-blue-700">{formatLen(detail.consumedInchC)}</span>{' '}
+              used
             </p>
             <table className="w-full text-sm">
               <thead>
@@ -293,7 +318,14 @@ type PlanLine = {
   imagePath: string | null;
 };
 
-const EMPTY_LINE: PlanLine = { sizeId: null, code: '', pcs: null, clothPerPcInchC: null, widthCount: '', imagePath: null };
+const EMPTY_LINE: PlanLine = {
+  sizeId: null,
+  code: '',
+  pcs: null,
+  clothPerPcInchC: null,
+  widthCount: '',
+  imagePath: null,
+};
 
 function PlanModal({
   open,
@@ -363,7 +395,9 @@ function PlanModal({
           imagePath: l.imagePath,
         })),
       };
-      return batch ? api.put(`/api/cutting/${batch.id}`, payload) : api.post('/api/cutting', payload);
+      return batch
+        ? api.put(`/api/cutting/${batch.id}`, payload)
+        : api.post('/api/cutting', payload);
     },
     onSuccess: () => {
       onDone();
@@ -387,8 +421,16 @@ function PlanModal({
             return;
           }
           for (const l of lines) {
-            if (!l.sizeId || !l.code.trim() || !l.pcs || !l.clothPerPcInchC || !Number(l.widthCount)) {
-              setError('Every line needs size, code number, pieces, cloth per piece and pieces across the width.');
+            if (
+              !l.sizeId ||
+              !l.code.trim() ||
+              !l.pcs ||
+              !l.clothPerPcInchC ||
+              !Number(l.widthCount)
+            ) {
+              setError(
+                'Every line needs size, code number, pieces, cloth per piece and pieces across the width.',
+              );
               return;
             }
           }
@@ -402,9 +444,21 @@ function PlanModal({
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Cut date">
-            <TextInput type="date" value={cutDate} onChange={(e) => setCutDate(e.target.value)} required />
+            <TextInput
+              type="date"
+              value={cutDate}
+              onChange={(e) => setCutDate(e.target.value)}
+              required
+            />
           </Field>
-          <Field label="Cloth batch" hint={selectedLot?.widthInchC ? `Cloth width ${formatInchC(selectedLot.widthInchC)}` : undefined}>
+          <Field
+            label="Cloth batch"
+            hint={
+              selectedLot?.widthInchC
+                ? `Cloth width ${formatInchC(selectedLot.widthInchC)}`
+                : undefined
+            }
+          >
             <Select value={lotKey} onChange={(e) => setLotKey(e.target.value)}>
               <option value="" disabled>
                 — select the roll being cut —
@@ -533,7 +587,12 @@ function PlanModal({
               </div>
             ))}
           </div>
-          <Button type="button" variant="secondary" className="mt-2" onClick={() => setLines([...lines, { ...EMPTY_LINE }])}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-2"
+            onClick={() => setLines([...lines, { ...EMPTY_LINE }])}
+          >
             + Add size
           </Button>
         </div>

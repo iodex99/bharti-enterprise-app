@@ -55,14 +55,19 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
 
   // ---- offices (HO exists from the migration) -------------------------------
   const HO: Office = getOffice(db, 1)!;
-  const brId = must(createOffice(db, { code: 'BR', name: 'Branch Office' }, ADMIN, null), 'office BR').id;
+  const brId = must(
+    createOffice(db, { code: 'BR', name: 'Branch Office' }, ADMIN, null),
+    'office BR',
+  ).id;
   const BR: Office = getOffice(db, brId)!;
   insertUser.run('branch-op', hashPassword('Branch@123'), 'Salim (Branch)', 'operator', BR.id);
 
   // ---- masters (models are NOT a master — codes are typed at cutting) -------
   const ins = {
     color: db.prepare('INSERT INTO colors (name, color_code, created_by) VALUES (?, ?, 1)'),
-    size: db.prepare('INSERT INTO sizes (code, description, sort_order, created_by) VALUES (?, ?, ?, 1)'),
+    size: db.prepare(
+      'INSERT INTO sizes (code, description, sort_order, created_by) VALUES (?, ?, ?, 1)',
+    ),
     vendor: db.prepare(
       'INSERT INTO vendors (name, contact_person, mobile, address, gstin, created_by) VALUES (?, ?, ?, ?, ?, 1)',
     ),
@@ -86,7 +91,16 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   ] as const) {
     ins.color.run(name, code);
   }
-  const COLOR = { BLACK: 1, MAROON: 2, NAVY: 3, PINK: 4, WHITE: 5, EMERALD: 6, MUSTARD: 7, LAVENDER: 8 };
+  const COLOR = {
+    BLACK: 1,
+    MAROON: 2,
+    NAVY: 3,
+    PINK: 4,
+    WHITE: 5,
+    EMERALD: 6,
+    MUSTARD: 7,
+    LAVENDER: 8,
+  };
 
   (
     [
@@ -97,12 +111,36 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   ).forEach(([code, desc], i) => ins.size.run(code, desc, i + 1));
   const SIZE = { HR: 1, PIPE: 2, JUMBO: 3 };
 
-  ins.vendor.run('Sharma Textiles', 'Rakesh Sharma', '9812345678', 'Chandni Chowk, Delhi', '07AAACS1234A1Z5');
-  ins.vendor.run('Gupta Fabrics', 'Anil Gupta', '9823456789', 'Ring Road, Surat', '24AAACG5678B1Z3');
-  ins.vendor.run('Krishna Cloth House', 'Mohan Lal', '9811223344', 'Sadar Bazar, Delhi', '07AABCK9012C1Z8');
+  ins.vendor.run(
+    'Sharma Textiles',
+    'Rakesh Sharma',
+    '9812345678',
+    'Chandni Chowk, Delhi',
+    '07AAACS1234A1Z5',
+  );
+  ins.vendor.run(
+    'Gupta Fabrics',
+    'Anil Gupta',
+    '9823456789',
+    'Ring Road, Surat',
+    '24AAACG5678B1Z3',
+  );
+  ins.vendor.run(
+    'Krishna Cloth House',
+    'Mohan Lal',
+    '9811223344',
+    'Sadar Bazar, Delhi',
+    '07AABCK9012C1Z8',
+  );
   const VENDOR = { SHARMA: 1, GUPTA: 2, KRISHNA: 3 };
 
-  ins.contractor.run('Meena Stitching Works', 'Meena Devi', '9834567890', 'Karol Bagh, Delhi', 3000);
+  ins.contractor.run(
+    'Meena Stitching Works',
+    'Meena Devi',
+    '9834567890',
+    'Karol Bagh, Delhi',
+    3000,
+  );
   ins.contractor.run('Rafiq Tailors', 'Rafiq Ahmed', '9845678901', 'Seelampur, Delhi', 2800);
   ins.contractor.run('Sunita Job Work', 'Sunita Kumari', '9856789012', 'Uttam Nagar, Delhi', 3200);
   ins.contractor.run('Farah Stitching Unit', 'Farah Khan', '9867001122', 'Okhla, Delhi', 2900);
@@ -136,7 +174,17 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
       db,
       HO,
       // raw cloth carries no code — the code is given at cutting; length in 1/100 inch (25 yd), width 44"
-      { balanceDate: daysAgo(90), stage: 'RAW', modelCode: null, colorId: COLOR.BLACK, qty: 25 * 3600, widthInchC: 4400, note: 'register page 3', sizeId: null, contractorId: null },
+      {
+        balanceDate: daysAgo(90),
+        stage: 'RAW',
+        modelCode: null,
+        colorId: COLOR.BLACK,
+        qty: 25 * 3600,
+        widthInchC: 4400,
+        note: 'register page 3',
+        sizeId: null,
+        contractorId: null,
+      },
       ADMIN,
       null,
     ),
@@ -146,7 +194,17 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     createOpeningBalance(
       db,
       HO,
-      { balanceDate: daysAgo(90), stage: 'CUT', modelCode: '210', colorId: COLOR.PINK, sizeId: SIZE.PIPE, qty: 96, note: 'old cut stock', contractorId: null, widthInchC: null },
+      {
+        balanceDate: daysAgo(90),
+        stage: 'CUT',
+        modelCode: '210',
+        colorId: COLOR.PINK,
+        sizeId: SIZE.PIPE,
+        qty: 96,
+        note: 'old cut stock',
+        contractorId: null,
+        widthInchC: null,
+      },
       ADMIN,
       null,
     ),
@@ -156,7 +214,17 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     createOpeningBalance(
       db,
       HO,
-      { balanceDate: daysAgo(90), stage: 'FG', modelCode: '330', colorId: COLOR.WHITE, sizeId: SIZE.JUMBO, qty: 240, note: 'packed stock from before', contractorId: null, widthInchC: null },
+      {
+        balanceDate: daysAgo(90),
+        stage: 'FG',
+        modelCode: '330',
+        colorId: COLOR.WHITE,
+        sizeId: SIZE.JUMBO,
+        qty: 240,
+        note: 'packed stock from before',
+        contractorId: null,
+        widthInchC: null,
+      },
       ADMIN,
       null,
     ),
@@ -235,7 +303,8 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     ).id;
 
   const modelIdOf = (code: string): number =>
-    (db.prepare('SELECT id FROM models WHERE code = ? COLLATE NOCASE').get(code) as { id: number }).id;
+    (db.prepare('SELECT id FROM models WHERE code = ? COLLATE NOCASE').get(code) as { id: number })
+      .id;
 
   /** Combined issue — may span codes/colors; returns one card per (code, color). */
   const issue = (
@@ -284,7 +353,12 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     office: Office,
     days: number,
     jobId: number,
-    lines: Array<{ lineId: number; qtyPcs: number; returnType?: 'stitched' | 'unstitched_return'; discrepancyReason?: string }>,
+    lines: Array<{
+      lineId: number;
+      qtyPcs: number;
+      returnType?: 'stitched' | 'unstitched_return';
+      discrepancyReason?: string;
+    }>,
   ) =>
     must(
       createReceipt(
@@ -337,13 +411,24 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     jobId: number,
     sizeId: number,
     qtyPcs: number,
-    results: Array<{ days: number; passed: number; rejected?: Array<{ reason: string; qtyPcs: number }> }>,
+    results: Array<{
+      days: number;
+      passed: number;
+      rejected?: Array<{ reason: string; qtyPcs: number }>;
+    }>,
   ) => {
     const ci = must(
       createCheckIssue(
         db,
         office,
-        { issueDate: daysAgo(days), staffId, lotType: 'receipt_line', lotId: poolLotFor(jobId, sizeId), qtyPcs, notes: '' },
+        {
+          issueDate: daysAgo(days),
+          staffId,
+          lotType: 'receipt_line',
+          lotId: poolLotFor(jobId, sizeId),
+          qtyPcs,
+          notes: '',
+        },
         OPERATOR,
         null,
       ),
@@ -377,7 +462,12 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     staffId: number,
     checkIssueId: number,
     qtyPcs: number,
-    results: Array<{ days: number; packed: number; short?: number; shortReason?: 'damage' | 'missing' | 'other' }>,
+    results: Array<{
+      days: number;
+      packed: number;
+      short?: number;
+      shortReason?: 'damage' | 'missing' | 'other';
+    }>,
     opts: { kind?: 'pack' | 'bundle'; label?: string } = {},
   ) => {
     const pi = must(
@@ -405,7 +495,13 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
           db,
           office,
           pi.id,
-          { resultDate: daysAgo(r.days), qtyPacked: r.packed, qtyShort: r.short ?? 0, shortReason: r.shortReason ?? null, notes: '' },
+          {
+            resultDate: daysAgo(r.days),
+            qtyPacked: r.packed,
+            qtyShort: r.short ?? 0,
+            shortReason: r.shortReason ?? null,
+            notes: '',
+          },
           OPERATOR,
           null,
         ),
@@ -441,7 +537,14 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
     { days: 60, passed: 58, rejected: [{ reason: 'stitching_issue', qtyPcs: 2 }] },
   ]);
   const c2 = check(HO, 61, STAFF.POOJA, j1, SIZE.HR, 60, [
-    { days: 60, passed: 56, rejected: [{ reason: 'stitching_issue', qtyPcs: 2 }, { reason: 'missing', qtyPcs: 2 }] },
+    {
+      days: 60,
+      passed: 56,
+      rejected: [
+        { reason: 'stitching_issue', qtyPcs: 2 },
+        { reason: 'missing', qtyPcs: 2 },
+      ],
+    },
   ]);
   // PIPE batches: 96 then 84 (174 pass, 6 reject)
   const c3 = check(HO, 62, STAFF.KAVITA, j1, SIZE.PIPE, 96, [
@@ -454,7 +557,20 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   pack(HO, 55, STAFF.KAVITA, c3, 90, [{ days: 52, packed: 84, short: 6, shortReason: 'damage' }]);
   pack(HO, 54, STAFF.KAVITA, c4, 84, [{ days: 52, packed: 84 }]);
   must(
-    createDispatch(db, HO, { dispatchDate: daysAgo(45), modelId: modelIdOf('315'), colorId: COLOR.BLACK, sizeId: SIZE.HR, qtyPcs: 96, notes: 'Karol Bagh shop order' }, ADMIN, null),
+    createDispatch(
+      db,
+      HO,
+      {
+        dispatchDate: daysAgo(45),
+        modelId: modelIdOf('315'),
+        colorId: COLOR.BLACK,
+        sizeId: SIZE.HR,
+        qtyPcs: 96,
+        notes: 'Karol Bagh shop order',
+      },
+      ADMIN,
+      null,
+    ),
     'dispatch 1',
   );
 
@@ -466,12 +582,21 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   ]);
   const j2 = i2.cards[0]!.id;
   receive(HO, 60, j2, [{ lineId: i2.lineId(j2, SIZE.PIPE), qtyPcs: 120 }]);
-  receive(HO, 54, j2, [{ lineId: i2.lineId(j2, SIZE.PIPE), qtyPcs: 114, discrepancyReason: 'other' }]);
+  receive(HO, 54, j2, [
+    { lineId: i2.lineId(j2, SIZE.PIPE), qtyPcs: 114, discrepancyReason: 'other' },
+  ]);
   const c5 = check(HO, 50, STAFF.DEEPA, j2, SIZE.PIPE, 120, [
     { days: 48, passed: 116, rejected: [{ reason: 'color_defect', qtyPcs: 4 }] },
   ]);
   const c6 = check(HO, 49, STAFF.DEEPA, j2, SIZE.PIPE, 114, [
-    { days: 48, passed: 106, rejected: [{ reason: 'color_defect', qtyPcs: 6 }, { reason: 'missing', qtyPcs: 2 }] },
+    {
+      days: 48,
+      passed: 106,
+      rejected: [
+        { reason: 'color_defect', qtyPcs: 6 },
+        { reason: 'missing', qtyPcs: 2 },
+      ],
+    },
   ]);
   pack(HO, 46, STAFF.DEEPA, c5, 116, [{ days: 44, packed: 116 }]);
   // THE BUNDLE STORY: the owner asks Deepa to keep 24 pcs aside for a future order…
@@ -479,7 +604,20 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   // …and the rest is packed normally
   pack(HO, 45, STAFF.DEEPA, c6, 82, [{ days: 44, packed: 82 }]);
   must(
-    createDispatch(db, HO, { dispatchDate: daysAgo(40), modelId: modelIdOf('410'), colorId: COLOR.MAROON, sizeId: SIZE.PIPE, qtyPcs: 180, notes: 'Sadar Bazar wholesale' }, ADMIN, null),
+    createDispatch(
+      db,
+      HO,
+      {
+        dispatchDate: daysAgo(40),
+        modelId: modelIdOf('410'),
+        colorId: COLOR.MAROON,
+        sizeId: SIZE.PIPE,
+        qtyPcs: 180,
+        notes: 'Sadar Bazar wholesale',
+      },
+      ADMIN,
+      null,
+    ),
     'dispatch 2',
   );
 
@@ -491,9 +629,18 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   ]);
   const j3 = i3.cards[0]!.id;
   receive(HO, 42, j3, [{ lineId: i3.lineId(j3, SIZE.JUMBO), qtyPcs: 180 }]);
-  receive(HO, 38, j3, [{ lineId: i3.lineId(j3, SIZE.JUMBO), qtyPcs: 24, returnType: 'unstitched_return' }]);
+  receive(HO, 38, j3, [
+    { lineId: i3.lineId(j3, SIZE.JUMBO), qtyPcs: 24, returnType: 'unstitched_return' },
+  ]);
   must(
-    closeJobWithDiscrepancy(db, HO, j3, { reason: 'missing_pieces', note: 'Sunita could not account for 32 pcs' }, ADMIN, null),
+    closeJobWithDiscrepancy(
+      db,
+      HO,
+      j3,
+      { reason: 'missing_pieces', note: 'Sunita could not account for 32 pcs' },
+      ADMIN,
+      null,
+    ),
     'close j3 short',
   );
   const c7 = check(HO, 35, STAFF.POOJA, j3, SIZE.JUMBO, 180, [
@@ -534,7 +681,9 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   // a DELAYED job for the alert panel: issued 24 days ago, nothing back yet
   const p6 = purchase(HO, 30, VENDOR.KRISHNA, COLOR.MUSTARD, 110, 40, 3600);
   cut(HO, 27, p6, [{ sizeId: SIZE.PIPE, code: '128', qtyPcs: 168 }]);
-  issue(HO, 24, CT.RAFIQ, [{ code: '128', colorId: COLOR.MUSTARD, sizeId: SIZE.PIPE, qtyPcs: 168, rate: 2800 }]);
+  issue(HO, 24, CT.RAFIQ, [
+    { code: '128', colorId: COLOR.MUSTARD, sizeId: SIZE.PIPE, qtyPcs: 168, rate: 2800 },
+  ]);
 
   // fresh activity this week: new purchases + a cutting that can still be edited/deleted
   const p7 = purchase(HO, 4, VENDOR.SHARMA, COLOR.PINK, 170, 44, 5000, 'summer collection');
@@ -545,20 +694,125 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
   purchase(HO, 2, VENDOR.GUPTA, COLOR.WHITE, 150, 44, 4300, 'wedding season stock');
 
   // a voided purchase (typo demo — appears in audit + voided list)
-  const pOops = purchase(HO, 15, VENDOR.KRISHNA, COLOR.WHITE, 500, 44, 5600, 'typo: was meant to be 50 yd');
+  const pOops = purchase(
+    HO,
+    15,
+    VENDOR.KRISHNA,
+    COLOR.WHITE,
+    500,
+    44,
+    5600,
+    'typo: was meant to be 50 yd',
+  );
   must(voidPurchase(db, HO, pOops, 'entered 500 yd instead of 50 yd', ADMIN, null), 'void pOops');
   purchase(HO, 15, VENDOR.KRISHNA, COLOR.WHITE, 50, 44, 5600, 're-entered correctly');
 
   // payments: Meena mostly settled, others carry dues (the Dues page has data)
-  must(createPayment(db, HO, { contractorId: CT.MEENA, paymentDate: daysAgo(50), amountPaise: 50000, mode: 'upi', reference: 'UPI-4471', notes: '' }, OPERATOR, null), 'pay1');
-  must(createPayment(db, HO, { contractorId: CT.MEENA, paymentDate: daysAgo(12), amountPaise: 20000, mode: 'cash', reference: '', notes: 'advance adjusted' }, OPERATOR, null), 'pay2');
-  must(createPayment(db, HO, { contractorId: CT.RAFIQ, paymentDate: daysAgo(30), amountPaise: 30000, mode: 'bank_transfer', reference: 'NEFT-88123', notes: '' }, OPERATOR, null), 'pay3');
-  must(createPayment(db, HO, { contractorId: CT.SUNITA, paymentDate: daysAgo(20), amountPaise: 25000, mode: 'cash', reference: '', notes: '' }, OPERATOR, null), 'pay4');
+  must(
+    createPayment(
+      db,
+      HO,
+      {
+        contractorId: CT.MEENA,
+        paymentDate: daysAgo(50),
+        amountPaise: 50000,
+        mode: 'upi',
+        reference: 'UPI-4471',
+        notes: '',
+      },
+      OPERATOR,
+      null,
+    ),
+    'pay1',
+  );
+  must(
+    createPayment(
+      db,
+      HO,
+      {
+        contractorId: CT.MEENA,
+        paymentDate: daysAgo(12),
+        amountPaise: 20000,
+        mode: 'cash',
+        reference: '',
+        notes: 'advance adjusted',
+      },
+      OPERATOR,
+      null,
+    ),
+    'pay2',
+  );
+  must(
+    createPayment(
+      db,
+      HO,
+      {
+        contractorId: CT.RAFIQ,
+        paymentDate: daysAgo(30),
+        amountPaise: 30000,
+        mode: 'bank_transfer',
+        reference: 'NEFT-88123',
+        notes: '',
+      },
+      OPERATOR,
+      null,
+    ),
+    'pay3',
+  );
+  must(
+    createPayment(
+      db,
+      HO,
+      {
+        contractorId: CT.SUNITA,
+        paymentDate: daysAgo(20),
+        amountPaise: 25000,
+        mode: 'cash',
+        reference: '',
+        notes: '',
+      },
+      OPERATOR,
+      null,
+    ),
+    'pay4',
+  );
 
   // checker/packer pay: their per-dozen earnings accrued through the checks/packs above;
   // part-payments here so the Dues page shows both settled and outstanding people
-  must(createStaffPayment(db, HO, { staffId: STAFF.POOJA, paymentDate: daysAgo(25), amountPaise: 8000, mode: 'upi', reference: 'UPI-9921', notes: '' }, OPERATOR, null), 'spay1');
-  must(createStaffPayment(db, HO, { staffId: STAFF.KAVITA, paymentDate: daysAgo(15), amountPaise: 5000, mode: 'cash', reference: '', notes: 'part payment' }, OPERATOR, null), 'spay2');
+  must(
+    createStaffPayment(
+      db,
+      HO,
+      {
+        staffId: STAFF.POOJA,
+        paymentDate: daysAgo(25),
+        amountPaise: 8000,
+        mode: 'upi',
+        reference: 'UPI-9921',
+        notes: '',
+      },
+      OPERATOR,
+      null,
+    ),
+    'spay1',
+  );
+  must(
+    createStaffPayment(
+      db,
+      HO,
+      {
+        staffId: STAFF.KAVITA,
+        paymentDate: daysAgo(15),
+        amountPaise: 5000,
+        mode: 'cash',
+        reference: '',
+        notes: 'part payment',
+      },
+      OPERATOR,
+      null,
+    ),
+    'spay2',
+  );
 
   // ---- BRANCH OFFICE: a small, separate operation (BR- document numbers) -----
   const bp1 = purchase(BR, 12, VENDOR.GUPTA, COLOR.BLACK, 80, 44, 4200, 'branch stock');
@@ -572,9 +826,14 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
 
   // resolve the two oldest head-office discrepancies so a demo shows both review states
   const toResolve = db
-    .prepare('SELECT id FROM discrepancies WHERE office_id = ? ORDER BY created_at ASC, id ASC LIMIT 2')
+    .prepare(
+      'SELECT id FROM discrepancies WHERE office_id = ? ORDER BY created_at ASC, id ASC LIMIT 2',
+    )
     .all(HO.id) as Array<{ id: number }>;
-  const notes = ['counting error at the cutting table — register corrected', 'settled with contractor against dues'];
+  const notes = [
+    'counting error at the cutting table — register corrected',
+    'settled with contractor against dues',
+  ];
   toResolve.forEach((d, i) =>
     must(resolveDiscrepancy(db, HO.id, d.id, notes[i]!, ADMIN, null), `resolve d${d.id}`),
   );

@@ -74,10 +74,15 @@ function poolLotInfo(
          WHERE rl.id = ? AND r.voided_at IS NULL`,
       )
       .get(office.id, lotId) as
-      | { docNo: string; model_id: number; color_id: number; size_id: number }
-      | undefined;
+      { docNo: string; model_id: number; color_id: number; size_id: number } | undefined;
     if (!rl) return null;
-    return { modelId: rl.model_id, colorId: rl.color_id, sizeId: rl.size_id, available: bal, label: rl.docNo };
+    return {
+      modelId: rl.model_id,
+      colorId: rl.color_id,
+      sizeId: rl.size_id,
+      available: bal,
+      label: rl.docNo,
+    };
   }
   const o = db
     .prepare(
@@ -85,10 +90,15 @@ function poolLotInfo(
        WHERE id = ? AND office_id = ? AND stage = 'CHECKING' AND voided_at IS NULL`,
     )
     .get(lotId, office.id) as
-    | { docNo: string; model_id: number; color_id: number; size_id: number }
-    | undefined;
+    { docNo: string; model_id: number; color_id: number; size_id: number } | undefined;
   if (!o) return null;
-  return { modelId: o.model_id, colorId: o.color_id, sizeId: o.size_id, available: bal, label: o.docNo };
+  return {
+    modelId: o.model_id,
+    colorId: o.color_id,
+    sizeId: o.size_id,
+    available: bal,
+    label: o.docNo,
+  };
 }
 
 /**
@@ -201,7 +211,14 @@ export function createCheckIssue(
         },
       ];
       postMovements(db, movements, userId);
-      audit(db, { userId, action: 'create', entityType: 'check_issue', entityId: id, new: { docNo, officeId: office.id, ...input }, ip });
+      audit(db, {
+        userId,
+        action: 'create',
+        entityType: 'check_issue',
+        entityId: id,
+        new: { docNo, officeId: office.id, ...input },
+        ip,
+      });
       onCreated?.(id);
     });
     tx();
@@ -212,7 +229,10 @@ export function createCheckIssue(
   return { ok: true, id, docNo };
 }
 
-function resultTotals(db: Db, checkIssueId: number): { passed: number; rejected: number; missing: number } {
+function resultTotals(
+  db: Db,
+  checkIssueId: number,
+): { passed: number; rejected: number; missing: number } {
   return db
     .prepare(
       `SELECT COALESCE(SUM(qty_passed),0) AS passed, COALESCE(SUM(qty_rejected),0) AS rejected,
@@ -264,7 +284,15 @@ export function recordCheckResult(
         `INSERT INTO check_results (check_issue_id, result_date, qty_passed, qty_rejected, qty_missing, notes, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(checkIssueId, input.resultDate, input.qtyPassed, qtyRejected, qtyMissing, input.notes, userId);
+      .run(
+        checkIssueId,
+        input.resultDate,
+        input.qtyPassed,
+        qtyRejected,
+        qtyMissing,
+        input.notes,
+        userId,
+      );
     resultId = Number(info.lastInsertRowid);
     const insertRejection = db.prepare(
       'INSERT INTO check_result_rejections (check_result_id, reason, qty_pcs) VALUES (?, ?, ?)',
@@ -333,7 +361,14 @@ export function recordCheckResult(
          VALUES ('CHECKING', ?, 'check_result', ?, ?, ?, ?, ?)`,
       );
       for (const rejection of realRejections) {
-        insertDiscrepancy.run(office.id, resultId, -rejection.qtyPcs, rejection.reason, input.notes, userId);
+        insertDiscrepancy.run(
+          office.id,
+          resultId,
+          -rejection.qtyPcs,
+          rejection.reason,
+          input.notes,
+          userId,
+        );
       }
     }
     if (qtyMissing > 0) {
@@ -400,7 +435,11 @@ export function voidCheckIssue(
     .prepare(
       'SELECT checking_lot_type, checking_lot_id, qty_pcs FROM check_allocations WHERE check_issue_id = ?',
     )
-    .all(checkIssueId) as Array<{ checking_lot_type: 'receipt_line' | 'opening'; checking_lot_id: number; qty_pcs: number }>;
+    .all(checkIssueId) as Array<{
+    checking_lot_type: 'receipt_line' | 'opening';
+    checking_lot_id: number;
+    qty_pcs: number;
+  }>;
 
   const base = {
     officeId: office.id,
@@ -431,13 +470,17 @@ export function voidCheckIssue(
       })),
     ];
     postMovements(db, movements, userId);
-    db.prepare('UPDATE check_issues SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?').run(
-      nowIso(),
-      reason,
+    db.prepare(
+      'UPDATE check_issues SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
+    ).run(nowIso(), reason, userId, checkIssueId);
+    audit(db, {
       userId,
-      checkIssueId,
-    );
-    audit(db, { userId, action: 'void', entityType: 'check_issue', entityId: checkIssueId, new: { reason }, ip });
+      action: 'void',
+      entityType: 'check_issue',
+      entityId: checkIssueId,
+      new: { reason },
+      ip,
+    });
   });
   tx();
   return { ok: true, id: checkIssueId };

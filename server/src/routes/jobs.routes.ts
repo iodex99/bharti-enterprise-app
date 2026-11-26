@@ -56,8 +56,13 @@ export function jobsRoutes(): Router {
     idempotencyGuard('job_card'),
     validateBody(jobIssueSchema),
     (req, res) => {
-      const result = createJobIssue(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
-        recordIdempotency(getDb(), res, id),
+      const result = createJobIssue(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+        (id) => recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
@@ -69,8 +74,17 @@ export function jobsRoutes(): Router {
 
   /** Edit an unstarted card (no receipts yet). */
   router.put('/:id', requireRole('admin', 'operator'), validateBody(jobEditSchema), (req, res) => {
-    const result = editJobCard(getDb(), officeOf(req), Number(req.params.id), req.body, req.user!.id, req.ip ?? null);
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    const result = editJobCard(
+      getDb(),
+      officeOf(req),
+      Number(req.params.id),
+      req.body,
+      req.user!.id,
+      req.ip ?? null,
+    );
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   /** Delete an unstarted card (soft: void with a standard reason; CUT stock restored). */
@@ -83,7 +97,9 @@ export function jobsRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   router.post(
@@ -134,7 +150,9 @@ export function jobsRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;
@@ -164,8 +182,13 @@ export function contractorsRoutes(): Router {
     idempotencyGuard('contractor_payment'),
     validateBody(paymentSchema),
     (req, res) => {
-      const result = createPayment(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
-        recordIdempotency(getDb(), res, id),
+      const result = createPayment(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+        (id) => recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
@@ -184,7 +207,9 @@ export function contractorsRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;

@@ -76,7 +76,9 @@ export default function PurchasesPage() {
             key: 'lenInchC',
             header: 'Length',
             // register color code: red = goods received in
-            render: (r) => <span className="font-medium text-red-700">{formatLen(r.lenInchC)}</span>,
+            render: (r) => (
+              <span className="font-medium text-red-700">{formatLen(r.lenInchC)}</span>
+            ),
             value: (r) => r.lenInchC,
           },
           {
@@ -104,12 +106,19 @@ export default function PurchasesPage() {
             header: 'Rate/yd',
             render: (r) => formatPaise(r.ratePaisePerYard),
           },
-          { key: 'totalPaise', header: 'Total', render: (r) => formatPaise(r.totalPaise), className: 'font-medium' },
+          {
+            key: 'totalPaise',
+            header: 'Total',
+            render: (r) => formatPaise(r.totalPaise),
+            className: 'font-medium',
+          },
         ]}
         rows={data?.items}
         loading={isLoading}
         emptyTitle="No purchases recorded yet"
-        emptyHint={canWrite ? 'Press “+ New purchase” to record the first cloth purchase.' : undefined}
+        emptyHint={
+          canWrite ? 'Press “+ New purchase” to record the first cloth purchase.' : undefined
+        }
         facets={[
           { key: 'vendor', label: 'Vendor', value: (r) => r.vendorName },
           { key: 'color', label: 'Color', value: (r) => r.colorName },
@@ -146,7 +155,11 @@ export default function PurchasesPage() {
       />
       <VoidModal
         entity="purchase"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/purchases/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? { id: voidFor.id, label: voidFor.docNo, url: `/api/purchases/${voidFor.id}/void` }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
@@ -219,10 +232,20 @@ function NewPurchaseModal({
         className="grid grid-cols-1 gap-4 sm:grid-cols-2"
       >
         <Field label="Purchase date">
-          <TextInput type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={purchaseDate}
+            onChange={(e) => setPurchaseDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Date received">
-          <TextInput type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={receivedDate}
+            onChange={(e) => setReceivedDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Vendor">
           <MasterSelect master="vendors" value={vendorId} onChange={setVendorId} />
@@ -301,11 +324,16 @@ export function VoidModal({
         className="space-y-4"
       >
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Voiding reverses this {entity}'s stock movements. The record stays in history with
-          your reason. This cannot be undone.
+          Voiding reverses this {entity}'s stock movements. The record stays in history with your
+          reason. This cannot be undone.
         </p>
         <Field label="Reason (required)">
-          <TextInput value={reason} onChange={(e) => setReason(e.target.value)} required minLength={3} />
+          <TextInput
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+            minLength={3}
+          />
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" variant="danger" disabled={doVoid.isPending} className="w-full">

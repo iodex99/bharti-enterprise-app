@@ -55,8 +55,13 @@ export function checkingRoutes(): Router {
     idempotencyGuard('check_issue'),
     validateBody(checkIssueSchema),
     (req, res) => {
-      const result = createCheckIssue(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
-        recordIdempotency(getDb(), res, id),
+      const result = createCheckIssue(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+        (id) => recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
@@ -71,7 +76,14 @@ export function checkingRoutes(): Router {
     requireRole('admin', 'operator'),
     validateBody(checkResultSchema),
     (req, res) => {
-      const result = recordCheckResult(getDb(), officeOf(req), Number(req.params.id), req.body, req.user!.id, req.ip ?? null);
+      const result = recordCheckResult(
+        getDb(),
+        officeOf(req),
+        Number(req.params.id),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+      );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
         return;
@@ -118,7 +130,9 @@ export function checkingRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;
@@ -133,7 +147,8 @@ export function packingRoutes(): Router {
   router.param('id', idParamGuard);
 
   router.get('/', requireAuth, (req, res) => {
-    const kind = req.query.kind === 'bundle' ? 'bundle' : req.query.kind === 'pack' ? 'pack' : undefined;
+    const kind =
+      req.query.kind === 'bundle' ? 'bundle' : req.query.kind === 'pack' ? 'pack' : undefined;
     res.json({ items: listPackIssues(getDb(), officeOf(req).id, { kind }) });
   });
 
@@ -144,8 +159,13 @@ export function packingRoutes(): Router {
     idempotencyGuard('pack_issue'),
     validateBody(packIssueSchema),
     (req, res) => {
-      const result = createPackIssue(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
-        recordIdempotency(getDb(), res, id),
+      const result = createPackIssue(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+        (id) => recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
@@ -160,7 +180,14 @@ export function packingRoutes(): Router {
     requireRole('admin', 'operator'),
     validateBody(packResultSchema),
     (req, res) => {
-      const result = recordPackResult(getDb(), officeOf(req), Number(req.params.id), req.body, req.user!.id, req.ip ?? null);
+      const result = recordPackResult(
+        getDb(),
+        officeOf(req),
+        Number(req.params.id),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+      );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
         return;
@@ -178,7 +205,9 @@ export function packingRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;
@@ -198,8 +227,13 @@ export function dispatchesRoutes(): Router {
     idempotencyGuard('fg_dispatch'),
     validateBody(dispatchSchema),
     (req, res) => {
-      const result = createDispatch(getDb(), officeOf(req), req.body, req.user!.id, req.ip ?? null, (id) =>
-        recordIdempotency(getDb(), res, id),
+      const result = createDispatch(
+        getDb(),
+        officeOf(req),
+        req.body,
+        req.user!.id,
+        req.ip ?? null,
+        (id) => recordIdempotency(getDb(), res, id),
       );
       if (!result.ok) {
         res.status(result.code).json({ error: result.error });
@@ -218,7 +252,9 @@ export function dispatchesRoutes(): Router {
       req.user!.id,
       req.ip ?? null,
     );
-    res.status(result.ok ? 200 : result.code).json(result.ok ? { ok: true } : { error: result.error });
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
   });
 
   return router;

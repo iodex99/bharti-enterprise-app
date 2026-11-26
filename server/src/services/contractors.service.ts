@@ -85,7 +85,8 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
     const cost = (costStmt.get(officeId, row.id) as { cost: number }).cost;
     const se = shortExcessStmt.get(officeId, row.id) as { shortagePcs: number; excessPcs: number };
     const paid = (paymentsStmt.get(row.id, officeId) as { paid: number }).paid;
-    const lastPayment = (lastPaymentStmt.get(row.id, officeId) as { lastDate: string | null }).lastDate;
+    const lastPayment = (lastPaymentStmt.get(row.id, officeId) as { lastDate: string | null })
+      .lastDate;
     const turnaround = (turnaroundStmt.get(row.id, officeId) as { avgDays: number | null }).avgDays;
     row.receivedPcs = t.stitched;
     row.unstitchedReturnedPcs = t.unstitched;
@@ -109,7 +110,10 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
  * The pending-dues view (ADR-036): who is owed what, right now, in this office.
  * Sorted largest dues first; contractors with nothing outstanding drop out.
  */
-export function listPendingDues(db: Db, officeId: number): {
+export function listPendingDues(
+  db: Db,
+  officeId: number,
+): {
   items: Array<Record<string, unknown>>;
   totalDuesPaise: number;
 } {
@@ -179,7 +183,14 @@ export function createPayment(
         userId,
       );
     id = Number(info.lastInsertRowid);
-    audit(db, { userId, action: 'create', entityType: 'contractor_payment', entityId: id, new: { docNo, officeId: office.id, ...input }, ip });
+    audit(db, {
+      userId,
+      action: 'create',
+      entityType: 'contractor_payment',
+      entityId: id,
+      new: { docNo, officeId: office.id, ...input },
+      ip,
+    });
     onCreated?.(id);
   });
   tx();
@@ -203,7 +214,14 @@ export function voidPayment(
     db.prepare(
       'UPDATE contractor_payments SET voided_at = ?, void_reason = ?, voided_by = ? WHERE id = ?',
     ).run(nowIso(), reason, userId, id);
-    audit(db, { userId, action: 'void', entityType: 'contractor_payment', entityId: id, new: { reason }, ip });
+    audit(db, {
+      userId,
+      action: 'void',
+      entityType: 'contractor_payment',
+      entityId: id,
+      new: { reason },
+      ip,
+    });
   });
   tx();
   return { ok: true, id };
@@ -214,7 +232,9 @@ export function listPayments(
   officeId: number,
   contractorId?: number,
 ): Array<Record<string, unknown>> {
-  const where = contractorId ? 'WHERE p.office_id = ? AND p.contractor_id = ?' : 'WHERE p.office_id = ?';
+  const where = contractorId
+    ? 'WHERE p.office_id = ? AND p.contractor_id = ?'
+    : 'WHERE p.office_id = ?';
   const params = contractorId ? [officeId, contractorId] : [officeId];
   return db
     .prepare(

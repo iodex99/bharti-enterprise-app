@@ -11,7 +11,16 @@ import {
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, Select, TextInput, ThumbLink } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  Select,
+  TextInput,
+  ThumbLink,
+} from '../../components/ui';
 import { DzPcInput, ImageInput, MoneyInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { useMasterOptions } from '../../api/masters';
@@ -129,7 +138,9 @@ export default function JobsPage() {
             key: 'issuedPcs',
             header: 'Issued',
             // register color code: blue = issued out to the contractor
-            render: (r) => <span className="font-medium text-sky-700">{formatPieces(r.issuedPcs)}</span>,
+            render: (r) => (
+              <span className="font-medium text-sky-700">{formatPieces(r.issuedPcs)}</span>
+            ),
             value: (r) => r.issuedPcs,
           },
           {
@@ -192,16 +203,25 @@ export default function JobsPage() {
                 </Button>
               </>
             )}
-            {isAdmin && !row.voidedAt && !row.editable && row.status !== 'completed' && row.status !== 'closed_with_discrepancy' && (
-              <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
-                Void
-              </Button>
-            )}
+            {isAdmin &&
+              !row.voidedAt &&
+              !row.editable &&
+              row.status !== 'completed' &&
+              row.status !== 'closed_with_discrepancy' && (
+                <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
+                  Void
+                </Button>
+              )}
           </>
         )}
       />
 
-      <NewJobModal key={String(createOpen)} open={createOpen} onClose={() => setCreateOpen(false)} onDone={invalidate} />
+      <NewJobModal
+        key={String(createOpen)}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onDone={invalidate}
+      />
       {detail && (
         <JobDetailModal
           job={detail}
@@ -213,7 +233,11 @@ export default function JobsPage() {
       )}
       <VoidModal
         entity="job card"
-        target={voidFor ? { id: voidFor.id, label: voidFor.docNo, url: `/api/jobs/${voidFor.id}/void` } : null}
+        target={
+          voidFor
+            ? { id: voidFor.id, label: voidFor.docNo, url: `/api/jobs/${voidFor.id}/void` }
+            : null
+        }
         onClose={() => setVoidFor(null)}
         onDone={invalidate}
       />
@@ -233,7 +257,15 @@ export default function JobsPage() {
   );
 }
 
-function DeleteJobModal({ job, onClose, onDone }: { job: JobCard | null; onClose: () => void; onDone: () => void }) {
+function DeleteJobModal({
+  job,
+  onClose,
+  onDone,
+}: {
+  job: JobCard | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [error, setError] = useState('');
   const doDelete = useMutation({
     mutationFn: () => api.delete(`/api/jobs/${job!.id}`),
@@ -247,11 +279,16 @@ function DeleteJobModal({ job, onClose, onDone }: { job: JobCard | null; onClose
     <Modal title={`Delete ${job?.docNo ?? ''}?`} open={!!job} onClose={onClose}>
       <div className="space-y-4">
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          The issued pieces go back into Cut Cloth stock and the card stays in history as
-          deleted. Only possible while nothing has been received against it.
+          The issued pieces go back into Cut Cloth stock and the card stays in history as deleted.
+          Only possible while nothing has been received against it.
         </p>
         <ErrorText>{error}</ErrorText>
-        <Button variant="danger" className="w-full" disabled={doDelete.isPending} onClick={() => doDelete.mutate()}>
+        <Button
+          variant="danger"
+          className="w-full"
+          disabled={doDelete.isPending}
+          onClick={() => doDelete.mutate()}
+        >
           {doDelete.isPending ? 'Deleting…' : 'Delete job card'}
         </Button>
       </div>
@@ -260,11 +297,23 @@ function DeleteJobModal({ job, onClose, onDone }: { job: JobCard | null; onClose
 }
 
 /** Edit an unstarted card: date, notes and its size lines (same code + color). */
-function EditJobModal({ job, onClose, onDone }: { job: JobCard; onClose: () => void; onDone: () => void }) {
+function EditJobModal({
+  job,
+  onClose,
+  onDone,
+}: {
+  job: JobCard;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [issueDate, setIssueDate] = useState(job.issueDate);
   const [notes, setNotes] = useState(job.notes);
   const [lines, setLines] = useState(
-    job.lines.map((l) => ({ sizeId: l.sizeId as number | null, qtyPcs: l.qtyIssuedPcs as number | null, rate: l.ratePaisePerDozen as number | null })),
+    job.lines.map((l) => ({
+      sizeId: l.sizeId as number | null,
+      qtyPcs: l.qtyIssuedPcs as number | null,
+      rate: l.ratePaisePerDozen as number | null,
+    })),
   );
   const [error, setError] = useState('');
   const { data: sizes } = useMasterOptions('sizes');
@@ -276,14 +325,24 @@ function EditJobModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
         notes,
         lines: lines
           .filter((l) => l.sizeId && l.qtyPcs)
-          .map((l) => ({ sizeId: l.sizeId, qtyIssuedPcs: l.qtyPcs, unitEntered: 'dozens', ratePaisePerDozen: l.rate ?? 0 })),
+          .map((l) => ({
+            sizeId: l.sizeId,
+            qtyIssuedPcs: l.qtyPcs,
+            unitEntered: 'dozens',
+            ratePaisePerDozen: l.rate ?? 0,
+          })),
       }),
     onSuccess: () => onDone(),
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
   });
 
   return (
-    <Modal title={`Edit ${job.docNo} — ${job.modelCode} ${job.colorName}`} open onClose={onClose} wide>
+    <Modal
+      title={`Edit ${job.docNo} — ${job.modelCode} ${job.colorName}`}
+      open
+      onClose={onClose}
+      wide
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -296,7 +355,12 @@ function EditJobModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
         className="space-y-4"
       >
         <Field label="Issue date">
-          <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={issueDate}
+            onChange={(e) => setIssueDate(e.target.value)}
+            required
+          />
         </Field>
         <div className="space-y-2">
           {lines.map((line, i) => (
@@ -354,7 +418,11 @@ function EditJobModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
             </div>
           ))}
         </div>
-        <Button type="button" variant="secondary" onClick={() => setLines([...lines, { sizeId: null, qtyPcs: null, rate: null }])}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setLines([...lines, { sizeId: null, qtyPcs: null, rate: null }])}
+        >
           + Add size
         </Button>
         <Field label="Notes">
@@ -369,12 +437,26 @@ function EditJobModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
   );
 }
 
-function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+function NewJobModal({
+  open,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [issueDate, setIssueDate] = useState(todayIST());
   const [contractorId, setContractorId] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<
-    Array<{ modelId: number | null; colorId: number | null; sizeId: number | null; qtyPcs: number | null; rate: number | null }>
+    Array<{
+      modelId: number | null;
+      colorId: number | null;
+      sizeId: number | null;
+      qtyPcs: number | null;
+      rate: number | null;
+    }>
   >([{ modelId: null, colorId: null, sizeId: null, qtyPcs: null, rate: null }]);
   const [error, setError] = useState('');
   const [created, setCreated] = useState<Array<{ docNo: string }> | null>(null);
@@ -384,7 +466,8 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
   const { data: products } = useProducts();
 
   const defaultRate =
-    (contractors?.find((c) => c.id === contractorId)?.defaultRatePaisePerDozen as number | undefined) ?? null;
+    (contractors?.find((c) => c.id === contractorId)?.defaultRatePaisePerDozen as
+      number | undefined) ?? null;
 
   const distinctCards = new Set(
     lines.filter((l) => l.modelId && l.colorId).map((l) => `${l.modelId}|${l.colorId}`),
@@ -450,9 +533,17 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Issue date">
-            <TextInput type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required />
+            <TextInput
+              type="date"
+              value={issueDate}
+              onChange={(e) => setIssueDate(e.target.value)}
+              required
+            />
           </Field>
-          <Field label="Contractor" hint={defaultRate != null ? `Default cost ${formatPaise(defaultRate)}/dz` : undefined}>
+          <Field
+            label="Contractor"
+            hint={defaultRate != null ? `Default cost ${formatPaise(defaultRate)}/dz` : undefined}
+          >
             <MasterSelect master="contractors" value={contractorId} onChange={setContractorId} />
           </Field>
         </div>
@@ -470,7 +561,10 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
                     value={line.modelId ?? ''}
                     onChange={(e) => {
                       const next = [...lines];
-                      next[i] = { ...line, modelId: e.target.value ? Number(e.target.value) : null };
+                      next[i] = {
+                        ...line,
+                        modelId: e.target.value ? Number(e.target.value) : null,
+                      };
                       setLines(next);
                     }}
                   >
@@ -490,7 +584,10 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
                     value={line.colorId ?? ''}
                     onChange={(e) => {
                       const next = [...lines];
-                      next[i] = { ...line, colorId: e.target.value ? Number(e.target.value) : null };
+                      next[i] = {
+                        ...line,
+                        colorId: e.target.value ? Number(e.target.value) : null,
+                      };
                       setLines(next);
                     }}
                   >
@@ -561,7 +658,12 @@ function NewJobModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
             type="button"
             variant="secondary"
             className="mt-2"
-            onClick={() => setLines([...lines, { modelId: null, colorId: null, sizeId: null, qtyPcs: null, rate: null }])}
+            onClick={() =>
+              setLines([
+                ...lines,
+                { modelId: null, colorId: null, sizeId: null, qtyPcs: null, rate: null },
+              ])
+            }
           >
             + Add line
           </Button>
@@ -628,7 +730,9 @@ function JobDetailModal({
           </span>
         </div>
         {job.closeNote && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">Closed: {job.closeNote}</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+            Closed: {job.closeNote}
+          </p>
         )}
 
         <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -648,14 +752,20 @@ function JobDetailModal({
                 <tr key={l.id} className="border-b border-gray-100 last:border-0">
                   <td className="px-3 py-2 font-medium">{l.sizeCode}</td>
                   {/* register ink colors: blue = issued out, red = received in */}
-                  <td className="px-3 py-2 font-medium text-sky-700">{formatPieces(l.qtyIssuedPcs)}</td>
-                  <td className="px-3 py-2 font-medium text-red-700">{formatPieces(l.receivedPcs)}</td>
+                  <td className="px-3 py-2 font-medium text-sky-700">
+                    {formatPieces(l.qtyIssuedPcs)}
+                  </td>
+                  <td className="px-3 py-2 font-medium text-red-700">
+                    {formatPieces(l.receivedPcs)}
+                  </td>
                   <td className="px-3 py-2">{l.returnedPcs ? formatPieces(l.returnedPcs) : '—'}</td>
                   <td className="px-3 py-2">
                     {l.excessPcs > 0 ? (
                       <Badge tone="blue">+{formatPieces(l.excessPcs)} excess</Badge>
                     ) : l.pendingPcs > 0 ? (
-                      <span className="font-semibold text-amber-700">{formatPieces(l.pendingPcs)}</span>
+                      <span className="font-semibold text-amber-700">
+                        {formatPieces(l.pendingPcs)}
+                      </span>
                     ) : (
                       <Badge tone="green">settled</Badge>
                     )}
@@ -672,14 +782,21 @@ function JobDetailModal({
           {receipts?.items.length === 0 && <p className="text-sm text-gray-400">None yet.</p>}
           <ul className="space-y-1 text-sm">
             {receipts?.items.map((r) => (
-              <li key={`${r.id}-${r.sizeCode}-${r.returnType}-${r.qtyPcs}`} className="flex flex-wrap gap-2 text-gray-600">
+              <li
+                key={`${r.id}-${r.sizeCode}-${r.returnType}-${r.qtyPcs}`}
+                className="flex flex-wrap gap-2 text-gray-600"
+              >
                 <span className="font-mono text-xs text-gray-400">{r.docNo}</span>
                 <span>{formatBusinessDate(r.receiptDate)}</span>
                 <span className="font-medium text-red-700">
                   {r.sizeCode} · {formatPieces(r.qtyPcs)}
                 </span>
-                {r.returnType === 'unstitched_return' && <Badge tone="amber">unstitched return</Badge>}
-                {r.imagePath && <ThumbLink href={r.imagePath} label="photo" title="Photo of the returned goods" />}
+                {r.returnType === 'unstitched_return' && (
+                  <Badge tone="amber">unstitched return</Badge>
+                )}
+                {r.imagePath && (
+                  <ThumbLink href={r.imagePath} label="photo" title="Photo of the returned goods" />
+                )}
               </li>
             ))}
           </ul>
@@ -725,7 +842,15 @@ function JobDetailModal({
   );
 }
 
-function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => void; onDone: () => void }) {
+function ReceiveModal({
+  job,
+  onClose,
+  onDone,
+}: {
+  job: JobCard;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [receiptDate, setReceiptDate] = useState(todayIST());
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [rows, setRows] = useState(
@@ -779,9 +904,17 @@ function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
         className="space-y-4"
       >
         <Field label="Receipt date">
-          <TextInput type="date" value={receiptDate} onChange={(e) => setReceiptDate(e.target.value)} required />
+          <TextInput
+            type="date"
+            value={receiptDate}
+            onChange={(e) => setReceiptDate(e.target.value)}
+            required
+          />
         </Field>
-        <Field label="Photo of the returned goods (required)" hint="Every code's return is photographed — the checker refers to it">
+        <Field
+          label="Photo of the returned goods (required)"
+          hint="Every code's return is photographed — the checker refers to it"
+        >
           <ImageInput path={imagePath} onChange={setImagePath} />
         </Field>
         <div className="space-y-3">
@@ -867,7 +1000,15 @@ function ReceiveModal({ job, onClose, onDone }: { job: JobCard; onClose: () => v
   );
 }
 
-function CloseModal({ job, onClose, onDone }: { job: JobCard; onClose: () => void; onDone: () => void }) {
+function CloseModal({
+  job,
+  onClose,
+  onDone,
+}: {
+  job: JobCard;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [reason, setReason] = useState('missing_pieces');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -888,8 +1029,8 @@ function CloseModal({ job, onClose, onDone }: { job: JobCard; onClose: () => voi
         className="space-y-4"
       >
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {formatPieces(job.pendingPcs)} still pending will be written off as a contractor
-          shortage. Only Admin can do this, and it is recorded permanently.
+          {formatPieces(job.pendingPcs)} still pending will be written off as a contractor shortage.
+          Only Admin can do this, and it is recorded permanently.
         </p>
         <Field label="Reason">
           <Select value={reason} onChange={(e) => setReason(e.target.value)}>
@@ -901,7 +1042,12 @@ function CloseModal({ job, onClose, onDone }: { job: JobCard; onClose: () => voi
           </Select>
         </Field>
         <Field label="What happened? (required)">
-          <TextInput value={note} onChange={(e) => setNote(e.target.value)} required minLength={3} />
+          <TextInput
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            required
+            minLength={3}
+          />
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" variant="danger" disabled={close.isPending} className="w-full">

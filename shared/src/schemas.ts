@@ -230,8 +230,7 @@ export const jobIssueSchema = z
   })
   .refine(
     (p) =>
-      new Set(p.lines.map((l) => `${l.modelId}|${l.colorId}|${l.sizeId}`)).size ===
-      p.lines.length,
+      new Set(p.lines.map((l) => `${l.modelId}|${l.colorId}|${l.sizeId}`)).size === p.lines.length,
     { message: 'Each code + color + size may appear only once', path: ['lines'] },
   );
 export type JobIssueInput = z.infer<typeof jobIssueSchema>;

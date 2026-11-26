@@ -8,9 +8,8 @@ import type { Db } from '../db/connection';
 const DEFAULT_DELAYED_JOB_DAYS = 7;
 
 export function delayedJobThresholdDays(db: Db): number {
-  const row = db
-    .prepare("SELECT value FROM settings WHERE key = 'delayed_job_days'")
-    .get() as { value: string } | undefined;
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'delayed_job_days'").get() as
+    { value: string } | undefined;
   const parsed = row ? Number.parseInt(row.value, 10) : NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DELAYED_JOB_DAYS;
 }
@@ -19,7 +18,9 @@ export function dashboardData(db: Db, officeId: number): Record<string, unknown>
   const stage = (s: string) =>
     (
       db
-        .prepare('SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage = ? AND office_id = ?')
+        .prepare(
+          'SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage = ? AND office_id = ?',
+        )
         .get(s, officeId) as { q: number }
     ).q;
 
@@ -52,7 +53,9 @@ export function dashboardData(db: Db, officeId: number): Record<string, unknown>
 
   const unresolvedDiscrepancies = (
     db
-      .prepare('SELECT COUNT(*) AS n FROM discrepancies WHERE resolved_at IS NULL AND office_id = ?')
+      .prepare(
+        'SELECT COUNT(*) AS n FROM discrepancies WHERE resolved_at IS NULL AND office_id = ?',
+      )
       .get(officeId) as { n: number }
   ).n;
 

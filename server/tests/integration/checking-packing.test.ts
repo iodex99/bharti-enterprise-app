@@ -69,7 +69,16 @@ beforeAll(async () => {
       issueDate: '2026-07-03',
       contractorId: 1,
       notes: '',
-      lines: [{ modelId: modelM1, colorId: 1, sizeId: 1, qtyIssuedPcs: 120, unitEntered: 'dozens', ratePaisePerDozen: 3000 }],
+      lines: [
+        {
+          modelId: modelM1,
+          colorId: 1,
+          sizeId: 1,
+          qtyIssuedPcs: 120,
+          unitEntered: 'dozens',
+          ratePaisePerDozen: 3000,
+        },
+      ],
     });
   const jobCardId = job.body.cards[0].id as number;
   const lineId = (
@@ -125,7 +134,11 @@ describe('checking', () => {
     // the directed allocation records exactly the chosen batch
     const allocations = ctx.db
       .prepare('SELECT * FROM check_allocations WHERE check_issue_id = ?')
-      .all(checkId) as Array<{ checking_lot_type: string; checking_lot_id: number; qty_pcs: number }>;
+      .all(checkId) as Array<{
+      checking_lot_type: string;
+      checking_lot_id: number;
+      qty_pcs: number;
+    }>;
     expect(allocations).toHaveLength(1);
     expect(allocations[0]!.checking_lot_id).toBe(receiptLineId);
     expect(stageTotal('CHECKING')).toBe(120);
@@ -226,13 +239,22 @@ describe('packing → finished goods → dispatch', () => {
 
   it('allots packing FROM the checking row: directed, bundles supported', async () => {
     const checkId = (
-      ctx.db.prepare("SELECT id FROM check_issues WHERE doc_no = 'CHK-0001'").get() as { id: number }
+      ctx.db.prepare("SELECT id FROM check_issues WHERE doc_no = 'CHK-0001'").get() as {
+        id: number;
+      }
     ).id;
     // keep 24 pcs aside as a labeled bundle first (ADR-035 #12)
     const bundle = await request(ctx.app)
       .post(`/api/checking/${checkId}/pack`)
       .set('Cookie', operator)
-      .send({ issueDate: '2026-07-09', staffId: 2, qtyPcs: 24, kind: 'bundle', label: 'Festival reserve', notes: '' });
+      .send({
+        issueDate: '2026-07-09',
+        staffId: 2,
+        qtyPcs: 24,
+        kind: 'bundle',
+        label: 'Festival reserve',
+        notes: '',
+      });
     expect(bundle.status).toBe(201);
     bundleId = bundle.body.id as number;
 
@@ -240,14 +262,28 @@ describe('packing → finished goods → dispatch', () => {
     const noLabel = await request(ctx.app)
       .post(`/api/checking/${checkId}/pack`)
       .set('Cookie', operator)
-      .send({ issueDate: '2026-07-09', staffId: 2, qtyPcs: 4, kind: 'bundle', label: '', notes: '' });
+      .send({
+        issueDate: '2026-07-09',
+        staffId: 2,
+        qtyPcs: 4,
+        kind: 'bundle',
+        label: '',
+        notes: '',
+      });
     expect(noLabel.status).toBe(400);
 
     // the rest goes to normal packing (staff 1 — legacy 'checker' role doesn't restrict)
     const res = await request(ctx.app)
       .post(`/api/checking/${checkId}/pack`)
       .set('Cookie', operator)
-      .send({ issueDate: '2026-07-09', staffId: 1, qtyPcs: 88, kind: 'pack', label: '', notes: '' });
+      .send({
+        issueDate: '2026-07-09',
+        staffId: 1,
+        qtyPcs: 88,
+        kind: 'pack',
+        label: '',
+        notes: '',
+      });
     expect(res.status).toBe(201);
     packId = res.body.id as number;
 
@@ -444,9 +480,7 @@ describe('packing → finished goods → dispatch', () => {
     // RAW conservation separately (length units)
     const rawIn = (
       ctx.db
-        .prepare(
-          "SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage='RAW' AND qty > 0",
-        )
+        .prepare("SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage='RAW' AND qty > 0")
         .get() as { q: number }
     ).q;
     const rawOut = (
