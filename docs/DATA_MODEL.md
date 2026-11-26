@@ -64,7 +64,12 @@ to pack later, ADR-035) + pack_results (incremental) · discrepancies (generic: 
 reports + alerts; resolved_at/by/resolution_note set by the admin-only resolve workflow —
 an acknowledgement, never a stock movement) · fg_dispatches (DSP-) · opening_balances
 (OPB-; `width_inch_c` for RAW rows, `model_id` from a typed code otherwise) ·
-contractor_payments (PAY-)
+contractor_payments (PAY-) · staff_payments (SPAY-) ·
+contractor_adjustments (migration 006, ADR-046: one row per check result × reason —
+`kind ∈ rework|missing`, `job_card_line_id`, `contractor_id`, `check_issue_id`,
+`check_result_id`, `qty_pcs`, `adj_date`; NO money column — a line's payable is always
+(stitched − rework − missing) × line rate ÷ 12, rounded once per line, so a rate edit
+re-prices consistently)
 
 **Engine:**
 - `stock_ledger` — append-only signed rows. stage ∈ RAW/CUT/WIP/CHECKING/PACKING/FG/REJECTED;
@@ -72,7 +77,9 @@ contractor_payments (PAY-)
   (CHECKING/PACKING issued-to; NULL = pool); lot_type+lot_id (RAW→purchase|opening,
   CUT→cutting_line|opening, WIP→job_line, CHECKING→receipt_line|opening|check_issue(staff),
   PACKING→check_issue|opening|pack_issue(staff), FG→pack_issue|opening,
-  REJECTED→check_issue); qty signed ≠ 0 (inch_c for RAW, pieces otherwise);
+  REJECTED→check_issue — only rejects from opening stock land here; rejects from a
+  contractor's batch go back to WIP on its job line via `check_reject`, ADR-046);
+  qty signed ≠ 0 (inch_c for RAW, pieces otherwise);
   ref_type/ref_id; office_id (migration 004).
 - Allocations (lineage, lot-typed because opening lots participate everywhere):
   `job_allocations(job_card_line_id, cut_lot_type, cut_lot_id, qty_pcs)`,

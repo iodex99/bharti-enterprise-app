@@ -63,5 +63,7 @@ test('owner sees purchases but has no entry or void controls', async ({ page }) 
   await page.goto('/purchases');
   await expect(page.getByRole('heading', { name: 'Raw Material Purchases' })).toBeVisible();
   await expect(page.getByRole('button', { name: '+ New purchase' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Void' })).toHaveCount(0);
+  // exact: the "Voided" status chip is a button too, and must stay
+  await expect(page.getByRole('button', { name: 'Void', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
 });

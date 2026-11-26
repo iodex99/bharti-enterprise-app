@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { NavLink, Navigate, Outlet, useNavigate } from 'react-router';
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { activeOfficeId, api, switchOffice } from '../api/client';
@@ -33,9 +33,9 @@ const NAV: NavSection[] = [
       { to: '/purchases', label: 'Purchases', icon: '🧾' },
       { to: '/cutting', label: 'Cutting', icon: '✂️' },
       { to: '/jobs', label: 'Job Work', icon: '🧵' },
-      { to: '/contractors', label: 'Contractors', icon: '🤝' },
       { to: '/checking', label: 'Checking & Packing', icon: '🔍' },
       { to: '/dispatches', label: 'Dispatches', icon: '🚚' },
+      // contractors' performance and everyone's ledgers live under Pending Dues
       { to: '/dues', label: 'Pending Dues', icon: '💰' },
       { to: '/discrepancies', label: 'Discrepancies', icon: '⚖️' },
     ],
@@ -266,11 +266,70 @@ export default function AppShell() {
           </div>
         )}
 
-        <main className="min-w-0 flex-1">
+        {/* pb: room for the phone tab bar so it never covers the last row */}
+        <main className="min-w-0 flex-1 pb-20 lg:pb-0">
           <Outlet />
         </main>
       </div>
+
+      <BottomBar onMenu={() => setMenuOpen(true)} />
     </div>
+  );
+}
+
+const BOTTOM: Array<{ to: string; label: string; icon: string; match: (path: string) => boolean }> =
+  [
+    { to: '/', label: 'Home', icon: '🏠', match: (p) => p === '/' },
+    { to: '/jobs', label: 'Jobs', icon: '🧵', match: (p) => p.startsWith('/jobs') },
+    { to: '/checking', label: 'Checking', icon: '🔍', match: (p) => p.startsWith('/checking') },
+    {
+      to: '/dues',
+      label: 'Dues',
+      icon: '💰',
+      match: (p) => p.startsWith('/dues') || p.startsWith('/contractors'),
+    },
+  ];
+
+/**
+ * Phone tab bar: the four places operators go all day, one thumb away; everything else
+ * is behind "Menu". Hidden on laptops, where the sidebar is always open.
+ */
+function BottomBar({ onMenu }: { onMenu: () => void }) {
+  const { pathname } = useLocation();
+  return (
+    <nav
+      aria-label="Quick navigation"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+    >
+      {BOTTOM.map((item) => {
+        const active = item.match(pathname);
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            aria-current={active ? 'page' : undefined}
+            className={clsx(
+              'flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold',
+              active ? 'text-violet-700' : 'text-gray-500',
+            )}
+          >
+            <span aria-hidden className="text-lg leading-none">
+              {item.icon}
+            </span>
+            {item.label}
+          </NavLink>
+        );
+      })}
+      <button
+        onClick={onMenu}
+        className="flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-gray-500"
+      >
+        <span aria-hidden className="text-lg leading-none">
+          ☰
+        </span>
+        Menu
+      </button>
+    </nav>
   );
 }
 

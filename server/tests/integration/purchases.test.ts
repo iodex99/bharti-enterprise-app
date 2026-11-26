@@ -202,35 +202,60 @@ describe('purchases', () => {
     expect(blocked.body.error).toMatch(/CUT-TEST/);
   });
 
-  it('edit changes financial fields only and recomputes the total', async () => {
+  it('edit: everything while untouched, length/color move the RAW stock, total recomputes', async () => {
     const created = await request(ctx.app)
       .post('/api/purchases')
       .set('Cookie', operator)
       .send(PURCHASE);
     const id = created.body.id as number;
+    const rawOf = (colorId: number) =>
+      (
+        ctx.db
+          .prepare(
+            "SELECT COALESCE(SUM(qty),0) AS q FROM stock_ledger WHERE stage='RAW' AND lot_type='purchase' AND lot_id = ? AND color_id = ?",
+          )
+          .get(id, colorId) as { q: number }
+      ).q;
 
     const edit = await request(ctx.app)
       .put(`/api/purchases/${id}`)
       .set('Cookie', operator)
-      .send({ ratePaisePerYard: 5000, notes: 'renegotiated', imagePath: null });
+      .send({
+        ...PURCHASE,
+        lenInchC: PURCHASE.lenInchC + 36000,
+        ratePaisePerYard: 5000,
+        notes: 'renegotiated',
+      });
     expect(edit.status).toBe(200);
-
     const row = ctx.db
-      .prepare('SELECT total_paise, len_inch_c FROM purchases WHERE id = ?')
-      .get(id) as { total_paise: number; len_inch_c: number };
-    expect(row.len_inch_c).toBe(PURCHASE.lenInchC); // immutable
-    expect(row.total_paise).toBe(Math.round((PURCHASE.lenInchC * 5000) / 3600));
+      .prepare('SELECT total_paise, len_inch_c, notes FROM purchases WHERE id = ?')
+      .get(id) as { total_paise: number; len_inch_c: number; notes: string };
+    expect(row.len_inch_c).toBe(PURCHASE.lenInchC + 36000);
+    expect(row.total_paise).toBe(Math.round(((PURCHASE.lenInchC + 36000) * 5000) / 3600));
+    expect(rawOf(PURCHASE.colorId)).toBe(PURCHASE.lenInchC + 36000); // stock follows the edit
 
-    // length is not editable via the API at all
-    const qtyAttempt = await request(ctx.app)
+    // still untouched → the color can be corrected; the stock moves with it
+    ctx.db.exec("INSERT OR IGNORE INTO colors (id, name, created_by) VALUES (2, 'Navy', 1)");
+    const recolor = await request(ctx.app)
       .put(`/api/purchases/${id}`)
       .set('Cookie', operator)
-      .send({ ratePaisePerYard: 5000, notes: '', lenInchC: 99999 });
-    expect(qtyAttempt.status).toBe(200); // extra key ignored by schema
-    const rowAfter = ctx.db.prepare('SELECT len_inch_c FROM purchases WHERE id = ?').get(id) as {
-      len_inch_c: number;
-    };
-    expect(rowAfter.len_inch_c).toBe(PURCHASE.lenInchC);
+      .send({ ...PURCHASE, colorId: 2, lenInchC: PURCHASE.lenInchC });
+    expect(recolor.status).toBe(200);
+    expect(rawOf(PURCHASE.colorId)).toBe(0);
+    expect(rawOf(2)).toBe(PURCHASE.lenInchC);
+
+    // validation still applies to edits
+    const bad = await request(ctx.app)
+      .put(`/api/purchases/${id}`)
+      .set('Cookie', operator)
+      .send({ ...PURCHASE, receivedDate: '2026-06-01' });
+    expect(bad.status).toBe(400);
+    // owners read but never write
+    const ownerEdit = await request(ctx.app)
+      .put(`/api/purchases/${id}`)
+      .set('Cookie', owner)
+      .send(PURCHASE);
+    expect(ownerEdit.status).toBe(403);
   });
 });
 

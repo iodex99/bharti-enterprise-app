@@ -60,6 +60,6 @@ test('admin enters demo mode from the UI, sees demo data + banner, exits back to
   await signIn(page, 'admin', 'Admin@123');
   await expect(page.getByText(/DEMO MODE — sample data/)).toHaveCount(0);
   await page.goto('/contractors');
-  await expect(page.getByRole('heading', { name: 'Contractors' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pending Dues' })).toBeVisible();
   await expect(page.getByText('Farah Stitching Unit')).toHaveCount(0);
 });

@@ -27,8 +27,25 @@ export type DateRange<T> = {
 };
 
 /**
- * Client-side table for lists: instant search, dropdown filters (facets), date-range
- * filter, and click-to-sort headers. Server-paginated views (audit) manage their own.
+ * One-tap status filters shown as chips above the list ("Open", "Completed", …) with
+ * how many rows each holds — the filter people actually use, one thumb away.
+ */
+export type QuickFilter<T> = {
+  key: string;
+  label: string;
+  test: (row: T) => boolean;
+};
+
+/** The value a column contributes to search, sorting and export. */
+function columnValue<T>(col: Column<T>, row: T): unknown {
+  return col.value ? col.value(row) : (row as Record<string, unknown>)[col.key];
+}
+
+/**
+ * Client-side table for lists: one-tap status chips, instant search, dropdown filters
+ * (facets), date-range filter, and click-to-sort headers. On a phone the dropdowns and
+ * dates fold away behind one "Filters" button so the list itself stays on screen.
+ * Server-paginated views (audit) manage their own.
  */
 export function DataTable<T extends { id: number | string }>({
   columns,
@@ -41,6 +58,9 @@ export function DataTable<T extends { id: number | string }>({
   toolbar,
   facets,
   dateRange,
+  quickFilters,
+  defaultQuick,
+  onRowClick,
 }: {
   columns: Column<T>[];
   rows: T[] | undefined;
@@ -52,6 +72,11 @@ export function DataTable<T extends { id: number | string }>({
   toolbar?: ReactNode;
   facets?: Facet<T>[];
   dateRange?: DateRange<T>;
+  quickFilters?: QuickFilter<T>[];
+  /** the chip selected when the page opens ('' = All) */
+  defaultQuick?: string;
+  /** tapping a row/card opens it (the action buttons still work on their own) */
+  onRowClick?: (row: T) => void;
 }) {
   const [q, setQ] = useState('');
   const [facetValues, setFacetValues] = useState<Record<string, string>>({});
@@ -59,7 +84,15 @@ export function DataTable<T extends { id: number | string }>({
   const [to, setTo] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [quick, setQuick] = useState(defaultQuick ?? '');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const compact = useIsCompact();
+
+  const quickCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const qf of quickFilters ?? []) out[qf.key] = rows ? rows.filter(qf.test).length : 0;
+    return out;
+  }, [rows, quickFilters]);
 
   const facetOptions = useMemo(() => {
     const out: Record<string, string[]> = {};
@@ -75,12 +108,11 @@ export function DataTable<T extends { id: number | string }>({
     return out;
   }, [rows, facets]);
 
-  const columnValue = (col: Column<T>, row: T): unknown =>
-    col.value ? col.value(row) : (row as Record<string, unknown>)[col.key];
-
   const filtered = useMemo(() => {
     if (!rows) return [];
     let out = rows;
+    const chip = quickFilters?.find((qf) => qf.key === quick);
+    if (chip) out = out.filter(chip.test);
     for (const facet of facets ?? []) {
       const wanted = facetValues[facet.key];
       if (wanted) out = out.filter((row) => facet.value(row) === wanted);
@@ -118,7 +150,20 @@ export function DataTable<T extends { id: number | string }>({
       }
     }
     return out;
-  }, [rows, q, columns, facets, facetValues, dateRange, from, to, sortKey, sortDir]);
+  }, [
+    rows,
+    q,
+    columns,
+    facets,
+    facetValues,
+    dateRange,
+    from,
+    to,
+    sortKey,
+    sortDir,
+    quickFilters,
+    quick,
+  ]);
 
   const toggleSort = (col: Column<T>) => {
     if (col.sortable === false) return;
@@ -133,11 +178,48 @@ export function DataTable<T extends { id: number | string }>({
   };
 
   const hasFilters = (facets?.length ?? 0) > 0 || !!dateRange;
+  const activeFilterCount =
+    Object.values(facetValues).filter(Boolean).length + (from ? 1 : 0) + (to ? 1 : 0);
+  // phones: dropdowns + dates live behind one button (open by itself when in use)
+  const showFilters = !compact || filtersOpen || activeFilterCount > 0;
 
   return (
     <div>
+      {quickFilters && quickFilters.length > 0 && (
+        <div
+          role="group"
+          aria-label="Quick filter"
+          className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
+        >
+          {[{ key: '', label: 'All', test: () => true } as QuickFilter<T>, ...quickFilters].map(
+            (qf) => {
+              const active = quick === qf.key;
+              const count = qf.key === '' ? (rows?.length ?? 0) : (quickCounts[qf.key] ?? 0);
+              return (
+                <button
+                  key={qf.key || 'all'}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setQuick(qf.key)}
+                  className={clsx(
+                    'flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium sm:min-h-[34px]',
+                    active
+                      ? 'border-violet-600 bg-violet-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300',
+                  )}
+                >
+                  {qf.label}
+                  <span className={clsx('text-xs', active ? 'text-white/80' : 'text-gray-400')}>
+                    {count}
+                  </span>
+                </button>
+              );
+            },
+          )}
+        </div>
+      )}
       <div className="mb-3 flex flex-wrap items-end gap-2">
-        <div className="w-full sm:w-60">
+        <div className="min-w-0 flex-1 sm:w-60 sm:flex-none">
           <TextInput
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -145,23 +227,39 @@ export function DataTable<T extends { id: number | string }>({
             aria-label="Search"
           />
         </div>
-        {facets?.map((facet) => (
-          <div key={facet.key} className="w-full sm:w-44">
-            <Select
-              aria-label={`Filter ${facet.label}`}
-              value={facetValues[facet.key] ?? ''}
-              onChange={(e) => setFacetValues({ ...facetValues, [facet.key]: e.target.value })}
-            >
-              <option value="">{facet.label}: all</option>
-              {(facetOptions[facet.key] ?? []).map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ))}
-        {dateRange && (
+        {compact && hasFilters && (
+          <button
+            type="button"
+            aria-expanded={showFilters}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+            className={clsx(
+              'flex min-h-[44px] items-center gap-1 rounded-lg border px-3 text-sm font-medium',
+              activeFilterCount > 0
+                ? 'border-violet-400 bg-violet-50 text-violet-700'
+                : 'border-gray-300 bg-white text-gray-600',
+            )}
+          >
+            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+        )}
+        {showFilters &&
+          facets?.map((facet) => (
+            <div key={facet.key} className="w-full sm:w-44">
+              <Select
+                aria-label={`Filter ${facet.label}`}
+                value={facetValues[facet.key] ?? ''}
+                onChange={(e) => setFacetValues({ ...facetValues, [facet.key]: e.target.value })}
+              >
+                <option value="">{facet.label}: all</option>
+                {(facetOptions[facet.key] ?? []).map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ))}
+        {showFilters && dateRange && (
           <>
             <div className="w-[9.5rem]">
               <TextInput
@@ -184,7 +282,7 @@ export function DataTable<T extends { id: number | string }>({
         )}
         {/* Cards have no column headings to click, so phones get a sort picker —
             otherwise sorting would simply be missing on the device operators use. */}
-        {compact && (
+        {compact && showFilters && (
           <div className="w-full">
             <Select
               aria-label="Sort by"
@@ -209,7 +307,7 @@ export function DataTable<T extends { id: number | string }>({
             </Select>
           </div>
         )}
-        {hasFilters && (q || from || to || Object.values(facetValues).some(Boolean)) && (
+        {(q || from || to || Object.values(facetValues).some(Boolean)) && (
           <button
             className="pb-2 text-xs font-medium text-violet-600 hover:underline"
             onClick={() => {
@@ -251,7 +349,11 @@ export function DataTable<T extends { id: number | string }>({
             <div
               key={row.id}
               role="row"
-              className="rounded-2xl border border-gray-200 bg-white p-3"
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={clsx(
+                'rounded-2xl border border-gray-200 bg-white p-3',
+                onRowClick && 'cursor-pointer active:bg-gray-50',
+              )}
             >
               <dl className="space-y-1.5">
                 {columns.map((c) => {
@@ -274,6 +376,7 @@ export function DataTable<T extends { id: number | string }>({
               {actions && (
                 <div
                   role="cell"
+                  onClick={(e) => e.stopPropagation()}
                   className="mt-2 flex flex-wrap justify-end gap-1 border-t border-gray-100 pt-2"
                 >
                   {actions(row)}
@@ -324,7 +427,11 @@ export function DataTable<T extends { id: number | string }>({
               {filtered.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50"
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={clsx(
+                    'border-b border-gray-100 last:border-0 hover:bg-gray-50/50',
+                    onRowClick && 'cursor-pointer',
+                  )}
                 >
                   {columns.map((c) => (
                     <td key={c.key} className={clsx('px-4 py-2.5 align-middle', c.className)}>
@@ -332,7 +439,7 @@ export function DataTable<T extends { id: number | string }>({
                     </td>
                   ))}
                   {actions && (
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1">{actions(row)}</div>
                     </td>
                   )}

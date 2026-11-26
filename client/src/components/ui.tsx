@@ -4,8 +4,10 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
   useEffect,
+  useState,
   useSyncExternalStore,
 } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 
 /** Tailwind's `sm`. Below it, lists render as cards (ADR-038). */
@@ -36,7 +38,8 @@ export function Button({
   return (
     <button
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        // 44px tall on a phone (a thumb, not a mouse); compact again from `sm` up
+        'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0',
         variant === 'primary' && 'bg-violet-600 text-white hover:bg-violet-700',
         variant === 'secondary' && 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
         variant === 'danger' && 'bg-red-600 text-white hover:bg-red-700',
@@ -137,7 +140,8 @@ export function MiniTable<T>({
 
 /**
  * A link to a photo or QR code. Operators work on phones, so these never render as a
- * bare emoji — every one gets a finger-sized (36px) hit area of its own.
+ * bare emoji — every one gets a finger-sized (36px) hit area of its own. Tapping opens
+ * the photo right here (PhotoViewer) instead of throwing the user into a new tab.
  */
 export function ThumbLink({
   href,
@@ -150,18 +154,218 @@ export function ThumbLink({
   label?: string;
   title?: string;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      title={title ?? label ?? 'Open photo'}
-      onClick={(e) => e.stopPropagation()}
-      className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center gap-1 rounded-lg px-1.5 text-sm text-violet-600 hover:bg-violet-50 hover:underline"
+    <>
+      <a
+        href={href}
+        title={title ?? label ?? 'Open photo'}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center gap-1 rounded-lg px-1.5 text-sm text-violet-600 hover:bg-violet-50 hover:underline"
+      >
+        <span aria-hidden>{icon}</span>
+        {label && <span>{label}</span>}
+      </a>
+      {open && (
+        <PhotoViewer src={href} title={title ?? label ?? 'Photo'} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
+/**
+ * A small square thumbnail of the actual photo; tap to see it full screen. Used in
+ * lists so people recognise goods by sight, not by code.
+ */
+export function PhotoThumb({
+  src,
+  title = 'Photo',
+  size = 40,
+}: {
+  src: string | null | undefined;
+  title?: string;
+  size?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [broken, setBroken] = useState(false);
+  if (!src) return <span className="text-gray-300">—</span>;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`View ${title.toLowerCase()}`}
+        title={title}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
+        className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 align-middle hover:ring-2 hover:ring-violet-300"
+        style={{ width: size, height: size }}
+      >
+        {broken ? (
+          <span aria-hidden>📷</span>
+        ) : (
+          <img
+            src={src}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+            onError={() => setBroken(true)}
+          />
+        )}
+      </button>
+      {open && <PhotoViewer src={src} title={title} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/** Full-screen photo, above everything (including open dialogs). Esc / tap outside closes. */
+export function PhotoViewer({
+  src,
+  title,
+  onClose,
+}: {
+  src: string;
+  title: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return createPortal(
+    <div
+      role="dialog"
+      aria-label={title}
+      className="fixed inset-0 z-[70] flex flex-col bg-black/90"
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <span aria-hidden>{icon}</span>
-      {label && <span>{label}</span>}
-    </a>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 text-white">
+        <p className="truncate text-sm font-semibold">{title}</p>
+        <div className="flex items-center gap-1">
+          <a
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/10"
+          >
+            Full size
+          </a>
+          <button
+            onClick={onClose}
+            aria-label="Close photo"
+            className="rounded-lg p-2 hover:bg-white/10"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div
+        className="flex min-h-0 flex-1 items-center justify-center p-3"
+        onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <img src={src} alt={title} className="max-h-full max-w-full rounded-lg object-contain" />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * One row of big, tappable tabs — scrolls sideways on a phone instead of wrapping.
+ * Counts make "is anything waiting here?" answerable without opening the tab.
+ */
+export function Tabs<K extends string>({
+  value,
+  onChange,
+  items,
+}: {
+  value: K;
+  onChange: (key: K) => void;
+  items: Array<{
+    key: K;
+    label: string;
+    count?: number;
+    tone?: 'amber' | 'violet' | 'green' | 'gray';
+  }>;
+}) {
+  return (
+    <div
+      role="tablist"
+      className="-mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
+    >
+      {items.map((t) => {
+        const active = t.key === value;
+        return (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.key)}
+            className={clsx(
+              'flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border px-3.5 text-sm font-semibold transition-colors sm:min-h-[38px]',
+              active
+                ? 'border-violet-600 bg-violet-600 text-white'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300',
+            )}
+          >
+            {t.label}
+            {t.count != null && t.count > 0 && (
+              <span
+                className={clsx(
+                  'rounded-full px-1.5 py-0.5 text-[11px] font-bold leading-none',
+                  active
+                    ? 'bg-white/25 text-white'
+                    : t.tone === 'amber'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-gray-100 text-gray-600',
+                )}
+              >
+                {t.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Page title + one-line explanation + the page's main action, consistent everywhere. */
+export function PageHeader({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
   );
 }
 
@@ -193,7 +397,8 @@ export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInput
   return (
     <input
       className={clsx(
-        'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-gray-50',
+        // text-base below `sm`: iOS zooms the page into any field smaller than 16px
+        'w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:bg-gray-50 sm:py-2 sm:text-sm',
         className,
       )}
       {...props}
@@ -205,7 +410,7 @@ export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectE
   return (
     <select
       className={clsx(
-        'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200',
+        'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200 sm:py-2 sm:text-sm',
         className,
       )}
       {...props}

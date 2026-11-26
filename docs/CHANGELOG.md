@@ -5,6 +5,22 @@ commit messages; this file is the human-curated history.
 
 ## Unreleased
 
+- 2026-11-26 — **Rework back to the contractor, a ledger + PDF statement for everyone,
+  Edit on every list, a Packed register, and a phone-first pass over the whole UI.**
+  Rejected pieces now go straight back to the contractor who stitched them (the job card
+  reopens) and come off their dues until the fixed pieces pass; missing pieces are deducted
+  from the contractor (ADR-046, migration 006). Every contractor, checker and packer has a
+  ledger — work, deductions, payments, running balance and a "how this is worked out"
+  breakdown — with Download / Share PDF statements (ADR-047, pdf-lib). Edit is now on
+  purchases (full edit while the cloth is uncut), job cards (rates/date/notes after goods
+  came back), receipts (date/photo/notes), check and pack issues, payments (admin),
+  dispatches (admin) and opening balances — all through the ledger (ADR-048). Checking &
+  Packing is four tabs with a new **Packed** register and a one-step "pack now"; the
+  Contractors page moved under Pending Dues. Phones get a bottom tab bar, bigger tap
+  targets, one-tap status chips with counts on every list, filters folded behind one
+  button, photo thumbnails that open in-app, and "All pending / All passed / All packed"
+  shortcuts (ADR-049). Also: the WIP self-check now accounts for excess receipts.
+
 - 2026-10-04 — **Automatic-update controls, a backup-folder hint that works, and a
   proxy-safe sign-in check.** System Health gains an *Automatic updates* card (on/off and
   the quiet period) — the docs already promised it, but only the server settings existed.

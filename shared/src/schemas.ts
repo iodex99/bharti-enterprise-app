@@ -151,12 +151,12 @@ export const purchaseSchema = z
   });
 export type PurchaseInput = z.infer<typeof purchaseSchema>;
 
-export const purchaseEditSchema = z.object({
-  // financial/reference fields only — quantity/color are immutable (void + re-enter)
-  ratePaisePerYard: z.number().int().min(0).max(100_000_00),
-  imagePath: z.string().max(300).nullish(),
-  notes: optionalText(500),
-});
+/**
+ * Edit = the whole purchase again. The service decides what may change: everything
+ * while the cloth is untouched; once some was cut, the color and width are fixed and
+ * the length cannot drop below what was already used.
+ */
+export const purchaseEditSchema = purchaseSchema;
 export type PurchaseEditInput = z.infer<typeof purchaseEditSchema>;
 
 export const voidSchema = z.object({
@@ -299,6 +299,18 @@ export const staffPaymentSchema = paymentSchema.omit({ contractorId: true }).ext
 });
 export type StaffPaymentInput = z.infer<typeof staffPaymentSchema>;
 
+/** Correcting a payment: who it was paid to stays fixed (void and re-enter for that). */
+export const paymentEditSchema = paymentSchema.omit({ contractorId: true });
+export type PaymentEditInput = z.infer<typeof paymentEditSchema>;
+
+/** A receipt's pieces are fixed once recorded (checkers work from them); its paperwork is not. */
+export const receiptEditSchema = z.object({
+  receiptDate: businessDate,
+  imagePath: z.string().trim().min(1, 'A photo of the returned goods is required').max(300),
+  notes: optionalText(300),
+});
+export type ReceiptEditInput = z.infer<typeof receiptEditSchema>;
+
 export const checkIssueSchema = z.object({
   issueDate: businessDate,
   staffId: id,
@@ -311,6 +323,16 @@ export const checkIssueSchema = z.object({
   notes: optionalText(300),
 });
 export type CheckIssueInput = z.infer<typeof checkIssueSchema>;
+
+/** Checker + quantity change only before any result; date/rate/notes always. */
+export const checkIssueEditSchema = z.object({
+  issueDate: businessDate,
+  staffId: id,
+  qtyPcs: z.number().int().positive().max(10_000_000),
+  ratePaisePerDozen: z.number().int().min(0).max(100_000_00),
+  notes: optionalText(300),
+});
+export type CheckIssueEditInput = z.infer<typeof checkIssueEditSchema>;
 
 /**
  * Check result v2 (ADR-034): passed + ONE rejected box broken down by reason, where
@@ -330,6 +352,11 @@ export const checkResultSchema = z
       )
       .default([]),
     notes: optionalText(300),
+    /**
+     * One step instead of two: hand the passed pieces straight to packing, to the same
+     * person who checked them (what happens 9 times out of 10).
+     */
+    packNow: z.boolean().optional(),
   })
   .refine((r) => r.qtyPassed + r.rejections.reduce((s, x) => s + x.qtyPcs, 0) > 0, {
     message: 'Enter at least one quantity',
@@ -356,6 +383,17 @@ export const packIssueSchema = z.object({
   notes: optionalText(300),
 });
 export type PackIssueInput = z.infer<typeof packIssueSchema>;
+
+/** Packer + quantity change only before any packing result; the rest always. */
+export const packIssueEditSchema = z.object({
+  issueDate: businessDate,
+  staffId: id,
+  qtyPcs: z.number().int().positive().max(10_000_000),
+  label: optionalText(100),
+  ratePaisePerDozen: z.number().int().min(0).max(100_000_00),
+  notes: optionalText(300),
+});
+export type PackIssueEditInput = z.infer<typeof packIssueEditSchema>;
 
 export const packResultSchema = z
   .object({
@@ -417,3 +455,15 @@ export const openingBalanceSchema = z
     path: ['contractorId'],
   });
 export type OpeningBalanceInput = z.infer<typeof openingBalanceSchema>;
+
+/**
+ * Correcting an opening balance: its date, quantity and note. WHAT the stock is
+ * (stage/code/color/size/contractor) is its identity — void and re-enter to change it.
+ */
+export const openingEditSchema = z.object({
+  balanceDate: businessDate,
+  qty: z.number().int().positive().max(400_000_000),
+  widthInchC: z.number().int().positive().max(20_000).nullish(),
+  note: optionalText(300),
+});
+export type OpeningEditInput = z.infer<typeof openingEditSchema>;

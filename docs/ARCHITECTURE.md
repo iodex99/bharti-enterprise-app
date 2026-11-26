@@ -70,7 +70,19 @@ Operators use phones. Every list therefore has two renderings from ONE definitio
 stacked cards below the `sm` breakpoint, the table above it — `DataTable` for the main
 lists and `MiniTable` (components/ui.tsx) for the hand-rolled ones. Any new list must go
 through one of them, or the action buttons end up off-screen on a phone. Photo/QR links
-use `ThumbLink` so they keep a 36px hit area.
+use `ThumbLink`/`PhotoThumb` so they keep a finger-sized hit area and open the in-app
+`PhotoViewer`.
+
+Phone-first conventions (ADR-049): a bottom tab bar below `lg`; buttons 44px tall and
+inputs 16px below `sm`; `DataTable` takes `quickFilters` (status chips with counts,
+`defaultQuick`) and `onRowClick`, and on phones folds facets/dates/sort behind one
+"Filters" button; multi-step pages use `Tabs` with the tab in `?tab=` so links land on
+the right step.
+
+Money (ADR-046/047): `jobAccounts.service` is the single source of a contractor's
+payable per job line; `statements.service` builds every person's ledger from it (and
+from check/pack results for staff) and `utils/statementPdf.ts` renders that same object
+as the PDF.
 
 ## Core invariants
 

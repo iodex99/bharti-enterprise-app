@@ -25,6 +25,7 @@ type OpeningRow = {
   sizeCode: string | null;
   contractorName: string | null;
   qty: number;
+  widthInchC: number | null;
   note: string;
   voidedAt: string | null;
 };
@@ -32,6 +33,7 @@ type OpeningRow = {
 export default function OpeningBalancesPage() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editFor, setEditFor] = useState<OpeningRow | null>(null);
   const [voidFor, setVoidFor] = useState<OpeningRow | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -103,14 +105,34 @@ export default function OpeningBalancesPage() {
         loading={isLoading}
         emptyTitle="No opening balances entered"
         emptyHint="Use this once at go-live to load current stock from the paper registers."
+        quickFilters={[
+          { key: 'active', label: 'Active', test: (r) => !r.voidedAt },
+          { key: 'voided', label: 'Voided', test: (r) => !!r.voidedAt },
+        ]}
+        defaultQuick="active"
+        facets={[{ key: 'stage', label: 'Stage', value: (r) => stageLabel(r.stage) }]}
+        dateRange={{ label: 'As of', value: (r) => r.balanceDate }}
         actions={(row) =>
           row.voidedAt ? null : (
-            <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
-              Void
-            </Button>
+            <>
+              <Button variant="ghost" onClick={() => setEditFor(row)}>
+                Edit
+              </Button>
+              <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
+                Void
+              </Button>
+            </>
           )
         }
       />
+      {editFor && (
+        <EditOpeningModal
+          key={editFor.id}
+          row={editFor}
+          onClose={() => setEditFor(null)}
+          onDone={invalidate}
+        />
+      )}
 
       <NewOpeningModal
         key={String(createOpen)}
@@ -133,6 +155,83 @@ export default function OpeningBalancesPage() {
         onDone={invalidate}
       />
     </div>
+  );
+}
+
+/** Correct the date, quantity or note of an opening balance (identity stays fixed). */
+function EditOpeningModal({
+  row,
+  onClose,
+  onDone,
+}: {
+  row: OpeningRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [balanceDate, setBalanceDate] = useState(row.balanceDate);
+  const [qty, setQty] = useState<number | null>(row.qty);
+  const [widthInchC, setWidth] = useState<number | null>(row.widthInchC);
+  const [note, setNote] = useState(row.note ?? '');
+  const [error, setError] = useState('');
+  const isRaw = row.stage === 'RAW';
+  const save = useMutation({
+    mutationFn: () =>
+      api.put(`/api/opening-balances/${row.id}`, {
+        balanceDate,
+        qty,
+        widthInchC: isRaw ? widthInchC : null,
+        note,
+      }),
+    onSuccess: () => {
+      onDone();
+      onClose();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
+  });
+  return (
+    <Modal title={`Edit ${row.docNo}`} open onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate();
+        }}
+        className="space-y-4"
+      >
+        <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          {stageLabel(row.stage)} · {row.modelCode} {row.colorName}
+          {row.sizeCode ? ` · ${row.sizeCode}` : ''}
+          {row.contractorName ? ` · with ${row.contractorName}` : ''} — to change what this stock
+          is, void it and add it again.
+        </p>
+        <Field label="As of">
+          <TextInput
+            type="date"
+            value={balanceDate}
+            onChange={(e) => setBalanceDate(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label={isRaw ? 'Length (yards)' : 'Quantity'}>
+          {isRaw ? (
+            <YardsInput inchC={qty} onChange={setQty} />
+          ) : (
+            <DzPcInput pieces={qty} onChange={setQty} />
+          )}
+        </Field>
+        {isRaw && (
+          <Field label="Width (inches)">
+            <InchesInput inchC={widthInchC} onChange={setWidth} />
+          </Field>
+        )}
+        <Field label="Note">
+          <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <ErrorText>{error}</ErrorText>
+        <Button type="submit" disabled={save.isPending || !qty} className="w-full">
+          {save.isPending ? 'Saving…' : 'Save changes'}
+        </Button>
+      </form>
+    </Modal>
   );
 }
 

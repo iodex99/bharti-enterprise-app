@@ -107,27 +107,28 @@ missing and the contractor cannot return them, only the **Admin** can close the 
 ("Close with discrepancy") — the shortage is written off and recorded against the
 contractor permanently.
 
-### 4. Checking & Packing (one page)
-**Production → Checking & Packing.** The top of the page lists every batch **pending for
-checking** — which contractor it came from, the receipt number, the return photo, and how
-many pieces are waiting. Press **Issue to checker** on a batch to allot it: you always
-know **which contractor's goods each checker is checking**. Any staff member can check.
+### 4. Checking & Packing (one page, four tabs)
+**Checking** (bottom bar) has four tabs, in the order the goods move:
 
-Record results in sessions (today 3 dz, tomorrow 2 dz): **passed** and **rejected
-pieces** with a reason — stitching, elastic, color, damage, **missing**, or other.
-"Missing" is simply one of the reasons in the dropdown; the system knows missing pieces
-are gone (they never sit in Rejected stock) and records them against that contractor's
-batch on the Discrepancies page.
-
-**Packing happens right here.** When a batch has passed pieces, a **Pack** button appears
-on its row. Nine times out of ten the checker packs their own goods, so the checker is
-already selected — change the person only if someone else will pack. Two choices:
-
-- **Pack now** — the pieces go to that packer; record the packed dozens under
-  **📦 Packing in progress** below, and they become **Finished Goods**.
-- **Keep aside as a bundle** — when the owner asks for some dozens to be kept aside for
-  later. Give the bundle a name ("Festival order reserve"); it waits under **🎁 Bundles
-  kept aside** and can be packed by anyone, any time, straight from that list.
+1. **📥 To check** — every batch back from a contractor and not yet verified: who it came
+   from, the receipt number, the return photo (tap it to see it big), and how many pieces
+   are waiting. Press **Issue to checker**. Any staff member can check.
+2. **🔍 Checking** — batches with a checker. Press **Record result** and enter **passed**
+   (or tap **All … passed**) and any **rejected pieces** with a reason — stitching,
+   elastic, color, damage, **missing**, or other.
+   - **Rejected pieces go straight back to the contractor** who stitched them. Their job
+     card reopens, and those pieces come **off the contractor's dues** until they bring
+     them back fixed — then they are checked again and paid normally. The form tells you
+     this before you save.
+   - **Missing** pieces are written off and **deducted from the contractor**.
+   - **"packs the passed pieces now"** is ticked by default: the checker gets the passed
+     pieces for packing in the same step. Untick it to choose a different packer or keep
+     a bundle.
+3. **📦 Packing** — passed pieces ready to pack (**Pack**: the checker is already chosen;
+   or **Keep aside as a bundle** for later), packing in progress (**Record packing**, with
+   an **All … packed** shortcut), and bundles kept aside.
+4. **✅ Packed** — the register of finished goods: what was packed, when, by whom, and
+   from which contractor's batch.
 
 ### 5. Dispatches (Admin)
 **Production → Dispatches.** Records finished goods leaving for sale so FG stock stays
@@ -135,9 +136,21 @@ true.
 
 ## Money: contractors, checkers/packers, and pending dues
 
-**Production → Contractors** shows every contractor's scorecard: how much they've been
-given, returned, lost (shortage), extra (excess), their discrepancy %, average turnaround
-days, the job-work cost earned and dues.
+**Pending Dues** (bottom bar → Dues) has four tabs: **Pending** (who is owed what right
+now), **Contractors** (every contractor's scorecard — given, returned, rework, short /
+excess, discrepancy %, turnaround, cost and dues), **Checkers & Packers**, and
+**Payments** (every payment; the Admin can **Edit** or **Void** one).
+
+**Tap any person to open their ledger.** It shows:
+- the **balance due** at the top, with **Record payment**, **Download PDF** and, on a
+  phone, **Share PDF** (send it straight on WhatsApp);
+- **How this is worked out** — work received, *less* pieces sent back for rework, *less*
+  missing pieces, *less* paid, = balance due;
+- the breakdown **by job card** (contractors) or **by batch** (checkers/packers): pieces,
+  rate per dozen, amount;
+- the **account ledger** — every receipt, deduction and payment with the running balance.
+Choose **This month**, **Last month** or your own dates to get a statement for a period
+(it starts from the opening balance).
 
 **Checkers and packers are paid per dozen too.** Set each person's usual rate in
 **Masters → Checkers & Packers**; when a batch is allotted for checking or packing, that
@@ -173,17 +186,19 @@ was recorded, so nothing moves again.
 
 ## On a phone
 
-The app is built for phones as much as for the office computer. On a phone every list
-turns into **one card per row** — the contractor, the size-code, the quantity and the
-buttons all stacked and readable, with nothing hidden off the side of the screen. The
-menu is behind the ☰ button, and photo and QR links are sized for a fingertip. On a
-tablet or laptop the same lists show as normal tables.
+The app is built for phones first. The **bar at the bottom** takes you to Home, Jobs,
+Checking and Dues in one tap; everything else is under **Menu**. Every list turns into
+**one card per row** — tap a card to open it; its buttons sit underneath. Buttons and
+boxes are thumb-sized, and **photos show as small pictures — tap one to see it full
+screen**. On a tablet or laptop the same lists show as normal tables.
 
 ## Finding things fast
 
-Every list has instant **search**, **dropdown filters** (vendor, contractor, code,
-color, size, status, checker/packer…), a **date range**, and **click-to-sort column
-headings**. The size-code and its photo appear on every screen the goods pass through —
+Every list has **one-tap status chips** at the top with a count on each (e.g. *In
+stock · Fully used · Voided*, *With contractor · Rework due · Completed · Closed*),
+instant **search**, **dropdown filters** (vendor, contractor, code, color, size,
+checker/packer…), a **date range**, and sorting. On a phone the dropdowns, dates and
+sorting sit behind one **Filters** button. The size-code and its photo appear on every screen the goods pass through —
 cutting, job cards, checking, packing, stock, reports and traceability all speak the
 same language.
 
@@ -213,12 +228,20 @@ forward.
 ## Fixing mistakes
 
 Nothing is ever deleted. If a document was entered wrongly:
-- A cutting entry or an unstarted job card can be **edited or deleted** directly while
-  nothing downstream has used it — the stock adjusts itself.
-- Financial details of a purchase (rate, notes, photo) can be edited — changes are logged.
-- Everything else: the **Admin voids** the document (reason required) and it is re-entered
-  correctly. Voiding puts the stock back exactly as it was, and is blocked if later steps
-  already used the material (void those first).
+Every list has an **Edit** button. What can change depends on what has happened since:
+- **Before anything later uses it, everything can be corrected** — a purchase (vendor,
+  color, length, width, rate…), a cutting entry, a job card, a checker's or packer's batch
+  (person and quantity). The stock adjusts itself.
+- **After that, the paperwork stays editable**: dates, rates, photos and notes. A job card
+  that already has goods back keeps its sizes and quantities, but its **cost per dozen**
+  can still be corrected — the contractor's dues update by themselves. Once some cloth of
+  a purchase is cut, its color and width are fixed and the length can't go below what was
+  used.
+- Receipts: date, photo and notes. Opening balances: date, quantity and note (never below
+  what was used).
+- Payments and dispatches are corrected by the **Admin**.
+- To change what a document *is* after it has been used, the **Admin voids** it (reason
+  required) and it is re-entered. Voiding puts the stock back exactly as it was.
 
 Every change is recorded in **Administration → Audit Log** — who, when, and what changed.
 

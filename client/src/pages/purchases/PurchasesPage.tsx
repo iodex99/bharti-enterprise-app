@@ -4,7 +4,16 @@ import { formatBusinessDate, formatInchC, formatLen, formatPaise, todayIST } fro
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, TextInput } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  PageHeader,
+  PhotoThumb,
+  TextInput,
+} from '../../components/ui';
 import { ImageInput, InchesInput, MoneyInput, YardsInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 
@@ -34,13 +43,13 @@ export default function PurchasesPage() {
   const isAdmin = user?.role === 'admin';
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editFor, setEditFor] = useState<PurchaseRow | null>(null);
   const [voidFor, setVoidFor] = useState<PurchaseRow | null>(null);
-  const [showVoided, setShowVoided] = useState(false);
 
+  // voided ones come too — the "Voided" chip shows them, the default chips hide them
   const { data, isLoading } = useQuery({
-    queryKey: ['purchases', showVoided],
-    queryFn: () =>
-      api.get<{ items: PurchaseRow[] }>(`/api/purchases${showVoided ? '?includeVoided=1' : ''}`),
+    queryKey: ['purchases', 'all'],
+    queryFn: () => api.get<{ items: PurchaseRow[] }>('/api/purchases?includeVoided=1'),
   });
 
   const invalidate = () => {
@@ -50,19 +59,23 @@ export default function PurchasesPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Raw Material Purchases</h1>
-          <p className="text-sm text-gray-500">
-            Cloth received from vendors — length in yards, width in inches
-          </p>
-        </div>
-        {canWrite && <Button onClick={() => setCreateOpen(true)}>+ New purchase</Button>}
-      </div>
+      <PageHeader
+        title="Raw Material Purchases"
+        subtitle="Cloth received from vendors — length in yards, width in inches"
+        action={canWrite && <Button onClick={() => setCreateOpen(true)}>+ New purchase</Button>}
+      />
 
       <DataTable
         columns={[
           { key: 'docNo', header: 'Batch', className: 'font-mono text-xs font-medium' },
+          {
+            key: 'imagePath',
+            header: 'Photo',
+            sortable: false,
+            value: () => '',
+            render: (r) =>
+              r.imagePath ? <PhotoThumb src={r.imagePath} title={`Purchase ${r.docNo}`} /> : '',
+          },
           {
             key: 'purchaseDate',
             header: 'Date',
@@ -119,40 +132,51 @@ export default function PurchasesPage() {
         emptyHint={
           canWrite ? 'Press “+ New purchase” to record the first cloth purchase.' : undefined
         }
+        quickFilters={[
+          { key: 'stock', label: 'In stock', test: (r) => !r.voidedAt && r.remainingInchC > 0 },
+          { key: 'used', label: 'Fully used', test: (r) => !r.voidedAt && r.remainingInchC === 0 },
+          { key: 'voided', label: 'Voided', test: (r) => !!r.voidedAt },
+        ]}
+        defaultQuick="stock"
         facets={[
           { key: 'vendor', label: 'Vendor', value: (r) => r.vendorName },
           { key: 'color', label: 'Color', value: (r) => r.colorName },
         ]}
         dateRange={{ label: 'Purchase date', value: (r) => r.purchaseDate }}
-        toolbar={
-          <label className="flex items-center gap-1.5 text-sm text-gray-500">
-            <input
-              type="checkbox"
-              checked={showVoided}
-              onChange={(e) => setShowVoided(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            Show voided
-          </label>
-        }
-        actions={
-          isAdmin
-            ? (row) =>
-                row.voidedAt ? null : (
-                  <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
-                    Void
-                  </Button>
-                )
-            : undefined
+        onRowClick={canWrite ? (row) => !row.voidedAt && setEditFor(row) : undefined}
+        actions={(row) =>
+          row.voidedAt ? null : (
+            <>
+              {canWrite && (
+                <Button variant="ghost" onClick={() => setEditFor(row)}>
+                  Edit
+                </Button>
+              )}
+              {isAdmin && (
+                <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
+                  Void
+                </Button>
+              )}
+            </>
+          )
         }
       />
 
-      <NewPurchaseModal
+      <PurchaseModal
         key={String(createOpen)}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onDone={invalidate}
       />
+      {editFor && (
+        <PurchaseModal
+          key={`edit-${editFor.id}`}
+          open
+          existing={editFor}
+          onClose={() => setEditFor(null)}
+          onDone={invalidate}
+        />
+      )}
       <VoidModal
         entity="purchase"
         target={
@@ -167,32 +191,40 @@ export default function PurchasesPage() {
   );
 }
 
-function NewPurchaseModal({
+/**
+ * New purchase, or edit an existing one. Everything is editable while the cloth is
+ * untouched; once some is cut, color and width lock and length can't drop below what
+ * was used (the server enforces it — the form says so up front).
+ */
+function PurchaseModal({
   open,
+  existing,
   onClose,
   onDone,
 }: {
   open: boolean;
+  existing?: PurchaseRow;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [purchaseDate, setPurchaseDate] = useState(todayIST());
-  const [receivedDate, setReceivedDate] = useState(todayIST());
-  const [vendorId, setVendorId] = useState<number | null>(null);
-  const [colorId, setColorId] = useState<number | null>(null);
-  const [lenInchC, setLenInchC] = useState<number | null>(null);
-  const [widthInchC, setWidthInchC] = useState<number | null>(null);
-  const [rate, setRate] = useState<number | null>(null);
-  const [imagePath, setImagePath] = useState<string | null>(null);
-  const [notes, setNotes] = useState('');
+  const used = existing ? existing.lenInchC - existing.remainingInchC : 0;
+  const [purchaseDate, setPurchaseDate] = useState(existing?.purchaseDate ?? todayIST());
+  const [receivedDate, setReceivedDate] = useState(existing?.receivedDate ?? todayIST());
+  const [vendorId, setVendorId] = useState<number | null>(existing?.vendorId ?? null);
+  const [colorId, setColorId] = useState<number | null>(existing?.colorId ?? null);
+  const [lenInchC, setLenInchC] = useState<number | null>(existing?.lenInchC ?? null);
+  const [widthInchC, setWidthInchC] = useState<number | null>(existing?.widthInchC ?? null);
+  const [rate, setRate] = useState<number | null>(existing?.ratePaisePerYard ?? null);
+  const [imagePath, setImagePath] = useState<string | null>(existing?.imagePath ?? null);
+  const [notes, setNotes] = useState(existing?.notes ?? '');
   const [error, setError] = useState('');
 
   const totalPreview =
     lenInchC != null && rate != null ? formatPaise(Math.round((lenInchC * rate) / 3600)) : '—';
 
   const save = useMutation({
-    mutationFn: () =>
-      api.post('/api/purchases', {
+    mutationFn: () => {
+      const body = {
         purchaseDate,
         receivedDate,
         vendorId,
@@ -202,7 +234,11 @@ function NewPurchaseModal({
         ratePaisePerYard: rate ?? 0,
         imagePath,
         notes,
-      }),
+      };
+      return existing
+        ? api.put(`/api/purchases/${existing.id}`, body)
+        : api.post('/api/purchases', body);
+    },
     onSuccess: () => {
       onDone();
       onClose();
@@ -211,7 +247,12 @@ function NewPurchaseModal({
   });
 
   return (
-    <Modal title="New raw material purchase" open={open} onClose={onClose} wide>
+    <Modal
+      title={existing ? `Edit purchase ${existing.docNo}` : 'New raw material purchase'}
+      open={open}
+      onClose={onClose}
+      wide
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -231,6 +272,12 @@ function NewPurchaseModal({
         }}
         className="grid grid-cols-1 gap-4 sm:grid-cols-2"
       >
+        {used > 0 && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:col-span-2">
+            {formatLen(used)} of this cloth is already cut, so its color and width are fixed and the
+            length can't go below that. Everything else can be corrected.
+          </p>
+        )}
         <Field label="Purchase date">
           <TextInput
             type="date"
@@ -251,13 +298,18 @@ function NewPurchaseModal({
           <MasterSelect master="vendors" value={vendorId} onChange={setVendorId} />
         </Field>
         <Field label="Color" hint="The code number is given later, at cutting">
-          <MasterSelect master="colors" value={colorId} onChange={setColorId} />
+          <MasterSelect master="colors" value={colorId} onChange={setColorId} disabled={used > 0} />
         </Field>
         <Field label="Length (yards)">
           <YardsInput inchC={lenInchC} onChange={setLenInchC} placeholder="e.g. 125.5" />
         </Field>
         <Field label="Width (inches)" hint="Used at cutting to work out pieces across the width">
-          <InchesInput inchC={widthInchC} onChange={setWidthInchC} placeholder="e.g. 44" />
+          <InchesInput
+            inchC={widthInchC}
+            onChange={setWidthInchC}
+            placeholder="e.g. 44"
+            disabled={used > 0}
+          />
         </Field>
         <Field label="Rate per yard">
           <MoneyInput paise={rate} onChange={setRate} placeholder="e.g. 45.50" />
@@ -280,7 +332,7 @@ function NewPurchaseModal({
         <div className="sm:col-span-2 space-y-3">
           <ErrorText>{error}</ErrorText>
           <Button type="submit" disabled={save.isPending} className="w-full">
-            {save.isPending ? 'Saving…' : 'Save purchase'}
+            {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Save purchase'}
           </Button>
         </div>
       </form>

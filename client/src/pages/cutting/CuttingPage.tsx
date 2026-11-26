@@ -17,9 +17,10 @@ import {
   ErrorText,
   Field,
   Modal,
+  PageHeader,
+  PhotoThumb,
   Select,
   TextInput,
-  ThumbLink,
 } from '../../components/ui';
 import { DzPcInput, ImageInput, InchesInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
@@ -109,15 +110,11 @@ export default function CuttingPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Cutting</h1>
-          <p className="text-sm text-gray-500">
-            The code number is given here — each size line carries its code and photo
-          </p>
-        </div>
-        {canWrite && <Button onClick={() => setPlanOpen(true)}>+ New cutting</Button>}
-      </div>
+      <PageHeader
+        title="Cutting"
+        subtitle="The code number is given here — each size line carries its code and photo"
+        action={canWrite && <Button onClick={() => setPlanOpen(true)}>+ New cutting</Button>}
+      />
 
       <DataTable
         columns={[
@@ -132,11 +129,23 @@ export default function CuttingPage() {
           {
             key: 'lines',
             header: 'Size-codes',
-            render: (r) => (
-              <span className="text-sm">
-                {r.lines.map((l) => l.sizeCodeLabel).join(', ')} · {r.colorName}
-              </span>
-            ),
+            render: (r) => {
+              const photo = r.lines.find((l) => l.imagePath)?.imagePath;
+              return (
+                <span className="inline-flex items-center gap-2 text-sm">
+                  {photo && (
+                    <PhotoThumb
+                      src={photo}
+                      title={r.lines.map((l) => l.sizeCodeLabel).join(', ')}
+                      size={32}
+                    />
+                  )}
+                  <span>
+                    {r.lines.map((l) => l.sizeCodeLabel).join(', ')} · {r.colorName}
+                  </span>
+                </span>
+              );
+            },
             value: (r) => r.lines.map((l) => l.sizeCodeLabel).join(', '),
           },
           {
@@ -171,8 +180,14 @@ export default function CuttingPage() {
         loading={isLoading}
         emptyTitle="Nothing cut yet"
         emptyHint={canWrite ? 'Press “+ New cutting” to record the first batch.' : undefined}
+        quickFilters={[
+          { key: 'editable', label: 'Editable', test: (r) => !r.voidedAt && r.editable },
+          { key: 'used', label: 'With contractors', test: (r) => !r.voidedAt && !r.editable },
+          { key: 'deleted', label: 'Deleted', test: (r) => !!r.voidedAt },
+        ]}
         facets={[{ key: 'color', label: 'Color', value: (r) => r.colorName }]}
         dateRange={{ label: 'Cut date', value: (r) => r.cutDate }}
+        onRowClick={(row) => setDetail(row)}
         actions={(row) => {
           if (row.voidedAt)
             return (
@@ -287,11 +302,7 @@ export default function CuttingPage() {
                   <tr key={l.id} className="border-b border-gray-100">
                     <td className="py-1.5 font-medium">{l.sizeCodeLabel}</td>
                     <td>
-                      {l.imagePath ? (
-                        <ThumbLink href={l.imagePath} label="view" title="Product photo" />
-                      ) : (
-                        '—'
-                      )}
+                      <PhotoThumb src={l.imagePath} title={l.sizeCodeLabel} size={36} />
                     </td>
                     <td>{formatPieces(l.qtyPcs)}</td>
                     <td>{l.clothPerPcInchC ? formatInchC(l.clothPerPcInchC) : '—'}</td>

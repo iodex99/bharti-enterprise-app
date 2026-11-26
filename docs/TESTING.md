@@ -38,6 +38,17 @@ Playwright browsers: `npx playwright install chromium` once per machine.
 
 ## Coverage map (v2 — multi-office, yards, codes-at-cutting)
 
+**Rework, ledgers and edits (`rework-ledgers.test.ts`, ADR-046/047/048):** rejects move to
+WIP on the source job line (opening-stock rejects still go to REJECTED), the card reopens
+and re-completes when the fixed pieces come back, payable = stitched − rework − missing at
+an awkward rate (₹30.50/dz) with once-per-line rounding; contractor and staff statements
+equal dues to the paisa, the period filter's opening balance, PDFs (`%PDF-`, file name,
+non-Latin names); payment edits admin-only; job rate edits after receipts re-price while
+quantity edits 409; receipt edits; check/pack issue edits move stock back and out, lock
+after results, and a void after an edit restores exactly the net taken; "pack now";
+dispatch edit/void; purchase edits after cutting (color/width/length rules); opening
+balance edits; every reconciliation check green at the end.
+
 **Browser-runtime unit tests:** the hand-written shims are checked against the real Node
 modules — SHA-256 for every input shape and chunking pattern (a padding bug at 55-byte
 inputs was caught this way), `node:path` against `node:path/posix`, and the Express shim's

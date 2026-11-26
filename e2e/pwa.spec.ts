@@ -59,7 +59,12 @@ test('admin System Health page shows green reconciliation and saves the delay th
 
   const days = page.getByLabel('Job considered delayed after (days)');
   await days.fill('9');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  // the page has two Save buttons (automatic updates + settings) — use the settings one
+  await page
+    .locator('section')
+    .filter({ hasText: 'Job considered delayed' })
+    .getByRole('button', { name: 'Save', exact: true })
+    .click();
   await page.reload();
   await expect(page.getByLabel('Job considered delayed after (days)')).toHaveValue('9');
 });

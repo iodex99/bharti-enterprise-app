@@ -1,4 +1,4 @@
-import type { CheckIssueInput, CheckResultInput } from '@shared';
+import type { CheckIssueEditInput, CheckIssueInput, CheckResultInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
@@ -6,6 +6,7 @@ import { nextDocNo } from './docNo.service';
 import { LedgerError, postMovements, type Movement } from './ledger.service';
 import type { Office } from './offices.service';
 import type { ServiceResult } from './purchases.service';
+import { refreshJobStatus } from './jobs.service';
 
 /**
  * Module 4: checking (v2, ADR-034/035).
@@ -17,7 +18,11 @@ import type { ServiceResult } from './purchases.service';
  * Results are incremental sessions with ONE rejected box broken down by reason.
  * 'missing' is a reason in that dropdown for the user, but internally missing pieces
  * are a terminal write-off (they do not physically exist to sit in REJECTED stock):
- *   passed → PACKING pool (lot = check_issue) ; rejected → REJECTED ; missing → gone.
+ *   passed   → PACKING pool (lot = check_issue)
+ *   rejected → straight back to the contractor who stitched them (WIP on their job
+ *              line, ADR-046) and off their payable pieces until they return fixed;
+ *              opening-stock batches have no contractor, so theirs go to REJECTED
+ *   missing  → gone, and deducted from the contractor.
  * Packing is allotted from the checking page (packing.service) — usually to the same
  * person who checked.
  */
@@ -38,6 +43,33 @@ export function staffDefaultRate(db: Db, staffId: number): number {
     .prepare('SELECT default_rate_paise_per_dozen AS rate FROM staff WHERE id = ?')
     .get(staffId) as { rate: number } | undefined;
   return row?.rate ?? 0;
+}
+
+/** The contractor job line a check issue's goods came from (null for opening stock). */
+export type CheckSource = {
+  jobCardLineId: number;
+  jobCardId: number;
+  jobDocNo: string;
+  contractorId: number;
+  contractorName: string;
+};
+
+export function checkSourceOf(db: Db, checkIssueId: number): CheckSource | null {
+  return (
+    (db
+      .prepare(
+        `SELECT jl.id AS jobCardLineId, jc.id AS jobCardId, jc.doc_no AS jobDocNo,
+                jc.contractor_id AS contractorId, ct.name AS contractorName
+         FROM check_allocations a
+         JOIN job_receipt_lines rl ON rl.id = a.checking_lot_id
+         JOIN job_card_lines jl ON jl.id = rl.job_card_line_id
+         JOIN job_cards jc ON jc.id = jl.job_card_id
+         JOIN contractors ct ON ct.id = jc.contractor_id
+         WHERE a.check_issue_id = ? AND a.checking_lot_type = 'receipt_line'
+         ORDER BY a.id LIMIT 1`,
+      )
+      .get(checkIssueId) as CheckSource | undefined) ?? null
+  );
 }
 
 type PoolLotInfo = {
@@ -305,6 +337,27 @@ export function recordCheckResult(
       colorId: issue.color_id as number,
       sizeId: issue.size_id as number,
     };
+    const source = checkSourceOf(db, checkIssueId);
+    const insertAdjustment = db.prepare(
+      `INSERT INTO contractor_adjustments (office_id, contractor_id, job_card_line_id, check_issue_id,
+         check_result_id, kind, reason, qty_pcs, adj_date, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const adjust = (kind: 'rework' | 'missing', reason: string, qty: number): void => {
+      if (!source) return;
+      insertAdjustment.run(
+        office.id,
+        source.contractorId,
+        source.jobCardLineId,
+        checkIssueId,
+        resultId,
+        kind,
+        reason,
+        qty,
+        input.resultDate,
+        userId,
+      );
+    };
     const movements: Movement[] = [];
     const outFromChecker = sessionTotal;
     // one negative row per destination keeps the transfer pairs balanced
@@ -343,22 +396,37 @@ export function recordCheckResult(
           refType: 'check_reject',
           refId: resultId,
         },
-        {
-          ...base,
-          stage: 'REJECTED',
-          lotType: 'check_issue',
-          lotId: checkIssueId,
-          qty: qtyRejected,
-          refType: 'check_reject',
-          refId: resultId,
-        },
+        source
+          ? {
+              // back to the contractor for rework, on the job line they came from
+              ...base,
+              stage: 'WIP',
+              contractorId: source.contractorId,
+              lotType: 'job_line',
+              lotId: source.jobCardLineId,
+              qty: qtyRejected,
+              refType: 'check_reject',
+              refId: resultId,
+            }
+          : {
+              ...base,
+              stage: 'REJECTED',
+              lotType: 'check_issue',
+              lotId: checkIssueId,
+              qty: qtyRejected,
+              refType: 'check_reject',
+              refId: resultId,
+            },
       );
       // ONE ROW PER REASON. Lumping "4 damage + 10 colour defect" into a single row
       // labelled with the first reason made the Discrepancies page — and every
       // reason-based follow-up with the contractor — read 14 pcs of the wrong fault.
+      // Sent-back pieces are already handled (the contractor owes them again), so their
+      // rows are recorded resolved: a history of quality, not an open problem.
       const insertDiscrepancy = db.prepare(
-        `INSERT INTO discrepancies (stage, office_id, ref_type, ref_id, qty_pcs, reason, note, created_by)
-         VALUES ('CHECKING', ?, 'check_result', ?, ?, ?, ?, ?)`,
+        `INSERT INTO discrepancies (stage, office_id, ref_type, ref_id, qty_pcs, reason, note, created_by,
+           resolved_at, resolved_by, resolution_note)
+         VALUES ('CHECKING', ?, 'check_result', ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const rejection of realRejections) {
         insertDiscrepancy.run(
@@ -368,10 +436,15 @@ export function recordCheckResult(
           rejection.reason,
           input.notes,
           userId,
+          source ? nowIso() : null,
+          source ? userId : null,
+          source ? `Sent back to ${source.contractorName} for rework (${source.jobDocNo})` : '',
         );
+        adjust('rework', rejection.reason, rejection.qtyPcs);
       }
     }
     if (qtyMissing > 0) {
+      adjust('missing', 'missing', qtyMissing);
       movements.push({
         ...base,
         stage: 'CHECKING',
@@ -388,6 +461,8 @@ export function recordCheckResult(
       ).run(office.id, resultId, -qtyMissing, input.notes, userId);
     }
     postMovements(db, movements, userId);
+    // the contractor owes the sent-back pieces again: the card is active until they return
+    if (source && qtyRejected > 0) refreshJobStatus(db, source.jobCardId, { reopen: true });
 
     if (outFromChecker === remaining) {
       db.prepare("UPDATE check_issues SET status = 'completed', completed_at = ? WHERE id = ?").run(
@@ -486,6 +561,154 @@ export function voidCheckIssue(
   return { ok: true, id: checkIssueId };
 }
 
+/**
+ * Edit a check issue. Before any result: checker, quantity, rate, date and notes (the
+ * pieces are put back on the received batch and re-issued). After results the work is
+ * history, so only the date, the checker's rate and notes can change — earnings
+ * re-price from the rate automatically.
+ */
+export function editCheckIssue(
+  db: Db,
+  office: Office,
+  checkIssueId: number,
+  input: CheckIssueEditInput,
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const issue = db
+    .prepare('SELECT * FROM check_issues WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(checkIssueId, office.id) as Record<string, unknown> | undefined;
+  if (!issue) return { ok: false, code: 404, error: 'Check issue not found.' };
+  const results = (
+    db
+      .prepare('SELECT COUNT(*) AS n FROM check_results WHERE check_issue_id = ?')
+      .get(checkIssueId) as {
+      n: number;
+    }
+  ).n;
+  const reissue = input.staffId !== issue.staff_id || input.qtyPcs !== issue.qty_pcs;
+  if (reissue && results > 0) {
+    return {
+      ok: false,
+      code: 409,
+      error:
+        'Results are already recorded for this batch, so the checker and quantity are fixed. You can still change the date, rate and notes.',
+    };
+  }
+  if (input.staffId !== issue.staff_id) {
+    const staffError = staffUsable(db, input.staffId, 'Checker');
+    if (staffError) return { ok: false, code: 400, error: staffError };
+  }
+
+  try {
+    const tx = db.transaction(() => {
+      if (reissue) {
+        const alloc = db
+          .prepare(
+            'SELECT checking_lot_type, checking_lot_id, qty_pcs FROM check_allocations WHERE check_issue_id = ?',
+          )
+          .get(checkIssueId) as {
+          checking_lot_type: 'receipt_line' | 'opening';
+          checking_lot_id: number;
+          qty_pcs: number;
+        };
+        const base = {
+          officeId: office.id,
+          modelId: issue.model_id as number,
+          colorId: issue.color_id as number,
+          sizeId: issue.size_id as number,
+        };
+        // back onto the batch, then out again in the new shape (one balanced call each)
+        postMovements(
+          db,
+          [
+            {
+              ...base,
+              stage: 'CHECKING',
+              staffId: issue.staff_id as number,
+              lotType: 'check_issue',
+              lotId: checkIssueId,
+              qty: -(issue.qty_pcs as number),
+              refType: 'void_reversal',
+              refId: checkIssueId,
+            },
+            {
+              ...base,
+              stage: 'CHECKING',
+              lotType: alloc.checking_lot_type,
+              lotId: alloc.checking_lot_id,
+              qty: alloc.qty_pcs,
+              refType: 'void_reversal',
+              refId: checkIssueId,
+            },
+          ],
+          userId,
+        );
+        postMovements(
+          db,
+          [
+            {
+              ...base,
+              stage: 'CHECKING',
+              lotType: alloc.checking_lot_type,
+              lotId: alloc.checking_lot_id,
+              qty: -input.qtyPcs,
+              refType: 'check_issue',
+              refId: checkIssueId,
+            },
+            {
+              ...base,
+              stage: 'CHECKING',
+              staffId: input.staffId,
+              lotType: 'check_issue',
+              lotId: checkIssueId,
+              qty: input.qtyPcs,
+              refType: 'check_issue',
+              refId: checkIssueId,
+            },
+          ],
+          userId,
+        );
+        db.prepare('UPDATE check_allocations SET qty_pcs = ? WHERE check_issue_id = ?').run(
+          input.qtyPcs,
+          checkIssueId,
+        );
+      }
+      db.prepare(
+        `UPDATE check_issues SET issue_date = ?, staff_id = ?, qty_pcs = ?, rate_paise_per_dozen = ?, notes = ?
+         WHERE id = ?`,
+      ).run(
+        input.issueDate,
+        input.staffId,
+        input.qtyPcs,
+        input.ratePaisePerDozen,
+        input.notes,
+        checkIssueId,
+      );
+      audit(db, {
+        userId,
+        action: 'update',
+        entityType: 'check_issue',
+        entityId: checkIssueId,
+        old: {
+          issueDate: issue.issue_date,
+          staffId: issue.staff_id,
+          qtyPcs: issue.qty_pcs,
+          ratePaisePerDozen: issue.rate_paise_per_dozen,
+          notes: issue.notes,
+        },
+        new: input,
+        ip,
+      });
+    });
+    tx();
+  } catch (err) {
+    if (err instanceof LedgerError) return { ok: false, code: 409, error: err.message };
+    throw err;
+  }
+  return { ok: true, id: checkIssueId };
+}
+
 export function listCheckIssues(db: Db, officeId: number): Array<Record<string, unknown>> {
   // first allocation → source receipt line → contractor: the checker ↔ contractor mapping
   const issues = db
@@ -537,6 +760,9 @@ export function listCheckIssues(db: Db, officeId: number): Array<Record<string, 
       (issue.rejectedPcs as number) -
       (issue.missingPcs as number);
     issue.packablePcs = (packableStmt.get(issue.id) as { bal: number }).bal;
+    // rejected pieces from a contractor's batch went back to them for rework (ADR-046)
+    issue.sentBackPcs = issue.contractorName ? issue.rejectedPcs : 0;
+    issue.hasResults = results.length > 0;
   }
   return issues;
 }

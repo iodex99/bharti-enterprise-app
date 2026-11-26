@@ -110,9 +110,19 @@ test('issue goods, partial receipts with photo, auto-complete, contractor analyt
   await page.getByRole('button', { name: 'Close window' }).click();
 
   // contractor analytics show the delivery (desktop run: 10dz; mobile runs after desktop: 20dz)
+  // — the old /contractors address now lands on Pending Dues → Contractors
   await page.goto('/contractors');
+  await expect(page).toHaveURL(/\/dues\?tab=contractors/);
   const rafiqRow = page.getByRole('row', { name: /Rafiq Tailors/ });
   await expect(rafiqRow.getByText(/(10|20)dz/).first()).toBeVisible();
+
+  // tapping a contractor opens their ledger: how the amount was worked out + PDF
+  await rafiqRow.first().getByRole('button', { name: 'Ledger' }).click();
+  await expect(page.getByRole('heading', { name: 'Rafiq Tailors' })).toBeVisible();
+  await expect(page.getByText('How this is worked out')).toBeVisible();
+  const pdf = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Download PDF/ }).click();
+  expect((await pdf).suggestedFilename()).toMatch(/^Statement-Rafiq-Tailors-.*\.pdf$/);
 
   // the job-work cost lands on Pending Dues, and a PART payment is recorded right there
   await page.goto('/dues');
@@ -135,8 +145,8 @@ test('owner sees jobs and contractor dues read-only', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Job Work' })).toBeVisible();
   await expect(page.getByRole('button', { name: '+ Issue goods' })).toHaveCount(0);
   await page.goto('/contractors');
-  await expect(page.getByRole('heading', { name: 'Contractors' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '+ Record payment' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Pending Dues' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Record payment' })).toHaveCount(0);
 
   // the dedicated pending-dues view is visible to the owner
   await page.goto('/dues');

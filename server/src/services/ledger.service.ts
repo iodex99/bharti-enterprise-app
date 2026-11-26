@@ -265,6 +265,7 @@ export function stockByDimensions(
   return db
     .prepare(
       `SELECT l.model_id AS modelId, m.code AS modelCode, m.name AS modelName,
+              m.image_path AS modelImagePath,
               l.color_id AS colorId, c.name AS colorName,
               l.size_id AS sizeId, s.code AS sizeCode,
               l.contractor_id AS contractorId, ct.name AS contractorName,

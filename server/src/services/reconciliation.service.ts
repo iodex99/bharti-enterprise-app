@@ -91,7 +91,10 @@ export function runReconciliation(db: Db): { ok: boolean; checks: Reconciliation
         : `${unbalanced.length} unbalanced transfer(s), e.g. ${unbalanced[0]!.ref_type} #${unbalanced[0]!.ref_id} nets ${unbalanced[0]!.net}.`,
   });
 
-  // 5. Job WIP matches document math (issued − received − returned − written off).
+  // 5. Job WIP matches document math:
+  //    issued + sent back for rework − received − returned − written off
+  //    + excess (pieces received beyond what was out never came from WIP — they were
+  //      created as receipt_excess, so they must be added back to the expectation)
   const wipMismatch = db
     .prepare(
       `SELECT l.id FROM job_card_lines l
@@ -100,7 +103,12 @@ export function runReconciliation(db: Db): { ok: boolean; checks: Reconciliation
        WHERE (SELECT COALESCE(SUM(s.qty),0) FROM stock_ledger s
               WHERE s.stage='WIP' AND s.lot_type='job_line' AND s.lot_id = l.id)
              NOT IN (
-               MAX(0, l.qty_issued_pcs - v.received_pcs - v.returned_pcs -
+               MAX(0, l.qty_issued_pcs - v.received_pcs - v.returned_pcs +
+                 COALESCE((SELECT SUM(a.qty_pcs) FROM contractor_adjustments a
+                   WHERE a.job_card_line_id = l.id AND a.kind = 'rework'), 0) +
+                 COALESCE((SELECT SUM(s3.qty) FROM stock_ledger s3
+                   JOIN job_receipt_lines rl3 ON s3.lot_type = 'receipt_line' AND rl3.id = s3.lot_id
+                   WHERE s3.ref_type = 'receipt_excess' AND rl3.job_card_line_id = l.id), 0) -
                  COALESCE((SELECT SUM(-s2.qty) FROM stock_ledger s2
                    WHERE s2.ref_type='job_shortage' AND s2.lot_type='job_line' AND s2.lot_id=l.id), 0)),
                0
@@ -112,7 +120,7 @@ export function runReconciliation(db: Db): { ok: boolean; checks: Reconciliation
     ok: wipMismatch.length === 0,
     detail:
       wipMismatch.length === 0
-        ? 'Ledger WIP equals issued − received − returned − written-off on every job line.'
+        ? 'Ledger WIP equals issued + sent back − received − returned − written-off on every job line.'
         : `${wipMismatch.length} job line(s) disagree with the ledger.`,
   });
 

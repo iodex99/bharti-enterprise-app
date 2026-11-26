@@ -1,4 +1,4 @@
-import type { StaffPaymentInput } from '@shared';
+import type { PaymentEditInput, StaffPaymentInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
@@ -183,6 +183,44 @@ export function voidStaffPayment(
       entityType: 'staff_payment',
       entityId: id,
       new: { reason },
+      ip,
+    });
+  });
+  tx();
+  return { ok: true, id };
+}
+
+/** Correct a staff payment's date, amount, mode or reference — audited, payee fixed. */
+export function editStaffPayment(
+  db: Db,
+  office: Office,
+  id: number,
+  input: PaymentEditInput,
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const row = db
+    .prepare('SELECT * FROM staff_payments WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(id, office.id) as Record<string, unknown> | undefined;
+  if (!row) return { ok: false, code: 404, error: 'Payment not found.' };
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE staff_payments SET payment_date = ?, amount_paise = ?, mode = ?, reference = ?, notes = ?
+       WHERE id = ?`,
+    ).run(input.paymentDate, input.amountPaise, input.mode, input.reference, input.notes, id);
+    audit(db, {
+      userId,
+      action: 'update',
+      entityType: 'staff_payment',
+      entityId: id,
+      old: {
+        paymentDate: row.payment_date,
+        amountPaise: row.amount_paise,
+        mode: row.mode,
+        reference: row.reference,
+        notes: row.notes,
+      },
+      new: input,
       ip,
     });
   });

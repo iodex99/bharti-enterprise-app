@@ -4,7 +4,17 @@ import { formatBusinessDate, formatPieces, todayIST } from '@shared';
 import { api, ApiError } from '../../api/client';
 import { useAuth } from '../../lib/auth';
 import { DataTable } from '../../components/DataTable';
-import { Badge, Button, ErrorText, Field, Modal, TextInput } from '../../components/ui';
+import {
+  Badge,
+  Button,
+  ErrorText,
+  Field,
+  Modal,
+  PageHeader,
+  PhotoThumb,
+  Select,
+  TextInput,
+} from '../../components/ui';
 import { DzPcInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
 import { useProducts } from '../../api/products';
@@ -14,6 +24,10 @@ type Dispatch = {
   id: number;
   docNo: string;
   dispatchDate: string;
+  modelId: number;
+  colorId: number;
+  sizeId: number;
+  modelImagePath: string | null;
   modelCode: string;
   colorName: string;
   sizeCode: string;
@@ -28,6 +42,7 @@ export default function DispatchesPage() {
   const isAdmin = user?.role === 'admin';
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editFor, setEditFor] = useState<Dispatch | null>(null);
   const [voidFor, setVoidFor] = useState<Dispatch | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -42,13 +57,11 @@ export default function DispatchesPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Dispatches</h1>
-          <p className="text-sm text-gray-500">Finished goods sent out for sale (admin only)</p>
-        </div>
-        {isAdmin && <Button onClick={() => setCreateOpen(true)}>+ New dispatch</Button>}
-      </div>
+      <PageHeader
+        title="Dispatches"
+        subtitle="Finished goods sent out for sale (admin only)"
+        action={isAdmin && <Button onClick={() => setCreateOpen(true)}>+ New dispatch</Button>}
+      />
 
       <DataTable
         columns={[
@@ -63,10 +76,15 @@ export default function DispatchesPage() {
             header: 'Item',
             value: (r) => `${r.modelCode} ${r.colorName} ${r.sizeCode}`,
             render: (r) => (
-              <span>
-                <span className="font-medium">{r.modelCode}</span>{' '}
-                <span className="text-gray-500">
-                  {r.colorName} · {r.sizeCode}
+              <span className="inline-flex items-center gap-2">
+                {r.modelImagePath && (
+                  <PhotoThumb src={r.modelImagePath} title={r.modelCode} size={32} />
+                )}
+                <span>
+                  <span className="font-medium">{r.modelCode}</span>{' '}
+                  <span className="text-gray-500">
+                    {r.colorName} · {r.sizeCode}
+                  </span>
                 </span>
               </span>
             ),
@@ -89,6 +107,11 @@ export default function DispatchesPage() {
         rows={data?.items}
         loading={isLoading}
         emptyTitle="No dispatches yet"
+        quickFilters={[
+          { key: 'active', label: 'Dispatched', test: (r) => !r.voidedAt },
+          { key: 'voided', label: 'Voided', test: (r) => !!r.voidedAt },
+        ]}
+        defaultQuick="active"
         facets={[
           { key: 'model', label: 'Code', value: (r) => r.modelCode },
           { key: 'color', label: 'Color', value: (r) => r.colorName },
@@ -98,20 +121,38 @@ export default function DispatchesPage() {
           isAdmin
             ? (row) =>
                 row.voidedAt ? null : (
-                  <Button variant="ghost" className="text-red-600" onClick={() => setVoidFor(row)}>
-                    Void
-                  </Button>
+                  <>
+                    <Button variant="ghost" onClick={() => setEditFor(row)}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="text-red-600"
+                      onClick={() => setVoidFor(row)}
+                    >
+                      Void
+                    </Button>
+                  </>
                 )
             : undefined
         }
       />
 
-      <NewDispatchModal
+      <DispatchModal
         key={String(createOpen)}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onDone={invalidate}
       />
+      {editFor && (
+        <DispatchModal
+          key={`edit-${editFor.id}`}
+          open
+          existing={editFor}
+          onClose={() => setEditFor(null)}
+          onDone={invalidate}
+        />
+      )}
       <VoidModal
         entity="dispatch"
         target={
@@ -126,26 +167,33 @@ export default function DispatchesPage() {
   );
 }
 
-function NewDispatchModal({
+/** New dispatch, or correct one (its old take goes back to stock and it takes again). */
+function DispatchModal({
   open,
+  existing,
   onClose,
   onDone,
 }: {
   open: boolean;
+  existing?: Dispatch;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [dispatchDate, setDate] = useState(todayIST());
-  const [modelId, setModelId] = useState<number | null>(null);
-  const [colorId, setColorId] = useState<number | null>(null);
-  const [sizeId, setSizeId] = useState<number | null>(null);
-  const [qtyPcs, setQty] = useState<number | null>(null);
-  const [notes, setNotes] = useState('');
+  const [dispatchDate, setDate] = useState(existing?.dispatchDate ?? todayIST());
+  const [modelId, setModelId] = useState<number | null>(existing?.modelId ?? null);
+  const [colorId, setColorId] = useState<number | null>(existing?.colorId ?? null);
+  const [sizeId, setSizeId] = useState<number | null>(existing?.sizeId ?? null);
+  const [qtyPcs, setQty] = useState<number | null>(existing?.qtyPcs ?? null);
+  const [notes, setNotes] = useState(existing?.notes ?? '');
   const [error, setError] = useState('');
 
   const save = useMutation({
-    mutationFn: () =>
-      api.post('/api/dispatches', { dispatchDate, modelId, colorId, sizeId, qtyPcs, notes }),
+    mutationFn: () => {
+      const body = { dispatchDate, modelId, colorId, sizeId, qtyPcs, notes };
+      return existing
+        ? api.put(`/api/dispatches/${existing.id}`, body)
+        : api.post('/api/dispatches', body);
+    },
     onSuccess: () => {
       onDone();
       onClose();
@@ -154,7 +202,11 @@ function NewDispatchModal({
   });
 
   return (
-    <Modal title="New dispatch (stock out)" open={open} onClose={onClose}>
+    <Modal
+      title={existing ? `Edit dispatch ${existing.docNo}` : 'New dispatch (stock out)'}
+      open={open}
+      onClose={onClose}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -187,7 +239,7 @@ function NewDispatchModal({
         </Field>
         <ErrorText>{error}</ErrorText>
         <Button type="submit" disabled={save.isPending} className="w-full">
-          {save.isPending ? 'Saving…' : 'Dispatch'}
+          {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Dispatch'}
         </Button>
       </form>
     </Modal>
@@ -203,8 +255,7 @@ function ProductSelect({
 }) {
   const { data: products } = useProducts();
   return (
-    <select
-      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+    <Select
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
     >
@@ -216,6 +267,6 @@ function ProductSelect({
           {p.code}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

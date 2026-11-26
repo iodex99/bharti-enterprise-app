@@ -218,3 +218,41 @@ One line per locked decision; expand only when the reasoning is non-obvious.
   release folder, `current.txt` and the database, then restart unconditionally — a
   supervisor crash-looping on a bad release still reports the service as Running.
   Rehearsed end to end, including a deliberately broken upgrade.
+- **ADR-046** **Rejected pieces go straight back to the contractor; missing pieces are
+  deducted from them.** (Client decision, 2026-11-26.) When a checker rejects pieces from a
+  contractor's batch they move CHECKING → WIP on the very job line they came from (ref
+  `check_reject` — the immutable ref_type CHECK allows no new types, and the pair still
+  nets to zero), the card reopens, and the contractor owes them again. Every reason goes
+  back, no per-rejection decision for the operator. Opening-stock batches have no
+  contractor, so their rejects still go to REJECTED. Missing pieces stay a terminal
+  write-off and are ALSO deducted from the contractor. Recorded per (check result,
+  reason) in `contractor_adjustments` (migration 006); money is never stored: a job
+  line's payable = (stitched − rework − missing) × line rate ÷ 12, rounded once per line,
+  computed in ONE place (`jobAccounts.service`) for the job card, dues, analytics,
+  dashboard and statements. Fixed pieces come back through a normal receipt and are paid
+  once they pass — a piece is paid exactly once. Sent-back rejections are recorded as
+  resolved discrepancies (handled, not an open alert); missing stays unresolved.
+- **ADR-047** **Every contractor, checker and packer has a ledger, and the PDF statement
+  is generated from the same object.** `statements.service` builds work credited,
+  deductions and payments with a running balance, an opening balance for a period, and a
+  per-job/per-batch breakdown that shows how the amount was derived. Each event's amount
+  is the change in the rounded running total of its line (telescoping), so the statement
+  equals the dues figure to the paisa while every row still shows its own money. PDFs use
+  pdf-lib with built-in Helvetica (pure JS, nothing to install on the office PC); text
+  outside WinAnsi becomes "?" and ₹ becomes "Rs." rather than failing. Phones get a
+  Share button (Web Share with the file) so the statement goes straight to WhatsApp.
+- **ADR-048** **Edit is offered on every list; what can change depends on what came
+  after.** Everything is editable while nothing downstream depends on it; after that only
+  dates, rates, photos and notes (money re-prices from the rate — it is never stored).
+  Stock-moving edits post a reversal plus a fresh take in the same transaction (purchases
+  and opening balances post the difference as adjustment in/out), so the ledger stays
+  append-only and voids after an edit restore exactly the net taken. Payment edits are
+  admin-only (money out, like a void); dispatch edits are admin-only like dispatches.
+- **ADR-049** **Phone-first UI conventions.** A bottom tab bar (Home · Jobs · Checking ·
+  Dues · Menu) below `lg`; 44px tap targets and 16px inputs below `sm` (iOS zooms into
+  smaller fields); one-tap status chips with counts on every list, with the dropdowns and
+  dates folded behind one "Filters" button on phones; photos open in an in-app viewer
+  (`PhotoThumb` / `ThumbLink`) instead of a new tab; Checking & Packing is four tabs (To
+  check · Checking · Packing · Packed); recording a check result packs the passed pieces
+  by the checker in the same step by default ("pack now"); the Contractors page became a
+  tab of Pending Dues (`/contractors` redirects).

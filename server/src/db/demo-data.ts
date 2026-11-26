@@ -826,8 +826,9 @@ export function populateDemo(db: Db): ReturnType<typeof runReconciliation> {
 
   // resolve the two oldest head-office discrepancies so a demo shows both review states
   const toResolve = db
+    // (rejections sent back for rework are recorded already resolved — skip those)
     .prepare(
-      'SELECT id FROM discrepancies WHERE office_id = ? ORDER BY created_at ASC, id ASC LIMIT 2',
+      'SELECT id FROM discrepancies WHERE office_id = ? AND resolved_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 2',
     )
     .all(HO.id) as Array<{ id: number }>;
   const notes = [

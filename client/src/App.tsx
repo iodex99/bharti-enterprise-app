@@ -9,10 +9,10 @@ import MastersPage from './pages/masters/MastersPage';
 import PurchasesPage from './pages/purchases/PurchasesPage';
 import CuttingPage from './pages/cutting/CuttingPage';
 import JobsPage from './pages/jobs/JobsPage';
-import ContractorsPage from './pages/contractors/ContractorsPage';
 import CheckingPage from './pages/checking/CheckingPage';
 import DispatchesPage from './pages/dispatches/DispatchesPage';
 import DuesPage from './pages/dues/DuesPage';
+import LedgerPage from './pages/dues/LedgerPage';
 import OfficesPage from './pages/admin/OfficesPage';
 import DiscrepanciesPage from './pages/discrepancies/DiscrepanciesPage';
 import ReportsPage from './pages/reports/ReportsPage';
@@ -82,10 +82,12 @@ export default function App() {
         <Route path="purchases" element={<PurchasesPage />} />
         <Route path="cutting" element={<CuttingPage />} />
         <Route path="jobs" element={<JobsPage />} />
-        <Route path="contractors" element={<ContractorsPage />} />
+        {/* contractors now live under Pending Dues (performance tab + ledgers) */}
+        <Route path="contractors" element={<Navigate to="/dues?tab=contractors" replace />} />
         <Route path="checking" element={<CheckingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="dues" element={<DuesPage />} />
+        <Route path="dues/:kind/:id" element={<LedgerPage />} />
         <Route path="discrepancies" element={<DiscrepanciesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="trace" element={<TracePage />} />

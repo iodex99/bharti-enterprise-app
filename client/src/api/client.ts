@@ -55,7 +55,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Fetch a file (PDF statement, …) for this office, with the server's suggested name.
+ * Same office header and error handling as JSON calls.
+ */
+async function fetchFile(path: string): Promise<{ blob: Blob; fileName: string }> {
+  const res = await fetch(path, { headers: { 'X-Office-Id': String(activeOfficeId()) } });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      /* non-JSON error */
+    }
+    throw new ApiError(res.status, message);
+  }
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { blob: await res.blob(), fileName: match?.[1] ?? 'download' };
+}
+
 export const api = {
+  file: fetchFile,
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {

@@ -1,4 +1,4 @@
-import type { OpeningBalanceInput } from '@shared';
+import type { OpeningBalanceInput, OpeningEditInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
@@ -152,6 +152,85 @@ export function voidOpeningBalance(
         ok: false,
         code: 409,
         error: 'Cannot void: this opening stock was already used downstream.',
+      };
+    }
+    throw err;
+  }
+  return { ok: true, id };
+}
+
+/**
+ * Correct an opening balance's date, quantity or note. A quantity change posts the
+ * difference to the lot (adjustment in/out); it can never drop below what was already
+ * used downstream — the ledger's no-negative-lot rule refuses that.
+ */
+export function editOpeningBalance(
+  db: Db,
+  office: Office,
+  id: number,
+  input: OpeningEditInput,
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const existing = db
+    .prepare('SELECT * FROM opening_balances WHERE id = ? AND office_id = ? AND voided_at IS NULL')
+    .get(id, office.id) as Record<string, unknown> | undefined;
+  if (!existing) return { ok: false, code: 404, error: 'Opening balance not found.' };
+  const delta = input.qty - (existing.qty as number);
+  try {
+    const tx = db.transaction(() => {
+      if (delta !== 0) {
+        postMovements(
+          db,
+          [
+            {
+              stage: existing.stage as never,
+              officeId: office.id,
+              modelId: existing.model_id as number,
+              colorId: existing.color_id as number,
+              sizeId: existing.size_id as number | null,
+              contractorId: existing.contractor_id as number | null,
+              lotType: 'opening',
+              lotId: id,
+              qty: delta,
+              refType: delta > 0 ? 'adjustment_in' : 'adjustment_out',
+              refId: id,
+            },
+          ],
+          userId,
+        );
+      }
+      db.prepare(
+        'UPDATE opening_balances SET balance_date = ?, qty = ?, width_inch_c = ?, note = ? WHERE id = ?',
+      ).run(
+        input.balanceDate,
+        input.qty,
+        existing.stage === 'RAW' ? (input.widthInchC ?? existing.width_inch_c ?? null) : null,
+        input.note,
+        id,
+      );
+      audit(db, {
+        userId,
+        action: 'update',
+        entityType: 'opening_balance',
+        entityId: id,
+        old: {
+          balanceDate: existing.balance_date,
+          qty: existing.qty,
+          widthInchC: existing.width_inch_c,
+          note: existing.note,
+        },
+        new: input,
+        ip,
+      });
+    });
+    tx();
+  } catch (err) {
+    if (err instanceof LedgerError) {
+      return {
+        ok: false,
+        code: 409,
+        error: 'Cannot reduce it that far: some of this opening stock was already used.',
       };
     }
     throw err;

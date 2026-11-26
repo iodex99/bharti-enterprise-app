@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { openingBalanceSchema, voidSchema } from '@shared';
+import { openingBalanceSchema, openingEditSchema, voidSchema } from '@shared';
 import { getDb } from '../db/connection';
 import { requireRole } from '../middleware/auth';
 import { officeOf } from '../middleware/office';
@@ -8,6 +8,7 @@ import { validateBody } from '../middleware/validate';
 import { idempotencyGuard, recordIdempotency } from '../middleware/idempotency';
 import {
   createOpeningBalance,
+  editOpeningBalance,
   listOpeningBalances,
   voidOpeningBalance,
 } from '../services/opening.service';
@@ -41,6 +42,20 @@ export function openingRoutes(): Router {
       res.status(201).json({ id: result.id, docNo: result.docNo });
     },
   );
+
+  router.put('/:id', validateBody(openingEditSchema), (req, res) => {
+    const result = editOpeningBalance(
+      getDb(),
+      officeOf(req),
+      Number(req.params.id),
+      req.body,
+      req.user!.id,
+      req.ip ?? null,
+    );
+    res
+      .status(result.ok ? 200 : result.code)
+      .json(result.ok ? { ok: true } : { error: result.error });
+  });
 
   router.post('/:id/void', validateBody(voidSchema), (req, res) => {
     const result = voidOpeningBalance(

@@ -1,14 +1,16 @@
-import type { PaymentInput } from '@shared';
+import type { PaymentEditInput, PaymentInput } from '@shared';
 import type { Db } from '../db/connection';
 import { nowIso } from '../db/connection';
 import { audit } from './audit.service';
 import { nextDocNo } from './docNo.service';
 import type { Office } from './offices.service';
 import type { ServiceResult } from './purchases.service';
+import { lineAccounts } from './jobAccounts.service';
 
 /**
  * Contractor analytics + payments + PENDING DUES (v2, ADR-036), office-scoped.
- * Job-work cost = stitched received qty × line rate / 12; dues = cost − payments.
+ * Job-work cost = (stitched received − rework − missing) × line rate / 12, rounded once
+ * per line (jobAccounts.service, ADR-046); dues = cost − payments.
  */
 
 export function contractorAnalytics(db: Db, officeId: number): Array<Record<string, unknown>> {
@@ -39,20 +41,17 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
      JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL AND j.office_id = ?
      WHERE j.contractor_id = ?`,
   );
-  // Round ONCE per job line over everything received against it — the same rule the
-  // job card itself uses (listJobCards). Rounding each partial receipt separately made
-  // the card and the dues page disagree by a paise or two on split deliveries.
-  const costStmt = db.prepare(
-    `SELECT COALESCE(SUM(lineCost), 0) AS cost FROM (
-       SELECT CAST(ROUND(SUM(rl.qty_pcs) * l.rate_paise_per_dozen / 12.0) AS INTEGER) AS lineCost
-       FROM job_receipt_lines rl
-       JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
-       JOIN job_card_lines l ON l.id = rl.job_card_line_id
-       JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL AND j.office_id = ?
-       WHERE j.contractor_id = ? AND rl.return_type = 'stitched'
-       GROUP BY rl.job_card_line_id
-     )`,
-  );
+  // Round ONCE per job line over everything payable on it — the same rule the job card
+  // itself uses (listJobCards). Rounding each partial receipt separately made the card
+  // and the dues page disagree by a paise or two on split deliveries.
+  const costByContractor = new Map<number, { cost: number; rework: number; missing: number }>();
+  for (const a of lineAccounts(db, officeId)) {
+    const t = costByContractor.get(a.contractorId) ?? { cost: 0, rework: 0, missing: 0 };
+    t.cost += a.amountPaise;
+    t.rework += a.reworkPcs;
+    t.missing += a.missingPcs;
+    costByContractor.set(a.contractorId, t);
+  }
   const shortExcessStmt = db.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN d.qty_pcs < 0 THEN -d.qty_pcs END), 0) AS shortagePcs,
@@ -82,7 +81,8 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
 
   for (const row of rows) {
     const t = receiptTotals.get(officeId, row.id) as { stitched: number; unstitched: number };
-    const cost = (costStmt.get(officeId, row.id) as { cost: number }).cost;
+    const acct = costByContractor.get(row.id as number) ?? { cost: 0, rework: 0, missing: 0 };
+    const cost = acct.cost;
     const se = shortExcessStmt.get(officeId, row.id) as { shortagePcs: number; excessPcs: number };
     const paid = (paymentsStmt.get(row.id, officeId) as { paid: number }).paid;
     const lastPayment = (lastPaymentStmt.get(row.id, officeId) as { lastDate: string | null })
@@ -97,6 +97,8 @@ export function contractorAnalytics(db: Db, officeId: number): Array<Record<stri
       effectiveIssued > 0
         ? Math.round(((se.shortagePcs + se.excessPcs) / effectiveIssued) * 1000) / 10
         : 0;
+    row.reworkPcs = acct.rework;
+    row.missingPcs = acct.missing;
     row.jobWorkCostPaise = cost;
     row.paidPaise = paid;
     row.duesPaise = cost - paid;
@@ -220,6 +222,46 @@ export function voidPayment(
       entityType: 'contractor_payment',
       entityId: id,
       new: { reason },
+      ip,
+    });
+  });
+  tx();
+  return { ok: true, id };
+}
+
+/** Correct a payment's date, amount, mode or reference — audited, payee fixed. */
+export function editPayment(
+  db: Db,
+  office: Office,
+  id: number,
+  input: PaymentEditInput,
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const row = db
+    .prepare(
+      'SELECT * FROM contractor_payments WHERE id = ? AND office_id = ? AND voided_at IS NULL',
+    )
+    .get(id, office.id) as Record<string, unknown> | undefined;
+  if (!row) return { ok: false, code: 404, error: 'Payment not found.' };
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE contractor_payments SET payment_date = ?, amount_paise = ?, mode = ?, reference = ?, notes = ?
+       WHERE id = ?`,
+    ).run(input.paymentDate, input.amountPaise, input.mode, input.reference, input.notes, id);
+    audit(db, {
+      userId,
+      action: 'update',
+      entityType: 'contractor_payment',
+      entityId: id,
+      old: {
+        paymentDate: row.payment_date,
+        amountPaise: row.amount_paise,
+        mode: row.mode,
+        reference: row.reference,
+        notes: row.notes,
+      },
+      new: input,
       ip,
     });
   });

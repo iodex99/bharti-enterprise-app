@@ -58,3 +58,10 @@ Status: ✅ done · 🚧 in progress · ⬜ planned
 | Payment QR codes on contractor + staff masters (shown when paying) | ✅ | v3 (ADR-037) |
 | Record payments on the Dues page (partial, dated; contractors AND staff) | ✅ | v3 (ADR-037) |
 | Client's default sizes HR / PIPE / JUMBO in seed + demo | ✅ | v3 |
+| Rejected pieces go back to the contractor (rework, card reopens); missing deducted | ✅ | v4 (ADR-046) |
+| Ledger per contractor / checker / packer with "how it's worked out" + period filter | ✅ | v4 (ADR-047) |
+| PDF payment statements (Download + Share on phones) | ✅ | v4 (ADR-047) |
+| Edit on every list (full while unused; dates/rates/photos/notes after) | ✅ | v4 (ADR-048) |
+| Packed-goods register; "pack now" with the check result | ✅ | v4 (ADR-049) |
+| Contractors under Pending Dues; Payments tab with admin edit/void | ✅ | v4 (ADR-049) |
+| Phone UI: bottom tab bar, status chips with counts, folded filters, in-app photo viewer | ✅ | v4 (ADR-049) |

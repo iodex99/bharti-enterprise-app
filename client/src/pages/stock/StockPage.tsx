@@ -4,12 +4,14 @@ import clsx from 'clsx';
 import { formatInchC, formatLen, formatPieces, label as stageLabel, STAGES } from '@shared';
 import { api } from '../../api/client';
 import { DataTable, type Column } from '../../components/DataTable';
+import { PhotoThumb } from '../../components/ui';
 
 type SummaryRow = { stage: string; qty: number; combos: number };
 type StockRow = {
   modelId: number;
   modelCode: string;
   modelName: string;
+  modelImagePath: string | null;
   colorId: number;
   colorName: string;
   sizeId: number | null;
@@ -144,9 +146,12 @@ function StageStock({ stage }: { stage: string }) {
       header: 'Code / Color',
       value: (r) => `${r.modelCode} ${r.colorName}`,
       render: (r) => (
-        <span>
-          <span className="font-medium">{r.modelCode}</span>{' '}
-          <span className="text-gray-500">{r.colorName}</span>
+        <span className="inline-flex items-center gap-2">
+          {r.modelImagePath && <PhotoThumb src={r.modelImagePath} title={r.modelCode} size={32} />}
+          <span>
+            <span className="font-medium">{r.modelCode}</span>{' '}
+            <span className="text-gray-500">{r.colorName}</span>
+          </span>
         </span>
       ),
     },

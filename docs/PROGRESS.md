@@ -143,9 +143,39 @@ first release there. The first real install on a client PC then failed the insta
 checksum step (5.1 `.Content` is a byte[]) — fixed in v1.0.25+, rehearsed against the
 live feed.
 
-Next steps: complete one real install on the office PC with the one-liner, restart the
-PC to confirm the service comes back, then watch one real push land on it (go-live
-checklist items 3 and 14).
+**The client's office PC is installed (2026-11-26)** with the one-liner; Tailscale is up
+(MagicDNS name `desktop-8ivc990.tail7de677.ts.net`). Still pending at the client: Google
+Drive backup folder (INSTALL_CLIENT Part 7), staff phones on Tailscale (Part 5), a PC
+restart check and watching one real push land (go-live checklist items 3 and 14).
+
+**Workflow round 3 (2026-11-26, ADR-046…049, migration 006):**
+- Rejected pieces go straight back to the contractor (CHECKING → WIP on the source job
+  line, ref `check_reject`), the card reopens; missing pieces are deducted. One money
+  rule in `jobAccounts.service`: payable = (stitched − rework − missing) × rate ÷ 12,
+  rounded once per line — job card, dues, analytics, dashboard and statements all use it.
+- Per-person ledgers + PDF statements (`statements.service`, `utils/statementPdf.ts`,
+  pdf-lib 1.17.1), `/dues/:kind/:id`; telescoped rounding keeps statement = dues.
+- Edit on every list (purchases full edit, job rates after receipts, receipts, check/pack
+  issues, payments [A], dispatches [A], opening balances [A]) — all via the ledger.
+- Checking & Packing as four tabs with a Packed register and "pack now"; Contractors moved
+  under Pending Dues; phone bottom bar, 44px targets, status chips, folded filters,
+  in-app photo viewer.
+
+Next steps: client go-live items above; then walk the owner through the new ledger /
+statement PDF and the rework rule on their real data.
+
+**Round-3 quirks discovered (don't relearn these):**
+- `stock_ledger.ref_type` has an immutable CHECK: new movements must reuse an existing
+  type. Rework = `check_reject` pointing at WIP instead of REJECTED (it is still a
+  balanced transfer, which is all the engine and reconciliation care about).
+- Edits that re-take stock (check/pack issues, dispatches) post a reversal + a fresh take
+  under the same ref_id. Anything that later asks "what did this document take?" must
+  use the NET (`packConsumption`, dispatch void/edit), never "the negative rows".
+- The WIP self-check must add back receipt EXCESS: excess pieces never came out of WIP.
+- A fresh dev machine needs `npx playwright install chromium` before `npm run test:e2e`
+  (every spec fails with "Executable doesn't exist" otherwise).
+- The Bash tool mangles heredocs that contain JS template literals (`${…}` in
+  backticks): write edit scripts to a file instead.
 
 **Installer quirks discovered (don't relearn these):**
 - `irm | iex` delivers the script as a string: it must be pure ASCII (5.1 mangles the

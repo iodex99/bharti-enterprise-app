@@ -208,8 +208,38 @@ describe('checking', () => {
     expect(s2.body.status).toBe('completed');
 
     expect(stageTotal('PACKING')).toBe(112);
-    expect(stageTotal('REJECTED')).toBe(6);
+    // ADR-046: rejected pieces go straight back to the contractor who stitched them —
+    // they sit in WIP on Meena's job line again, never in REJECTED stock
+    expect(stageTotal('REJECTED')).toBe(0);
+    expect(stageTotal('WIP')).toBe(6);
     expect(stageTotal('CHECKING')).toBe(0);
+
+    // the job card reopened: Meena owes the 6 reworked pieces back
+    const jobs = await request(ctx.app).get('/api/jobs').set('Cookie', owner);
+    const card = jobs.body.items[0];
+    expect(card.status).toBe('partially_received');
+    expect(card.reworkPcs).toBe(6);
+    expect(card.missingPcs).toBe(2);
+    expect(card.pendingPcs).toBe(6);
+    // paid only for good pieces: (120 − 6 rework − 2 missing) × ₹30/dz = ₹280
+    expect(card.jobCostPaise).toBe(28000);
+
+    // one adjustment row per reason, plus the missing deduction
+    const adj = ctx.db
+      .prepare('SELECT kind, reason, qty_pcs FROM contractor_adjustments ORDER BY id')
+      .all() as Array<{ kind: string; reason: string; qty_pcs: number }>;
+    expect(adj).toEqual([
+      { kind: 'rework', reason: 'stitching_issue', qty_pcs: 4 },
+      { kind: 'rework', reason: 'elastic_issue', qty_pcs: 2 },
+      { kind: 'missing', reason: 'missing', qty_pcs: 2 },
+    ]);
+    // sent-back rejections are history, not open problems; missing stays open
+    const open = ctx.db
+      .prepare(
+        "SELECT reason FROM discrepancies WHERE ref_type = 'check_result' AND resolved_at IS NULL",
+      )
+      .all() as Array<{ reason: string }>;
+    expect(open.map((r) => r.reason)).toEqual(['missing']);
 
     const list = await request(ctx.app).get('/api/checking').set('Cookie', owner);
     const issue = list.body.items.find((i: { id: number }) => i.id === checkId);
@@ -416,14 +446,14 @@ describe('packing → finished goods → dispatch', () => {
     };
     expect(kpis.rawLen).toBe(180000 - CUT_LEN);
     expect(kpis.cutPcs).toBe(0);
-    expect(kpis.wipPcs).toBe(0);
+    expect(kpis.wipPcs).toBe(6); // the rejected pieces, back with Meena for rework
     expect(kpis.fgPcs).toBe(98);
-    expect(kpis.rejectedPcs).toBe(6);
-    expect(kpis.openJobs).toBe(0);
-    expect(kpis.completedJobs).toBe(1);
-    expect(kpis.unresolvedDiscrepancies).toBeGreaterThan(0); // missing + rejects + short
-    // dues: 120 pcs stitched @ ₹30/dz = ₹300 = 30000 paise, nothing paid
-    expect(kpis.duesPaise).toBe(30000);
+    expect(kpis.rejectedPcs).toBe(0);
+    expect(kpis.openJobs).toBe(1); // reopened by the rework
+    expect(kpis.completedJobs).toBe(0);
+    expect(kpis.unresolvedDiscrepancies).toBeGreaterThan(0); // missing + short
+    // dues: (120 stitched − 6 rework − 2 missing) @ ₹30/dz = ₹280 = 28000 paise
+    expect(kpis.duesPaise).toBe(28000);
 
     const trends = (res.body as { trends: Array<{ cutPcs: number }> }).trends;
     expect(trends.reduce((s, t) => s + t.cutPcs, 0)).toBe(120);
@@ -470,11 +500,11 @@ describe('packing → finished goods → dispatch', () => {
 
     // per-stage breakdown proves where everything sits
     expect(stageTotal('CUT')).toBe(0);
-    expect(stageTotal('WIP')).toBe(0);
+    expect(stageTotal('WIP')).toBe(6); // rejected → back with the contractor for rework
     expect(stageTotal('CHECKING')).toBe(0);
     expect(stageTotal('FG')).toBe(98);
     expect(stageTotal('PACKING')).toBe(12); // the bundle still held aside
-    expect(stageTotal('REJECTED')).toBe(6);
+    expect(stageTotal('REJECTED')).toBe(0);
     // 98 + 12 + 6 = 116 = 120 - 4 ✓ zero drift
 
     // RAW conservation separately (length units)

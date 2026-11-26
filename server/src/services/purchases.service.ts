@@ -138,32 +138,130 @@ export function editPurchase(
     .get(id, office.id) as Record<string, unknown> | undefined;
   if (!existing) return { ok: false, code: 404, error: 'Purchase not found.' };
 
-  const tx = db.transaction(() => {
-    db.prepare(
-      `UPDATE purchases SET rate_paise_per_yard = ?, total_paise = ?, image_path = ?, notes = ?
-       WHERE id = ?`,
-    ).run(
-      input.ratePaisePerYard,
-      purchaseTotalPaise(existing.len_inch_c as number, input.ratePaisePerYard),
-      input.imagePath ?? null,
-      input.notes,
-      id,
-    );
-    audit(db, {
-      userId,
-      action: 'update',
-      entityType: 'purchase',
-      entityId: id,
-      old: {
-        ratePaisePerYard: existing.rate_paise_per_yard,
-        imagePath: existing.image_path,
-        notes: existing.notes,
-      },
-      new: input,
-      ip,
+  const oldLen = existing.len_inch_c as number;
+  const oldColor = existing.color_id as number;
+  const { bal } = db
+    .prepare(
+      `SELECT COALESCE(SUM(qty), 0) AS bal FROM stock_ledger
+       WHERE stage = 'RAW' AND lot_type = 'purchase' AND lot_id = ?`,
+    )
+    .get(id) as { bal: number };
+  const usedInchC = oldLen - bal;
+
+  if (input.vendorId !== existing.vendor_id) {
+    const err = assertActive(db, 'vendors', input.vendorId, 'Vendor');
+    if (err) return { ok: false, code: 400, error: err };
+  }
+  if (usedInchC > 0) {
+    // some of this cloth is already cut: what it IS can no longer change
+    if (input.colorId !== oldColor) {
+      return {
+        ok: false,
+        code: 409,
+        error: 'Some of this cloth is already cut, so its color cannot change.',
+      };
+    }
+    if (input.widthInchC !== existing.width_inch_c) {
+      return {
+        ok: false,
+        code: 409,
+        error: 'Some of this cloth is already cut, so its width cannot change.',
+      };
+    }
+    if (input.lenInchC < usedInchC) {
+      return {
+        ok: false,
+        code: 409,
+        error: `Length cannot be less than the ${(usedInchC / 3600).toFixed(2)} yards already cut.`,
+      };
+    }
+  } else if (input.colorId !== oldColor) {
+    const err = assertActive(db, 'colors', input.colorId, 'Color');
+    if (err) return { ok: false, code: 400, error: err };
+  }
+
+  try {
+    const tx = db.transaction(() => {
+      const base = {
+        stage: 'RAW' as const,
+        officeId: office.id,
+        modelId: existing.model_id as number,
+        sizeId: null,
+        lotType: 'purchase' as const,
+        lotId: id,
+        refId: id,
+      };
+      if (input.colorId !== oldColor) {
+        // untouched lot changing color: the old cloth leaves, the corrected cloth arrives
+        postMovements(
+          db,
+          [{ ...base, colorId: oldColor, qty: -oldLen, refType: 'adjustment_out' }],
+          userId,
+        );
+        postMovements(
+          db,
+          [{ ...base, colorId: input.colorId, qty: input.lenInchC, refType: 'adjustment_in' }],
+          userId,
+        );
+      } else if (input.lenInchC !== oldLen) {
+        const delta = input.lenInchC - oldLen;
+        postMovements(
+          db,
+          [
+            {
+              ...base,
+              colorId: oldColor,
+              qty: delta,
+              refType: delta > 0 ? 'adjustment_in' : 'adjustment_out',
+            },
+          ],
+          userId,
+        );
+      }
+      db.prepare(
+        `UPDATE purchases SET purchase_date = ?, received_date = ?, vendor_id = ?, color_id = ?,
+           len_inch_c = ?, qty_cm = ?, width_inch_c = ?, rate_paise_per_yard = ?, total_paise = ?,
+           image_path = ?, notes = ?
+         WHERE id = ?`,
+      ).run(
+        input.purchaseDate,
+        input.receivedDate,
+        input.vendorId,
+        input.colorId,
+        input.lenInchC,
+        legacyCm(input.lenInchC),
+        input.widthInchC,
+        input.ratePaisePerYard,
+        purchaseTotalPaise(input.lenInchC, input.ratePaisePerYard),
+        input.imagePath ?? null,
+        input.notes,
+        id,
+      );
+      audit(db, {
+        userId,
+        action: 'update',
+        entityType: 'purchase',
+        entityId: id,
+        old: {
+          purchaseDate: existing.purchase_date,
+          receivedDate: existing.received_date,
+          vendorId: existing.vendor_id,
+          colorId: oldColor,
+          lenInchC: oldLen,
+          widthInchC: existing.width_inch_c,
+          ratePaisePerYard: existing.rate_paise_per_yard,
+          imagePath: existing.image_path,
+          notes: existing.notes,
+        },
+        new: input,
+        ip,
+      });
     });
-  });
-  tx();
+    tx();
+  } catch (err) {
+    if (err instanceof LedgerError) return { ok: false, code: 409, error: err.message };
+    throw err;
+  }
   return { ok: true, id };
 }
 

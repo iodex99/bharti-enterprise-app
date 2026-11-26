@@ -20,6 +20,12 @@ test('lists support facet filters, date range and sorting', async ({ page }) => 
   await signIn(page, 'owner', 'Owner@123');
   await page.goto('/purchases');
   await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
+  // on a phone the dropdowns + dates sit behind one "Filters" button
+  if (phone) await page.getByRole('button', { name: /^Filters/ }).click();
+
+  // one-tap status chips: "In stock" is the default, "All" shows everything
+  await page.getByRole('button', { name: /^All \d+/ }).click();
+  await page.getByRole('button', { name: /^In stock \d+/ }).click();
 
   // facet filter: choose a specific color, every visible row then shows it
   const colorFacet = page.getByLabel('Filter Color');
@@ -60,6 +66,8 @@ test('lists support facet filters, date range and sorting', async ({ page }) => 
   // jobs list has status/contractor facets too
   await page.goto('/jobs');
   await expect(page.getByText(/\d+ of \d+/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^With contractor \d+/ })).toBeVisible();
+  if (phone) await page.getByRole('button', { name: /^Filters/ }).click();
   await expect(page.getByLabel('Filter Status')).toBeVisible();
   await expect(page.getByLabel('Filter Contractor')).toBeVisible();
 });

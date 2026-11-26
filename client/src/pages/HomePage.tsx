@@ -136,7 +136,7 @@ export default function HomePage() {
           to="/discrepancies"
           tone={kpis.unresolvedDiscrepancies > 0 ? 'warning' : undefined}
         />
-        <Tile label="Contractor dues" value={formatPaise(kpis.duesPaise)} to="/contractors" />
+        <Tile label="Contractor dues" value={formatPaise(kpis.duesPaise)} to="/dues" />
       </section>
 
       {/* alerts */}

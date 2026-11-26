@@ -12,6 +12,7 @@ import {
 } from './ledger.service';
 import type { Office } from './offices.service';
 import { type ServiceResult } from './purchases.service';
+import { lineAccounts, linePendingPcs } from './jobAccounts.service';
 
 /**
  * Module 3: contractor job work (v2, ADR-032/033).
@@ -36,26 +37,46 @@ type JobLineRow = {
   rate_paise_per_dozen: number;
 };
 
-function lineTotals(db: Db, lineId: number): { stitched: number; unstitched: number } {
+function lineTotals(
+  db: Db,
+  lineId: number,
+): { stitched: number; unstitched: number; rework: number; shortage: number } {
   const row = db
     .prepare(
       `SELECT
          COALESCE(SUM(CASE WHEN rl.return_type = 'stitched' THEN rl.qty_pcs END), 0) AS stitched,
-         COALESCE(SUM(CASE WHEN rl.return_type = 'unstitched_return' THEN rl.qty_pcs END), 0) AS unstitched
+         COALESCE(SUM(CASE WHEN rl.return_type = 'unstitched_return' THEN rl.qty_pcs END), 0) AS unstitched,
+         (SELECT COALESCE(SUM(a.qty_pcs), 0) FROM contractor_adjustments a
+          WHERE a.job_card_line_id = $line AND a.kind = 'rework') AS rework,
+         (SELECT COALESCE(SUM(-s.qty), 0) FROM stock_ledger s
+          WHERE s.ref_type = 'job_shortage' AND s.lot_type = 'job_line' AND s.lot_id = $line) AS shortage
        FROM job_receipt_lines rl
        JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
-       WHERE rl.job_card_line_id = ?`,
+       WHERE rl.job_card_line_id = $line`,
     )
-    .get(lineId) as { stitched: number; unstitched: number };
+    .get({ line: lineId }) as {
+    stitched: number;
+    unstitched: number;
+    rework: number;
+    shortage: number;
+  };
   return row;
 }
 
-/** Recompute the denormalized card status from its lines. Call inside the transaction. */
-function refreshJobStatus(db: Db, jobCardId: number): string {
+/**
+ * Recompute the denormalized card status from its lines. Call inside the transaction.
+ * `reopen` (rework just sent back) lifts a closed card back into the active states —
+ * otherwise the contractor could never hand the fixed pieces back.
+ */
+export function refreshJobStatus(
+  db: Db,
+  jobCardId: number,
+  opts: { reopen?: boolean } = {},
+): string {
   const card = db.prepare('SELECT status FROM job_cards WHERE id = ?').get(jobCardId) as {
     status: string;
   };
-  if (card.status === 'closed_with_discrepancy') return card.status;
+  if (card.status === 'closed_with_discrepancy' && !opts.reopen) return card.status;
 
   const lines = db
     .prepare('SELECT id, qty_issued_pcs FROM job_card_lines WHERE job_card_id = ?')
@@ -65,7 +86,9 @@ function refreshJobStatus(db: Db, jobCardId: number): string {
   for (const line of lines) {
     const t = lineTotals(db, line.id);
     if (t.stitched + t.unstitched > 0) anyReceipt = true;
-    if (t.stitched + t.unstitched < line.qty_issued_pcs) allSettled = false;
+    // pieces sent back for rework are owed again, on top of the original issue;
+    // pieces written off when a card was closed are no longer owed
+    if (t.stitched + t.unstitched + t.shortage < line.qty_issued_pcs + t.rework) allSettled = false;
   }
   const status = allSettled ? 'completed' : anyReceipt ? 'partially_received' : 'open';
   db.prepare('UPDATE job_cards SET status = ? WHERE id = ?').run(status, jobCardId);
@@ -277,20 +300,13 @@ export function editJobCard(
       .prepare('SELECT COUNT(*) AS n FROM job_receipts WHERE job_card_id = ? AND voided_at IS NULL')
       .get(jobCardId) as { n: number }
   ).n;
-  if (receiptCount > 0) {
-    return {
-      ok: false,
-      code: 409,
-      error: 'Goods have already been received against this card — it can no longer be edited.',
-    };
-  }
-  if (card.status === 'closed_with_discrepancy') {
-    return { ok: false, code: 409, error: 'This job is closed.' };
-  }
-
   const oldLines = db
     .prepare('SELECT * FROM job_card_lines WHERE job_card_id = ?')
     .all(jobCardId) as JobLineRow[];
+
+  if (receiptCount > 0 || card.status === 'closed_with_discrepancy') {
+    return editStartedJobCard(db, card, oldLines, input, userId, ip);
+  }
 
   try {
     const tx = db.transaction(() => {
@@ -372,6 +388,96 @@ export function editJobCard(
     throw err;
   }
   return { ok: true, id: jobCardId };
+}
+
+/**
+ * Goods already came back: the pieces are fixed history, but the date, notes and the
+ * per-dozen rate of each size can still be corrected (dues re-price automatically —
+ * money is never stored, only computed from the rate).
+ */
+function editStartedJobCard(
+  db: Db,
+  card: Record<string, unknown>,
+  oldLines: JobLineRow[],
+  input: JobEditInput,
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const bySize = new Map(oldLines.map((l) => [l.size_id, l]));
+  const sameShape =
+    input.lines.length === oldLines.length &&
+    input.lines.every((l) => bySize.get(l.sizeId)?.qty_issued_pcs === l.qtyIssuedPcs);
+  if (!sameShape) {
+    return {
+      ok: false,
+      code: 409,
+      error:
+        'Goods have already been received on this card, so sizes and quantities are fixed. You can still change the date, notes and rates.',
+    };
+  }
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE job_cards SET issue_date = ?, notes = ? WHERE id = ?').run(
+      input.issueDate,
+      input.notes,
+      card.id,
+    );
+    const setRate = db.prepare('UPDATE job_card_lines SET rate_paise_per_dozen = ? WHERE id = ?');
+    for (const line of input.lines)
+      setRate.run(line.ratePaisePerDozen, bySize.get(line.sizeId)!.id);
+    audit(db, {
+      userId,
+      action: 'update',
+      entityType: 'job_card',
+      entityId: card.id as number,
+      old: {
+        issueDate: card.issue_date,
+        notes: card.notes,
+        rates: oldLines.map((l) => ({ sizeId: l.size_id, rate: l.rate_paise_per_dozen })),
+      },
+      new: {
+        issueDate: input.issueDate,
+        notes: input.notes,
+        rates: input.lines.map((l) => ({ sizeId: l.sizeId, rate: l.ratePaisePerDozen })),
+      },
+      ip,
+    });
+  });
+  tx();
+  return { ok: true, id: card.id as number };
+}
+
+/** A receipt's quantities are fixed (checkers work from them); its paperwork is not. */
+export function editReceipt(
+  db: Db,
+  office: Office,
+  receiptId: number,
+  input: { receiptDate: string; imagePath: string; notes: string },
+  userId: number,
+  ip: string | null,
+): ServiceResult {
+  const row = db
+    .prepare(
+      `SELECT r.* FROM job_receipts r JOIN job_cards j ON j.id = r.job_card_id AND j.office_id = ?
+       WHERE r.id = ? AND r.voided_at IS NULL`,
+    )
+    .get(office.id, receiptId) as Record<string, unknown> | undefined;
+  if (!row) return { ok: false, code: 404, error: 'Receipt not found.' };
+  const tx = db.transaction(() => {
+    db.prepare(
+      'UPDATE job_receipts SET receipt_date = ?, image_path = ?, notes = ? WHERE id = ?',
+    ).run(input.receiptDate, input.imagePath, input.notes, receiptId);
+    audit(db, {
+      userId,
+      action: 'update',
+      entityType: 'job_receipt',
+      entityId: receiptId,
+      old: { receiptDate: row.receipt_date, imagePath: row.image_path, notes: row.notes },
+      new: input,
+      ip,
+    });
+  });
+  tx();
+  return { ok: true, id: receiptId };
 }
 
 export function createReceipt(
@@ -798,14 +904,6 @@ export function listJobCards(
      FROM job_card_lines l JOIN sizes s ON s.id = l.size_id
      WHERE l.job_card_id = ? ORDER BY s.sort_order, s.code`,
   );
-  const totalsStmt = db.prepare(
-    `SELECT
-       COALESCE(SUM(CASE WHEN rl.return_type = 'stitched' THEN rl.qty_pcs END), 0) AS stitched,
-       COALESCE(SUM(CASE WHEN rl.return_type = 'unstitched_return' THEN rl.qty_pcs END), 0) AS unstitched
-     FROM job_receipt_lines rl
-     JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
-     WHERE rl.job_card_line_id = ?`,
-  );
   // pieces this contractor claims returned that no checker has verified yet
   const pendingCheckStmt = db.prepare(
     `SELECT COALESCE(SUM(l.qty), 0) AS pcs
@@ -814,39 +912,67 @@ export function listJobCards(
      JOIN job_receipts r ON r.id = rl.job_receipt_id
      WHERE l.stage = 'CHECKING' AND l.staff_id IS NULL AND r.job_card_id = ?`,
   );
+  // one pass over the office's line accounts — the same numbers the dues page uses
+  const accounts = new Map(
+    lineAccounts(db, officeId, { contractorId: f.contractorId }).map((a) => [a.lineId, a]),
+  );
 
   for (const card of cards) {
     const lines = lineStmt.all(card.id) as Array<Record<string, unknown>>;
     let issued = 0;
     let received = 0;
     let returned = 0;
+    let rework = 0;
+    let missing = 0;
+    let cost = 0;
     for (const line of lines) {
-      const t = totalsStmt.get(line.id) as { stitched: number; unstitched: number };
-      line.receivedPcs = t.stitched;
-      line.returnedPcs = t.unstitched;
-      line.pendingPcs = Math.max(0, (line.qtyIssuedPcs as number) - t.stitched - t.unstitched);
-      line.excessPcs = Math.max(0, t.stitched + t.unstitched - (line.qtyIssuedPcs as number));
+      const a = accounts.get(line.id as number);
+      const stitched = a?.stitchedPcs ?? 0;
+      const unstitched = a?.unstitchedPcs ?? 0;
+      const lineRework = a?.reworkPcs ?? 0;
+      line.receivedPcs = stitched;
+      line.returnedPcs = unstitched;
+      line.reworkPcs = lineRework;
+      line.missingPcs = a?.missingPcs ?? 0;
+      line.payablePcs = a?.payablePcs ?? 0;
+      line.amountPaise = a?.amountPaise ?? 0;
+      line.pendingPcs = linePendingPcs({
+        issuedPcs: line.qtyIssuedPcs as number,
+        reworkPcs: lineRework,
+        stitchedPcs: stitched,
+        unstitchedPcs: unstitched,
+        shortagePcs: a?.shortagePcs ?? 0,
+      });
+      line.excessPcs = Math.max(
+        0,
+        stitched + unstitched - (line.qtyIssuedPcs as number) - lineRework,
+      );
       issued += line.qtyIssuedPcs as number;
-      received += t.stitched;
-      returned += t.unstitched;
+      received += stitched;
+      returned += unstitched;
+      rework += lineRework;
+      missing += line.missingPcs as number;
+      cost += line.amountPaise as number;
     }
     card.sizeCodeLabel = `${card.modelCode as string} · ${card.colorName as string}`;
     card.lines = lines;
     card.issuedPcs = issued;
     card.receivedPcs = received;
     card.returnedPcs = returned;
+    card.reworkPcs = rework;
+    card.missingPcs = missing;
     card.pendingPcs = lines.reduce((s, l) => s + (l.pendingPcs as number), 0);
     card.pendingCheckPcs = (pendingCheckStmt.get(card.id) as { pcs: number }).pcs;
-    card.jobCostPaise = lines.reduce(
-      (s, l) => s + Math.round(((l.receivedPcs as number) * (l.ratePaisePerDozen as number)) / 12),
-      0,
-    );
-    // no receipts yet → the card can still be edited or deleted
+    // net of rework and missing deductions — what the contractor is owed for this card
+    card.jobCostPaise = cost;
+    // no receipts yet → everything can still be edited or the card deleted;
+    // once goods came back only the date, notes and rates can change (see editJobCard)
     card.editable =
       !card.voidedAt &&
       received === 0 &&
       returned === 0 &&
       card.status !== 'closed_with_discrepancy';
+    card.ratesEditable = !card.voidedAt;
   }
   return cards;
 }

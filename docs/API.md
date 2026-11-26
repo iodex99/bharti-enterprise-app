@@ -70,15 +70,15 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 ### Transactions
 | Path | Create | Extra endpoints | Void |
 |---|---|---|---|
-| /api/purchases | A O — vendor+color+{lenInchC, widthInchC, ratePaisePerYard}, NO code (given at cutting) | PUT /:id (financial fields only) | A, blocked after cutting |
-| /api/opening-balances | A — RAW takes widthInchC + no code; other stages take a typed `modelCode` | | A, blocked after consumption |
+| /api/purchases | A O — vendor+color+{lenInchC, widthInchC, ratePaisePerYard}, NO code (given at cutting) | PUT /:id — the whole purchase; color/width locked and length ≥ used once any cloth is cut; length/color changes post adjustment rows (ADR-048) | A, blocked after cutting |
+| /api/opening-balances | A — RAW takes widthInchC + no code; other stages take a typed `modelCode` | PUT /:id `{balanceDate, qty, widthInchC?, note}` — qty difference posted as adjustment, never below what was used | A, blocked after consumption |
 | /api/cutting | A O — per-line {sizeId, code, qtyPcs, clothPerPcInchC, widthCount, imagePath?}; the entry IS the cutting (consumes RAW + creates CUT, ADR-031) | PUT /:id, DELETE /:id — while nothing is issued downstream; doc number kept | A, blocked after issue |
-| /api/jobs | A O — lines carry {modelId, colorId, sizeId, qty, ratePaisePerDozen}; returns `{cards:[…]}`, ONE card per code+color (ADR-033) | PUT /:id, DELETE /:id (receipt-less cards), POST /:id/receipts (partial/excess/unstitched; **imagePath REQUIRED**, ADR-032), POST /:id/close (A) | A, unstarted only |
-| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs, ratePaisePerDozen?} names the received batch (rate defaults from the staff master) | GET /pending (batches waiting w/ contractor+photo), POST /:id/results ({qtyPassed, rejections:[{reason, qtyPcs}]} — 'missing' is a reason, ADR-034), POST /:id/pack (allot passed pcs to a packer or keep a labeled bundle, ADR-035) | A, before results |
-| /api/packing | A O — directed at {lotType ∈ check_issue\|opening\|pack_issue(bundle), lotId}; kind pack\|bundle + label | GET ?kind=, POST /:id/results (packed/short sessions) | A, before results |
-| /api/dispatches | A | | A (ledger replay) |
-| /api/contractors/payments | A O — refused (400) if that contractor has no job work in this office (ADR-039) | | A |
-| /api/staff/payments | A O — refused (400) if that person has not checked or packed in this office (ADR-039) | | A |
+| /api/jobs | A O — lines carry {modelId, colorId, sizeId, qty, ratePaisePerDozen}; returns `{cards:[…]}`, ONE card per code+color (ADR-033) | PUT /:id (unstarted: everything; after receipts: date, notes, rates only — 409 if sizes/qty change), DELETE /:id (receipt-less cards), POST /:id/receipts (partial/excess/unstitched; **imagePath REQUIRED**, ADR-032), PUT /receipts/:id `{receiptDate, imagePath, notes}` (qty fixed), POST /:id/close (A) | A, unstarted only |
+| /api/checking | A O — directed: {staffId, lotType, lotId, qtyPcs, ratePaisePerDozen?} names the received batch (rate defaults from the staff master) | GET /pending (batches waiting w/ contractor+photo), POST /:id/results ({qtyPassed, rejections:[{reason, qtyPcs}], packNow?} — 'missing' is a reason, ADR-034; rejects from a contractor's batch go back to that job line, ADR-046; `packNow` allots all waiting passed pieces to the checker in the same transaction and returns `pack`), PUT /:id (checker+qty before results; date/rate/notes always), POST /:id/pack (allot passed pcs to a packer or keep a labeled bundle, ADR-035) | A, before results |
+| /api/packing | A O — directed at {lotType ∈ check_issue\|opening\|pack_issue(bundle), lotId}; kind pack\|bundle + label | GET ?kind=, GET /packed (packed-goods register), PUT /:id (packer+qty before results; date/label/rate/notes always), POST /:id/results (packed/short sessions) | A, before results |
+| /api/dispatches | A | PUT /:id (A — old take restored, corrected qty taken FIFO) | A (ledger replay, net of edits) |
+| /api/contractors/payments | A O — refused (400) if that contractor has no job work in this office (ADR-039) | PUT /:id (A) `{paymentDate, amountPaise, mode, reference, notes}` | A |
+| /api/staff/payments | A O — refused (400) if that person has not checked or packed in this office (ADR-039) | PUT /:id (A) | A |
 
 ### Discrepancies (review workflow)
 | Method | Path | Roles | Notes |
@@ -94,6 +94,8 @@ the resize/re-encode runs on OffscreenCanvas instead of sharp.
 | GET /api/contractors/analytics | performance + dues |
 | GET /api/contractors/dues | pending dues per contractor (ADR-036) |
 | GET /api/staff/dues · /analytics · GET/POST /api/staff/payments · POST /payments/:id/void | checker/packer earnings, dues and dated partial payments (ADR-037) |
+| GET /api/contractors/:id/statement?from&to · /api/staff/:id/statement?from&to | the person's ledger (ADR-047): party, opening balance, totals (work, rework, missing, paid, closing), per-job/batch breakdown, entries with running balance; junk dates ignored |
+| GET /api/contractors/:id/statement/pdf?from&to · /api/staff/:id/statement/pdf | the same statement as `application/pdf`, `Statement-<Name>-<date>.pdf` |
 | GET /api/products | product codes for pickers (typed at cutting) |
 | GET /api/reports · /api/reports/:key?filters&format=xlsx | 17-report registry; xlsx export |
 | GET /api/reports/full?from&to&format=html|xlsx | Complete Business Report (styled HTML / multi-sheet workbook) |

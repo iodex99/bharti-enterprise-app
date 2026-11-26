@@ -1,4 +1,5 @@
 import type { Db } from '../db/connection';
+import { contractorEarnedPaise } from './jobAccounts.service';
 
 /**
  * Owner dashboard (spec: Dashboard + Notifications & Alerts).
@@ -59,25 +60,16 @@ export function dashboardData(db: Db, officeId: number): Record<string, unknown>
       .get(officeId) as { n: number }
   ).n;
 
-  const duesPaise = (
-    db
-      .prepare(
-        `SELECT COALESCE((
-           -- rounded once per job line, matching the job card and the dues page
-           SELECT SUM(lineCost) FROM (
-             SELECT CAST(ROUND(SUM(rl.qty_pcs) * l.rate_paise_per_dozen / 12.0) AS INTEGER) AS lineCost
-             FROM job_receipt_lines rl
-             JOIN job_receipts r ON r.id = rl.job_receipt_id AND r.voided_at IS NULL
-             JOIN job_card_lines l ON l.id = rl.job_card_line_id
-             JOIN job_cards j ON j.id = r.job_card_id AND j.voided_at IS NULL
-             WHERE rl.return_type = 'stitched' AND j.office_id = $office
-             GROUP BY rl.job_card_line_id
-           )
-         ), 0) -
-         COALESCE((SELECT SUM(amount_paise) FROM contractor_payments WHERE voided_at IS NULL AND office_id = $office), 0) AS dues`,
-      )
-      .get({ office: officeId }) as { dues: number }
-  ).dues;
+  // rounded once per job line, net of rework/missing — the job card and dues page rule
+  const duesPaise =
+    contractorEarnedPaise(db, officeId) -
+    (
+      db
+        .prepare(
+          'SELECT COALESCE(SUM(amount_paise), 0) AS paid FROM contractor_payments WHERE voided_at IS NULL AND office_id = ?',
+        )
+        .get(officeId) as { paid: number }
+    ).paid;
 
   // monthly production trend (last 6 months present in data)
   const trends = db
@@ -221,7 +213,7 @@ export function alerts(db: Db, officeId: number): Alert[] {
       severity: 'info',
       title: 'Goods waiting for checking',
       detail: `${checkingPool} pcs received from contractors are not yet issued to a checker.`,
-      link: '/checking',
+      link: '/checking?tab=tocheck',
     });
   }
 
@@ -238,7 +230,7 @@ export function alerts(db: Db, officeId: number): Alert[] {
       severity: 'info',
       title: 'Goods waiting for packing',
       detail: `${packingPool} pcs passed checking but are not yet with a packer.`,
-      link: '/checking',
+      link: '/checking?tab=packing',
     });
   }
 

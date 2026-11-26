@@ -17,9 +17,10 @@ import {
   ErrorText,
   Field,
   Modal,
+  PageHeader,
+  PhotoThumb,
   Select,
   TextInput,
-  ThumbLink,
 } from '../../components/ui';
 import { DzPcInput, ImageInput, MoneyInput } from '../../components/inputs';
 import { MasterSelect } from '../../components/MasterSelect';
@@ -35,6 +36,11 @@ export type JobLine = {
   ratePaisePerDozen: number;
   receivedPcs: number;
   returnedPcs: number;
+  /** rejected at checking and sent back to the contractor (ADR-046) */
+  reworkPcs: number;
+  missingPcs: number;
+  payablePcs: number;
+  amountPaise: number;
   pendingPcs: number;
   excessPcs: number;
 };
@@ -55,6 +61,8 @@ export type JobCard = {
   issuedPcs: number;
   receivedPcs: number;
   returnedPcs: number;
+  reworkPcs: number;
+  missingPcs: number;
   pendingPcs: number;
   pendingCheckPcs: number;
   jobCostPaise: number;
@@ -99,15 +107,11 @@ export default function JobsPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Job Work</h1>
-          <p className="text-sm text-gray-500">
-            Issue cut pieces to contractors — one card per code + color, cost set at issue
-          </p>
-        </div>
-        {canWrite && <Button onClick={() => setCreateOpen(true)}>+ Issue goods</Button>}
-      </div>
+      <PageHeader
+        title="Job Work"
+        subtitle="Issue cut pieces to contractors — one card per code + color, cost set at issue"
+        action={canWrite && <Button onClick={() => setCreateOpen(true)}>+ Issue goods</Button>}
+      />
 
       <DataTable
         columns={[
@@ -119,10 +123,18 @@ export default function JobsPage() {
             header: 'Code / Color',
             value: (r) => `${r.modelCode} ${r.colorName}`,
             render: (r) => (
-              <span>
-                <span className="font-medium">{r.modelCode}</span>{' '}
-                <span className="text-gray-500">{r.colorName}</span>
-                {r.modelImagePath && <ThumbLink href={r.modelImagePath} title="Product photo" />}
+              <span className="inline-flex items-center gap-2">
+                {r.modelImagePath && (
+                  <PhotoThumb
+                    src={r.modelImagePath}
+                    title={`${r.modelCode} ${r.colorName}`}
+                    size={32}
+                  />
+                )}
+                <span>
+                  <span className="font-medium">{r.modelCode}</span>{' '}
+                  <span className="text-gray-500">{r.colorName}</span>
+                </span>
               </span>
             ),
           },
@@ -162,8 +174,16 @@ export default function JobsPage() {
               r.pendingPcs === 0 ? (
                 <span className="text-gray-300">—</span>
               ) : (
-                <span className="font-semibold text-amber-700">{formatPieces(r.pendingPcs)}</span>
+                <span className="font-semibold text-amber-700">
+                  {formatPieces(r.pendingPcs)}
+                  {r.reworkPcs > 0 && (
+                    <span className="ml-1 font-normal text-red-600">
+                      (incl. {formatPieces(Math.min(r.reworkPcs, r.pendingPcs))} rework)
+                    </span>
+                  )}
+                </span>
               ),
+            value: (r) => r.pendingPcs,
           },
           {
             key: 'pendingCheckPcs',
@@ -182,26 +202,38 @@ export default function JobsPage() {
         loading={isLoading}
         emptyTitle="No job cards yet"
         emptyHint={canWrite ? 'Issue cut pieces to a contractor with “+ New job card”.' : undefined}
+        quickFilters={[
+          {
+            key: 'active',
+            label: 'With contractor',
+            test: (r) => r.status === 'open' || r.status === 'partially_received',
+          },
+          { key: 'rework', label: 'Rework due', test: (r) => r.reworkPcs > 0 && r.pendingPcs > 0 },
+          { key: 'check', label: 'Awaiting check', test: (r) => r.pendingCheckPcs > 0 },
+          { key: 'completed', label: 'Completed', test: (r) => r.status === 'completed' },
+          { key: 'closed', label: 'Closed', test: (r) => r.status === 'closed_with_discrepancy' },
+        ]}
         facets={[
           { key: 'status', label: 'Status', value: (r) => enumLabel(r.status) },
           { key: 'contractor', label: 'Contractor', value: (r) => r.contractorName },
           { key: 'model', label: 'Code', value: (r) => r.modelCode },
         ]}
         dateRange={{ label: 'Issue date', value: (r) => r.issueDate }}
+        onRowClick={(row) => setDetailFor(row.id)}
         actions={(row) => (
           <>
             <Button variant="ghost" onClick={() => setDetailFor(row.id)}>
               Open
             </Button>
+            {canWrite && !row.voidedAt && (
+              <Button variant="ghost" onClick={() => setEditFor(row)}>
+                Edit
+              </Button>
+            )}
             {canWrite && !row.voidedAt && row.editable && (
-              <>
-                <Button variant="ghost" onClick={() => setEditFor(row)}>
-                  Edit
-                </Button>
-                <Button variant="ghost" className="text-red-600" onClick={() => setDeleteFor(row)}>
-                  Delete
-                </Button>
-              </>
+              <Button variant="ghost" className="text-red-600" onClick={() => setDeleteFor(row)}>
+                Delete
+              </Button>
             )}
             {isAdmin &&
               !row.voidedAt &&
@@ -296,7 +328,11 @@ function DeleteJobModal({
   );
 }
 
-/** Edit an unstarted card: date, notes and its size lines (same code + color). */
+/**
+ * Edit a card. Unstarted: date, notes and its size lines (same code + color). Once goods
+ * came back the pieces are fixed history — only the date, notes and rates change (the
+ * contractor's dues re-price from the rate automatically).
+ */
 function EditJobModal({
   job,
   onClose,
@@ -306,6 +342,7 @@ function EditJobModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const started = !job.editable;
   const [issueDate, setIssueDate] = useState(job.issueDate);
   const [notes, setNotes] = useState(job.notes);
   const [lines, setLines] = useState(
@@ -354,6 +391,12 @@ function EditJobModal({
         }}
         className="space-y-4"
       >
+        {started && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Goods have come back on this card, so sizes and quantities are fixed. You can still
+            correct the date, notes and the cost per dozen — dues update by themselves.
+          </p>
+        )}
         <Field label="Issue date">
           <TextInput
             type="date"
@@ -369,6 +412,7 @@ function EditJobModal({
                 <Select
                   aria-label={`Size ${i + 1}`}
                   value={line.sizeId ?? ''}
+                  disabled={started}
                   onChange={(e) => {
                     const next = [...lines];
                     next[i] = { ...line, sizeId: e.target.value ? Number(e.target.value) : null };
@@ -388,6 +432,7 @@ function EditJobModal({
               <div className="min-w-[12rem] flex-1">
                 <DzPcInput
                   pieces={line.qtyPcs}
+                  disabled={started}
                   onChange={(pcs) => {
                     const next = [...lines];
                     next[i] = { ...line, qtyPcs: pcs };
@@ -411,20 +456,22 @@ function EditJobModal({
                 variant="ghost"
                 className="text-red-500"
                 onClick={() => setLines(lines.filter((_, j) => j !== i))}
-                disabled={lines.length === 1}
+                disabled={lines.length === 1 || started}
               >
                 ✕
               </Button>
             </div>
           ))}
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setLines([...lines, { sizeId: null, qtyPcs: null, rate: null }])}
-        >
-          + Add size
-        </Button>
+        {!started && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setLines([...lines, { sizeId: null, qtyPcs: null, rate: null }])}
+          >
+            + Add size
+          </Button>
+        )}
         <Field label="Notes">
           <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
@@ -692,10 +739,75 @@ type ReceiptRow = {
   docNo: string;
   receiptDate: string;
   imagePath: string | null;
+  notes: string;
   sizeCode: string;
   qtyPcs: number;
   returnType: string;
 };
+
+/** A receipt's pieces are fixed (checkers work from them); its date, photo and notes are not. */
+function EditReceiptModal({
+  receipt,
+  onClose,
+  onDone,
+}: {
+  receipt: ReceiptRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [receiptDate, setReceiptDate] = useState(receipt.receiptDate);
+  const [imagePath, setImagePath] = useState<string | null>(receipt.imagePath);
+  const [notes, setNotes] = useState(receipt.notes ?? '');
+  const [error, setError] = useState('');
+  const save = useMutation({
+    mutationFn: () =>
+      api.put(`/api/jobs/receipts/${receipt.id}`, { receiptDate, imagePath, notes }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      void queryClient.invalidateQueries({ queryKey: ['checking'] });
+      onDone();
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Save failed.'),
+  });
+  return (
+    <Modal title={`Edit receipt ${receipt.docNo}`} open onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!imagePath) {
+            setError('A photo of the returned goods is required.');
+            return;
+          }
+          save.mutate();
+        }}
+        className="space-y-4"
+      >
+        <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          {receipt.sizeCode} · {formatPieces(receipt.qtyPcs)} — the quantity is fixed once received.
+        </p>
+        <Field label="Receipt date">
+          <TextInput
+            type="date"
+            value={receiptDate}
+            onChange={(e) => setReceiptDate(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Photo of the returned goods">
+          <ImageInput path={imagePath} onChange={setImagePath} />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <ErrorText>{error}</ErrorText>
+        <Button type="submit" disabled={save.isPending} className="w-full">
+          {save.isPending ? 'Saving…' : 'Save changes'}
+        </Button>
+      </form>
+    </Modal>
+  );
+}
 
 function JobDetailModal({
   job,
@@ -712,6 +824,7 @@ function JobDetailModal({
 }) {
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [editReceipt, setEditReceipt] = useState<ReceiptRow | null>(null);
   const { data: receipts } = useQuery({
     queryKey: ['jobs', job.id, 'receipts'],
     queryFn: () => api.get<{ items: ReceiptRow[] }>(`/api/jobs/${job.id}/receipts`),
@@ -735,16 +848,26 @@ function JobDetailModal({
           </p>
         )}
 
+        {job.reworkPcs > 0 && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+            {formatPieces(job.reworkPcs)} were rejected at checking and sent back to{' '}
+            {job.contractorName} for rework
+            {job.missingPcs > 0 && <>, and {formatPieces(job.missingPcs)} were missing</>}. They are
+            not paid for until the fixed pieces come back and pass checking.
+          </p>
+        )}
         <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full min-w-[520px] text-sm">
+          <table className="w-full min-w-[620px] text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
                 <th className="px-3 py-2">Size</th>
                 <th className="px-3 py-2">Issued</th>
                 <th className="px-3 py-2">Received</th>
                 <th className="px-3 py-2">Returned</th>
+                <th className="px-3 py-2">Rework</th>
                 <th className="px-3 py-2">Pending</th>
                 <th className="px-3 py-2">Rate/dz</th>
+                <th className="px-3 py-2">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -760,6 +883,20 @@ function JobDetailModal({
                   </td>
                   <td className="px-3 py-2">{l.returnedPcs ? formatPieces(l.returnedPcs) : '—'}</td>
                   <td className="px-3 py-2">
+                    {l.reworkPcs || l.missingPcs ? (
+                      <span className="text-red-700">
+                        {l.reworkPcs > 0 && <>−{formatPieces(l.reworkPcs)}</>}
+                        {l.missingPcs > 0 && (
+                          <span className="block text-xs">
+                            {formatPieces(l.missingPcs)} missing
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
                     {l.excessPcs > 0 ? (
                       <Badge tone="blue">+{formatPieces(l.excessPcs)} excess</Badge>
                     ) : l.pendingPcs > 0 ? (
@@ -771,6 +908,7 @@ function JobDetailModal({
                     )}
                   </td>
                   <td className="px-3 py-2 text-gray-500">{formatPaise(l.ratePaisePerDozen)}</td>
+                  <td className="px-3 py-2 font-medium">{formatPaise(l.amountPaise)}</td>
                 </tr>
               ))}
             </tbody>
@@ -780,12 +918,15 @@ function JobDetailModal({
         <div>
           <p className="mb-1 text-sm font-semibold text-gray-700">Receipts</p>
           {receipts?.items.length === 0 && <p className="text-sm text-gray-400">None yet.</p>}
-          <ul className="space-y-1 text-sm">
+          <ul className="space-y-1.5 text-sm">
             {receipts?.items.map((r) => (
               <li
                 key={`${r.id}-${r.sizeCode}-${r.returnType}-${r.qtyPcs}`}
-                className="flex flex-wrap gap-2 text-gray-600"
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-100 px-2 py-1.5 text-gray-600"
               >
+                {r.imagePath && (
+                  <PhotoThumb src={r.imagePath} title={`Receipt ${r.docNo}`} size={36} />
+                )}
                 <span className="font-mono text-xs text-gray-400">{r.docNo}</span>
                 <span>{formatBusinessDate(r.receiptDate)}</span>
                 <span className="font-medium text-red-700">
@@ -794,8 +935,10 @@ function JobDetailModal({
                 {r.returnType === 'unstitched_return' && (
                   <Badge tone="amber">unstitched return</Badge>
                 )}
-                {r.imagePath && (
-                  <ThumbLink href={r.imagePath} label="photo" title="Photo of the returned goods" />
+                {canWrite && (
+                  <Button variant="ghost" className="ml-auto" onClick={() => setEditReceipt(r)}>
+                    Edit
+                  </Button>
                 )}
               </li>
             ))}
@@ -823,6 +966,16 @@ function JobDetailModal({
           onClose={() => setReceiveOpen(false)}
           onDone={() => {
             setReceiveOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+      {editReceipt && (
+        <EditReceiptModal
+          receipt={editReceipt}
+          onClose={() => setEditReceipt(null)}
+          onDone={() => {
+            setEditReceipt(null);
             onChanged();
           }}
         />
@@ -862,6 +1015,8 @@ function ReceiveModal({
         returnType: 'stitched',
         discrepancyReason: '',
         discrepancyNote: '',
+        /** bumped to re-seed the dozen/piece boxes when "All pending" fills them */
+        seed: 0,
       })),
   );
   const [error, setError] = useState('');
@@ -925,14 +1080,29 @@ function ReceiveModal({
                 : 0;
             return (
               <div key={r.line.id} className="rounded-xl border border-gray-200 p-3">
-                <div className="mb-2 flex items-center justify-between text-sm">
+                <div className="mb-2 flex items-center justify-between gap-2 text-sm">
                   <span className="font-semibold">{r.line.sizeCode}</span>
-                  <span className="text-gray-500">
-                    pending {formatPieces(r.line.pendingPcs)} of {formatPieces(r.line.qtyIssuedPcs)}
+                  <span className="flex items-center gap-2 text-gray-500">
+                    pending {formatPieces(r.line.pendingPcs)}
+                    {r.line.pendingPcs > 0 && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="!min-h-[36px] px-2.5 py-1 text-xs"
+                        onClick={() => {
+                          const next = [...rows];
+                          next[i] = { ...r, qtyPcs: r.line.pendingPcs, seed: r.seed + 1 };
+                          setRows(next);
+                        }}
+                      >
+                        All pending
+                      </Button>
+                    )}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <DzPcInput
+                    key={r.seed}
                     pieces={r.qtyPcs}
                     onChange={(pcs) => {
                       const next = [...rows];
